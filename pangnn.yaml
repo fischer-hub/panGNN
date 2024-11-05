@@ -1,0 +1,9 @@
+name: panGNN
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - biopython
+  - pandas
+  - bcbio-gff
