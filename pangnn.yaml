@@ -3,7 +3,9 @@ channels:
   - conda-forge
   - bioconda
   - defaults
+  - pyg
 dependencies:
   - biopython
   - pandas
   - bcbio-gff
+  - pyg
