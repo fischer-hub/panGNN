@@ -6,7 +6,7 @@ import pandas as pd
 from src.header import print_header, bcolors
 
 
-def map_edge_weights(edge_index, bit_score_df, gene_ids_lst):
+def map_edge_weights(edge_index, bit_score_dict, gene_ids_lst):
 
     """Returns a tensor that for each node pair in the edge index defines the
     edges weight, that being the similarity bit score of the genes in the two
@@ -16,32 +16,40 @@ def map_edge_weights(edge_index, bit_score_df, gene_ids_lst):
 
     edge_index -- The edge index defining the nodes that are connected by each edge.
 
-    bit_score_df -- The dataframe that holds for every pair of genes the according similarity bit score.
+    bit_score_dict -- The dictionary that holds for every pair of genes the according similarity bit score.
 
     gene_ids_lst -- The list holding all gene IDs as strings, where the index of an ID in the list is its integer index.
     """
 
     edge_weight_lst = []
+    count = 0
 
     for source_int_ID, target_int_ID in zip(edge_index[0], edge_index[1]):
+        print(count / len(edge_index[1]) * 100, ' %')
+        count = count+1
         
         # retrieve str IDs from integer IDs in the edge index
         source_str_ID = gene_ids_lst[source_int_ID]
         target_str_ID = gene_ids_lst[target_int_ID]
 
         # look up bit score for string IDs of the two genes and save to list
-        print(f"Starting lookup for source node: ({source_str_ID}, {source_int_ID}); Target node: ({target_str_ID}, {target_int_ID})")
+        #print(f"Starting lookup for source node: ({source_str_ID}, {source_int_ID}); Target node: ({target_str_ID}, {target_int_ID})")
         
         try:
-            edge_weight = bit_score_df.loc[(bit_score_df['query'] == source_str_ID) & (bit_score_df['target'] == target_str_ID)]['bits'].values[0]
+            edge_weight = bit_score_dict[source_str_ID][target_str_ID]
             edge_weight_lst.append(edge_weight)
-            print(f"Bit score: {edge_weight}")
+            #print(f"Bit score: {edge_weight}")
         
-        except IndexError as e:
-            edge_weight_lst.append(0)
-            print(f"Could not find gene pair in similarity score dataframe, assigning score 0.")
+        except KeyError:
+            try:
+                edge_weight = bit_score_dict[target_str_ID][source_str_ID]
+                edge_weight_lst.append(edge_weight)
+                #print(f"Bit score: {edge_weight}")
+            except KeyError:
+                edge_weight_lst.append(0)
+                #print(f"Could not find gene pair in similarity score dataframe, assigning score 0.")
 
-
+    print(edge_weight_lst)
     return torch.tensor(edge_weight_lst)
 
 
@@ -75,8 +83,18 @@ def load_similarity_score(similarity_score_file):
                                             'qstart', 'qend', 'qlen', 'tstart', 
                                             'tend', 'tlen', 'qcov', 'tcov', 
                                             'evalue', 'bits'])
+        
+    sim_score_df.drop(columns=['pident','alnlen', 'mismatch', 'gapopen', 
+                               'qstart', 'qend', 'qlen', 'tstart', 
+                               'tend', 'tlen', 'qcov', 'tcov', 'evalue'],
+                               inplace = True)
     
-    return sim_score_df
+    sim_score_dict = (
+    sim_score_df.groupby('query')
+                .apply(lambda x: dict(zip(x['target'], x['bits'])))
+                .to_dict())
+    
+    return sim_score_dict
         
 
 
@@ -92,7 +110,7 @@ def load_node_csv(path, index_col, encoders=None, **kwargs):
 
     return x, mapping
 
-
+### some boilerplate code for GNN design
 # Define the GNN model
 class GeneHomologyGNN(torch.nn.Module):
     def __init__(self, num_genes, embedding_dim, edge_feature_dim, hidden_dim, output_dim=1):
@@ -177,8 +195,8 @@ num_genes = len(genome1_annotation_df.index) + len(genome2_annotation_df)
 print(f"{bcolors.OKGREEN}Total number of genes found in annotation files: {num_genes}")
 
 # load similarity bit scores from MMSeqs2 output CSV file to pandas dataframe
-sim_score_df = load_similarity_score(os.path.join('data', 'minimal_mmseq2_result.csv'))
-print(f"{bcolors.OKGREEN}Loaded similarity scores file: \n {bcolors.ENDC}{sim_score_df.head()}")
+sim_score_dict = load_similarity_score(os.path.join('data', 'minimal_mmseq2_result.csv'))
+print(f"{bcolors.OKGREEN}Loaded similarity scores file: \n {bcolors.ENDC}")
 
 # low embedding dim will reduce risk of overfitting but may prevent model form learning nuanced patterns
 # we later concat the embeddings of each gene ID (node) with its neighbouring gene ID embedding -> 3 * embedding dim
@@ -219,7 +237,7 @@ print(f"{bcolors.OKGREEN} \nEdge index for fully connected graph successfully cr
 #torch.set_printoptions(threshold=10_000) # set print limit for tensors
 #torch.set_printoptions(profile="full")
 
-edge_attr = map_edge_weights(edge_index, sim_score_df, gene_ids_lst)#torch.randn((num_genes/2, edge_feature_dim))  # Edge features
+edge_attr = map_edge_weights(edge_index, sim_score_dict, gene_ids_lst)#torch.randn((num_genes/2, edge_feature_dim))  # Edge features
 batch = torch.zeros(num_genes, dtype=torch.long)  # Batch vector for mini-batches if needed
 
 # Neighbor dictionary with each gene's upstream and downstream neighbors
