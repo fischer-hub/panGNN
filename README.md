@@ -15,3 +15,18 @@ Would then also be interesting if the design works for pairwise species homology
 
 
 ![Alt text](./assets/panGNN_example_graph.svg)
+
+# get started
+Install the dependencies first using e.g. the conda environment file in the project directory and activate conda environment:
+
+```
+mamba env  create -f pangnn.yaml
+conda activate panGNN
+```
+
+Then run pangnn.py:
+```
+python pangnn.py
+```
+
+But dont expect too much, currently there is only some preprocessing happening on the test data in `/data` (although very slow).
