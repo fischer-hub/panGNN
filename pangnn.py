@@ -3,8 +3,54 @@ import torch.nn.functional as F
 from torch_geometric.data import Data
 from torch_geometric.nn import GCNConv, global_mean_pool
 import pandas as pd
+from src.header import print_header, bcolors
+
+
+def map_edge_weights(edge_index, bit_score_df, gene_ids_lst):
+
+    """Returns a tensor that for each node pair in the edge index defines the
+    edges weight, that being the similarity bit score of the genes in the two
+    nodes connected by the edge.
+
+    Keyword arguments:
+
+    edge_index -- The edge index defining the nodes that are connected by each edge.
+
+    bit_score_df -- The dataframe that holds for every pair of genes the according similarity bit score.
+
+    gene_ids_lst -- The list holding all gene IDs as strings, where the index of an ID in the list is its integer index.
+    """
+
+    edge_weight_lst = []
+
+    for source_int_ID, target_int_ID in zip(edge_index[0], edge_index[1]):
+        
+        # retrieve str IDs from integer IDs in the edge index
+        source_str_ID = gene_ids_lst[source_int_ID]
+        target_str_ID = gene_ids_lst[target_int_ID]
+
+        # look up bit score for string IDs of the two genes and save to list
+        print(f"Starting lookup for source node: ({source_str_ID}, {source_int_ID}); Target node: ({target_str_ID}, {target_int_ID})")
+        
+        try:
+            edge_weight = bit_score_df.loc[(bit_score_df['query'] == source_str_ID) & (bit_score_df['target'] == target_str_ID)]['bits'].values[0]
+            edge_weight_lst.append(edge_weight)
+            print(f"Bit score: {edge_weight}")
+        
+        except IndexError as e:
+            edge_weight_lst.append(0)
+            print(f"Could not find gene pair in similarity score dataframe, assigning score 0.")
+
+
+    return torch.tensor(edge_weight_lst)
+
+
+
 
 def load_gff(annotation_file_name):
+    """
+    Loads an annotation file in GFF format and returns a pandas dataframe.
+    """
     with open(annotation_file_name) as gff_handle:
 
         annotation_df = pd.read_csv(gff_handle, comment = '#', sep = '\t', 
@@ -117,19 +163,22 @@ class GeneHomologyGNN(torch.nn.Module):
         return torch.stack(combined_features)
 
 ### ENTRY POINT ###
+
+print_header(True)
+
 # load annotations from gff files and format to pandas dataframe
 genome1_annotation_df = load_gff(os.path.join('data', 'minimal_Cav_10DC88_RENAMED.gff'))
-print(f"Loaded annotation file of first genome:\n{genome1_annotation_df.head()}")
+print(f"{bcolors.OKGREEN}Loaded annotation file of first genome: \n {bcolors.ENDC}{genome1_annotation_df.head()}")
 genome2_annotation_df = load_gff(os.path.join('data', 'minimal_Cav_11DC096_RENAMED.gff'))
-print(f"Loaded annotation file of second genome:\n{genome1_annotation_df.head()}")
+print(f"{bcolors.OKGREEN}Loaded annotation file of second genome: \n {bcolors.ENDC}{genome1_annotation_df.head()}")
 
 # total number of genes found in all annotation files
 num_genes = len(genome1_annotation_df.index) + len(genome2_annotation_df)
-print(f"Total number of genes found in annotation files: {num_genes}")
+print(f"{bcolors.OKGREEN}Total number of genes found in annotation files: {num_genes}")
 
 # load similarity bit scores from MMSeqs2 output CSV file to pandas dataframe
 sim_score_df = load_similarity_score(os.path.join('data', 'minimal_mmseq2_result.csv'))
-print(f"Loaded similarity scores file:\n{sim_score_df.head()}")
+print(f"{bcolors.OKGREEN}Loaded similarity scores file: \n {bcolors.ENDC}{sim_score_df.head()}")
 
 # low embedding dim will reduce risk of overfitting but may prevent model form learning nuanced patterns
 # we later concat the embeddings of each gene ID (node) with its neighbouring gene ID embedding -> 3 * embedding dim
@@ -150,7 +199,7 @@ edge_feature_dim = 10
 gene_ids_lst = list(genome1_annotation_df.index) + list(genome2_annotation_df.index)
 gene_id_integer_dict = {gene: idx for idx, gene in enumerate(gene_ids_lst)}
 gene_ids_ts = torch.tensor(list(gene_id_integer_dict.values()))
-print(f"Tensor holding integer encoding of gene IDs: \n{gene_ids_ts}")
+print(f"\n{bcolors.OKGREEN}Tensor holding integer encoding of gene IDs:  \n {bcolors.ENDC}{gene_ids_ts}")
 
 # index specifying which nodes are connected by an edge in the graph, e.g.:
 # edge_index = torch.tensor([[0, 1],  # source nodes
@@ -162,14 +211,15 @@ print(f"Tensor holding integer encoding of gene IDs: \n{gene_ids_ts}")
 row = torch.arange(num_genes).repeat(num_genes)
 col = row.view(num_genes, num_genes).t().flatten()
 edge_index = torch.stack((row, col), dim=0)
-print(f"\nEdge index for fully connected graph successfully created: \n{edge_index}")
+print(f"{bcolors.OKGREEN} \nEdge index for fully connected graph successfully created:  \n {bcolors.ENDC}{edge_index}")
 
 # define the edge features (similarity bit scores from MMSeqs2)
 # TODO: map the bit score data to the integer IDs (which right now is just the 
 # index of the element in the dict luckily), then for 
-print(edge_index[0][0])
-print(edge_index[1][1])
-edge_attr = torch.randn((num_genes/2, edge_feature_dim))  # Edge features
+#torch.set_printoptions(threshold=10_000) # set print limit for tensors
+#torch.set_printoptions(profile="full")
+
+edge_attr = map_edge_weights(edge_index, sim_score_df, gene_ids_lst)#torch.randn((num_genes/2, edge_feature_dim))  # Edge features
 batch = torch.zeros(num_genes, dtype=torch.long)  # Batch vector for mini-batches if needed
 
 # Neighbor dictionary with each gene's upstream and downstream neighbors
