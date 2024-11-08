@@ -5,79 +5,17 @@ from torch_geometric.nn import GCNConv, global_mean_pool
 import pandas as pd
 from src.header import print_header, bcolors
 import src.preprocessing as pp
+from src.gnn import GCN
+from torch_geometric.data import Data
+
         
 
-### some boilerplate code for GNN design
-# Define the GNN model
-class GeneHomologyGNN(torch.nn.Module):
-    def __init__(self, num_genes, embedding_dim, edge_feature_dim, hidden_dim, output_dim=1):
-        super(GeneHomologyGNN, self).__init__()
 
-        # Embedding layer to convert gene IDs to vectors
-        self.embedding = torch.nn.Embedding(num_genes, embedding_dim)
-        
-        # Graph convolutional layers
-        self.conv1 = GCNConv(3 * embedding_dim, hidden_dim)
-        self.conv2 = GCNConv(hidden_dim, hidden_dim)
-        
-        # MLP for classification based on the graph-level output
-        self.classifier = torch.nn.Sequential(
-            torch.nn.Linear(hidden_dim, hidden_dim),
-            torch.nn.ReLU(),
-            torch.nn.Linear(hidden_dim, output_dim),
-            torch.nn.Sigmoid()
-        )
 
-    def forward(self, gene_ids, edge_index, edge_attr, batch, neighbor_dict):
-        # Convert gene IDs to embeddings
-        gene_embeddings = self.embedding(gene_ids)
-        
-        # Prepare node features by combining with neighbor embeddings
-        node_features = self.prepare_node_features_with_neighbors(gene_embeddings, neighbor_dict)
-        
-        # Pass through the graph convolution layers
-        x = self.conv1(node_features, edge_index)
-        x = F.relu(x)
-        x = self.conv2(x, edge_index)
-        
-        # Pooling the features across the graph
-        x = global_mean_pool(x, batch)
-        
-        # Classification layer
-        out = self.classifier(x)
-        return out
 
-    def prepare_node_features_with_neighbors(self, gene_embeddings, neighbor_dict):
-        """
-        Combine each gene's embedding with its neighbors' embeddings.
-        
-        Parameters:
-        - gene_embeddings: Tensor of shape [num_genes, embedding_dim]
-        - neighbor_dict: Dictionary where keys are gene indices and values are tuples
-          of the form (upstream_neighbor, downstream_neighbor).
-          
-        Returns:
-        - node_features: Tensor with combined neighbor features for each gene.
-        """
-        num_genes, embedding_dim = gene_embeddings.shape
-        combined_features = []
-
-        for gene_idx in range(num_genes):
-            # Get the current gene's embedding
-            gene_feat = gene_embeddings[gene_idx]
-            
-            # Get neighbors' embeddings
-            upstream_idx, downstream_idx = neighbor_dict.get(gene_idx, (None, None))
-            upstream_feat = gene_embeddings[upstream_idx] if upstream_idx is not None else torch.zeros(embedding_dim)
-            downstream_feat = gene_embeddings[downstream_idx] if downstream_idx is not None else torch.zeros(embedding_dim)
-            
-            # Concatenate embeddings (gene + upstream + downstream)
-            combined_feat = torch.cat([upstream_feat, gene_feat, downstream_feat], dim=0)
-            combined_features.append(combined_feat)
-
-        return torch.stack(combined_features)
-
+###################
 ### ENTRY POINT ###
+###################
 
 print_header(True)
 
@@ -113,7 +51,9 @@ edge_feature_dim = 10
 # map string gene IDs to integer IDs and save in tensor, then embed the int IDs in vector with embedding layer
 gene_ids_lst = list(genome1_annotation_df.index) + list(genome2_annotation_df.index)
 gene_id_integer_dict = {gene: idx for idx, gene in enumerate(gene_ids_lst)}
-gene_ids_ts = torch.tensor(list(gene_id_integer_dict.values()))
+
+# reshape tensor to have correct dimensions
+gene_ids_ts = torch.tensor(list(gene_id_integer_dict.values())).reshape([-1, 1])
 print(f"\n{bcolors.OKGREEN}Tensor holding integer encoding of gene IDs:  \n {bcolors.ENDC}{gene_ids_ts}")
 
 # index specifying which nodes are connected by an edge in the graph, e.g.:
@@ -125,32 +65,43 @@ print(f"\n{bcolors.OKGREEN}Tensor holding integer encoding of gene IDs:  \n {bco
 # fully connected edge index as follows (tensor magic happening):
 row = torch.arange(num_genes).repeat(num_genes)
 col = row.view(num_genes, num_genes).t().flatten()
-edge_index = torch.stack((row, col), dim=0)
-print(f"{bcolors.OKGREEN} \nEdge index for fully connected graph successfully created:  \n {bcolors.ENDC}{edge_index}")
+edge_index_ts = torch.stack((row, col), dim=0)
+print(f"{bcolors.OKGREEN} \nEdge index for fully connected graph successfully created:  \n {bcolors.ENDC}{edge_index_ts}")
 
 # index of the element in the dict luckily), then for 
 #torch.set_printoptions(threshold=10_000) # set print limit for tensors
 #torch.set_printoptions(profile="full")
 
-# define the edge features (similarity bit scores from MMSeqs2)
-edge_attr_ts = pp.map_edge_weights(edge_index, sim_score_dict, gene_ids_lst)#torch.randn((num_genes/2, edge_feature_dim))  # Edge features
+# define the edge features (similarity bit scores from MMSeqs2, higher score ~ higher similarity)
+edge_weight_ts = pp.map_edge_weights(edge_index_ts, sim_score_dict, gene_ids_lst)#torch.randn((num_genes/2, edge_feature_dim))  # Edge features
 batch = torch.zeros(num_genes, dtype=torch.long)  # Batch vector for mini-batches if needed
 
 # neighbour dictionary with each gene's upstream and downstream neighbours
 neighbour_lst = pp.construct_neighour_lst(len(genome1_annotation_df.index)) + pp.construct_neighour_lst(len(genome2_annotation_df.index))
 
 # Initialize model, optimizer, and loss function
-model = GeneHomologyGNN(num_genes=num_genes, embedding_dim=gene_id_embedding_dim, 
-                        edge_feature_dim=edge_feature_dim, hidden_dim=hidden_dim)
+#model = GeneHomologyGNN(num_genes=num_genes, embedding_dim=gene_id_embedding_dim, edge_feature_dim=edge_feature_dim, hidden_dim=hidden_dim)
+
+dataset = Data(x = gene_ids_ts, edge_index = edge_index_ts, edge_attr = edge_weight_ts)
+dataset.validate()
+dataset.node_feature_dim = gene_id_embedding_dim
+dataset.edge_feature_dim = edge_feature_dim
+print(f"Constructed dataset from tensors: \n{dataset}")
+
+model = GCN(dataset = dataset, hidden_dim = hidden_dim)
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 criterion = torch.nn.BCELoss()
+num_epochs = 10
 
 # Training loop
 for epoch in range(num_epochs):
     model.train()
     # clear old gradients so only current batch gradients are used
     optimizer.zero_grad()
-    output = model(gene_ids_ts, edge_index, edge_attr, batch, neighbour_lst)
+    #output = model(gene_ids_ts, edge_index, edge_attr_ts, batch, neighbour_lst)
+
+    # this calls the models forward function since model is callable
+    output = model(dataset)
     loss = criterion(output, labels)
     loss.backward()
     optimizer.step()

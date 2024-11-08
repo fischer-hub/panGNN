@@ -95,8 +95,11 @@ def map_edge_weights(edge_index, bit_score_dict, gene_ids_lst):
         with open('data/edge_features.pkl', 'wb') as f:
             pickle.dump(edge_weight_lst, f)
     
-    print(f"{bcolors.OKGREEN}Successfully created edge feature list.{bcolors.ENDC}")
-    return torch.tensor(edge_weight_lst)
+    # cast to float since edge weights have to be floats?
+    edge_weight_ts = torch.tensor(edge_weight_lst).float()
+
+    print(f"{bcolors.OKGREEN}Successfully created edge feature list with tensor elem type: {edge_weight_ts.dtype}{bcolors.ENDC}")
+    return edge_weight_ts
 
 
 
