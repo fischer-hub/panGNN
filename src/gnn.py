@@ -19,7 +19,7 @@ class GCN(torch.nn.Module):
 
         # define convolution layers
         self.conv1 = GCNConv(combined_embedding_dim, hidden_dim)
-        self.conv2 = GCNConv(hidden_dim, dataset.node_feature_dim)
+        self.conv2 = GCNConv(hidden_dim, dataset.edge_attr.shape[0])
 
 
     def forward(self, data):
@@ -31,19 +31,21 @@ class GCN(torch.nn.Module):
         node_embeddings = self.embedding(nodes)
         combined_embeddings = combine_neighbour_embeddings(node_embeddings, data.neighbour_lst)
 
-        # NOTE: data.edge_attr only contains a tensor with bit scores so basically an edge weight
-        # edge attributes can be multiple features embedded, not only a scalar but GCNConv 
-        # only takes edge weights (scalars)
         log.debug(f"Got nodes tensor of shape: {combined_embeddings.shape}")
         log.debug(f"Got edge weights tensor of shape: {edge_weights.shape}")
         log.debug(f"Got edge index of shape: {edge_index.shape}")
         log.debug(f"Node feature embedding (before neighbour combining) dims: {data.node_feature_dim}")
         log.debug(f"Edge feature embedding dims: {data.edge_feature_dim}")
+
+        # NOTE: data.edge_attr only contains a tensor with bit scores so basically an edge weight
+        # edge attributes can be multiple features embedded, not only a scalar but GCNConv 
+        # only takes edge weights (scalars)
         
         nodes = self.conv1(combined_embeddings, edge_index, edge_weights)
         nodes = F.relu(nodes)
         #nodes = F.dropout(nodes, training=self.training) # what does this do??
         nodes = self.conv2(nodes, edge_index, edge_weights)
+        log.debug(f"Outputting nodes of shape: {nodes.shape}\n{nodes}")
 
         return nodes #F.log_softmax(nodes, dim=1) # i think this again reduces to one value which we dont want
     

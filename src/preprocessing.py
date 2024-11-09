@@ -1,6 +1,7 @@
 import pickle, os, torch, logging
 import pandas as pd
 from rich.console import Console
+from rich.progress import track
 from rich.logging import RichHandler
 
 FORMAT = "%(message)s"
@@ -10,19 +11,81 @@ logging.basicConfig(
 
 log = logging.getLogger("rich")
 
+def map_labels_to_edge_index(edge_index, gene_ids_lst, ribap_groups_dict):
+    """Map labels for test dataset from RIBAP result table to respective edge
+    position in the edge index.
+
+    Args:
+        edge_index
+    """
+
+    if os.path.isfile('data/labels.pkl'):
+        with open('data/labels.pkl', 'rb') as f:
+            log.info(f"Found pickled labels, loading file..")
+            label_lst = pickle.load(f)
+    else:
+
+        num_genes = len(edge_index[0])
+        label_lst = [0] * num_genes
+
+        for edge in track(range(num_genes), description = 'Mapping labels to gene pairs in edge index', transient = True):
+
+            source_gene_int_id = edge_index[0][edge]
+            destination_gene_int_id = edge_index[1][edge]
+            source_gene_str_id = gene_ids_lst[source_gene_int_id]
+            destination_gene_str_id = gene_ids_lst[destination_gene_int_id]
+            
+            if source_gene_str_id in ribap_groups_dict and ribap_groups_dict[source_gene_str_id] == destination_gene_str_id:
+                label_lst[edge] = 1
+            elif destination_gene_str_id in ribap_groups_dict and ribap_groups_dict[destination_gene_str_id] == source_gene_str_id:
+                label_lst[edge] = 1
+
+        if not os.path.isfile('data/labels.pkl'):
+            log.info(f"Dumping labels list to pickle file..")
+            with open('data/labels.pkl', 'wb') as f:
+                pickle.dump(label_lst, f)
+
+    return torch.tensor(label_lst)
+
+
+def load_ribap_groups(ribap_group_file, genome_name_lst):
+    """Loads the ribap group file (tab seperated) and returns a pandas dataframe.
+
+    Args:
+        ribap_group_file (string, path object): Filename of the file containing the ribap groups.
+    """
+
+    ribap_groups_dict = {}
+    
+    with open(ribap_group_file) as ribap_file_handle:
+
+        ribap_groups_df = pd.read_csv(ribap_file_handle, comment = '#', sep = '\t', header = 0)
+        #ribap_groups_df.set_index(ribap_groups_df.columns[0], inplace = True)
+        ribap_groups_df.drop(ribap_groups_df.columns.difference(genome_name_lst), axis = 1, inplace=True)
+        ribap_groups_df.dropna(inplace=True)
+
+
+    with Console().status("Constructing two way mapping for ortholog genes..") as status:
+        # not sure if this is the best way to get random access but oh well I never claimed to be good at this
+        for _, row in ribap_groups_df.iterrows():
+            ribap_groups_dict[row[genome_name_lst[0]]] = row[genome_name_lst[1]]
+            ribap_groups_dict[row[genome_name_lst[1]]] = row[genome_name_lst[0]]
+
+    return ribap_groups_dict
+
 
 def combine_neighbour_embeddings(gene_embeddings, neighbor_lst):
     """
     Combine each gene's embedding with its neighbors' embeddings.
     
     Args:
-    gene_embeddings (tensor): Tensor of shape [num_genes, embedding_dim]
-                              take into account.
-    neighbor_lst (list):      List where indices are gene integer indices and elems are tuples
-                              of the form (-i-th-upstream_neighbor,... , ith-downstream_neighbor).
+        gene_embeddings (tensor): Tensor of shape [num_genes, embedding_dim]
+                                  take into account.
+        neighbor_lst (list):      List where indices are gene integer indices and elems are tuples
+                                  of the form (-i-th-upstream_neighbor,... , ith-downstream_neighbor).
         
     Returns:
-    node_features (tensor):   Tensor with combined neighbor features for each gene.
+        node_features (tensor):   Tensor with combined neighbor features for each gene.
     """
     log.debug(f"Got gene embeddings of shape: {gene_embeddings.shape}\n{gene_embeddings}")
     num_genes, embedding_dim = gene_embeddings.shape

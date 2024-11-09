@@ -1,6 +1,6 @@
 import torch, os, logging, argparse
 import torch.nn.functional as F
-from torch_geometric.data import Data
+from torch_geometric.data import Data, DataLoader
 from src.header import print_header
 from torch_geometric.data import Data
 from rich.logging import RichHandler
@@ -24,6 +24,7 @@ parser = argparse.ArgumentParser(
 parser.add_argument('-l', '--log_level',  help = "Set the level to print logs ['NOTSET', 'DEBUG', 'INFO', 'WARN', 'ERROR', 'CRITICAL', Default: 'INFO']", default = 'INFO')
 parser.add_argument('-n', '--neighbours', help = 'Number of genes from target gene to consider as neighbours.', default = 1)
 parser.add_argument('-d', '--debug',      help = 'Set log level to DEBUG and print debug information while running.', action='store_true')  # on/off flag
+parser.add_argument('-b', '--batch_size',  help = 'Set dataset batch size for model training.', default = 32)
 args = parser.parse_args()
 
 # setup some terminal formatting and logging
@@ -44,9 +45,12 @@ from src.gnn import GCN
 
 
 # load annotations from gff files and format to pandas dataframe
+genome1_name = 'Cav_10DC88'
 genome1_annotation_df = pp.load_gff(os.path.join('data', 'minimal_Cav_10DC88_RENAMED.gff'))
 log.info(f"Loaded annotation file of first genome: {os.path.join('data', 'minimal_Cav_10DC88_RENAMED.gff')}")
 log.debug(f"Genome 1 annotation dataframe:\n {genome1_annotation_df}")
+
+genome2_name = 'Cav_11DC096'
 genome2_annotation_df = pp.load_gff(os.path.join('data', 'minimal_Cav_11DC096_RENAMED.gff'))
 log.info(f"Loaded annotation file of second genome: {os.path.join('data', 'minimal_Cav_11DC096_RENAMED.gff')}")
 log.debug(f"Genome 2 annotation dataframe:\n {genome2_annotation_df}")
@@ -58,6 +62,11 @@ log.info(f"Total number of genes found in annotation files: {num_genes}")
 # load similarity bit scores from MMSeqs2 output CSV file to pandas dataframe
 sim_score_dict = pp.load_similarity_score(os.path.join('data', 'minimal_mmseq2_result.csv'))
 log.info(f"Loaded similarity scores file: {os.path.join('data', 'minimal_mmseq2_result.csv')}")
+
+# load holy ribap table to generate labels for test data set
+ribap_groups_dict = pp.load_ribap_groups(os.path.join('data', 'holy_python_ribap_95.csv'), [genome1_name, genome2_name])
+log.info(f"Loaded RIBAP groups file: {os.path.join('data', 'minimal_mmseq2_result.csv')}")
+log.debug(f"Got RIBAP groups dictionary:\n {next(iter(ribap_groups_dict.items()))}")
 
 # low embedding dim will reduce risk of overfitting but may prevent model form learning nuanced patterns
 # we later concat the embeddings of each gene ID (node) with its neighbouring gene ID embedding -> 3 * embedding dim
@@ -72,6 +81,7 @@ edge_feature_dim = 10
 # map string gene IDs to integer IDs and save in tensor, then embed the int IDs in vector with embedding layer
 gene_ids_lst = list(genome1_annotation_df.index) + list(genome2_annotation_df.index)
 gene_id_integer_dict = {gene: idx for idx, gene in enumerate(gene_ids_lst)}
+
 
 # reshape tensor to have correct dimensions
 gene_ids_ts = torch.tensor(list(gene_id_integer_dict.values()))
@@ -92,8 +102,13 @@ log.info(f"Edge index for fully connected graph successfully created.")
 #torch.set_printoptions(threshold=10_000) # set print limit for tensors
 #torch.set_printoptions(profile="full")
 
+# construct list of labels from ribap groups and format to match edge_index
+labels_ts = pp.map_labels_to_edge_index(edge_index_ts, gene_ids_lst, ribap_groups_dict)
+log.info('Created tensor of labels for training from RIBAP groups.')
+log.debug(f"Got tensor of labels of shape: {labels_ts.shape}\n{labels_ts}")
+
 # define the edge features (similarity bit scores from MMSeqs2, higher score ~ higher similarity)
-edge_weight_ts = pp.map_edge_weights(edge_index_ts, sim_score_dict, gene_ids_lst).reshape([-1, 1])#torch.randn((num_genes/2, edge_feature_dim))  # Edge features
+edge_weight_ts = pp.map_edge_weights(edge_index_ts, sim_score_dict, gene_ids_lst)#torch.randn((num_genes/2, edge_feature_dim))  # Edge features
 batch = torch.zeros(num_genes, dtype=torch.long)  # Batch vector for mini-batches if needed
 
 # neighbour dictionary with each gene's upstream and downstream neighbours
@@ -104,33 +119,41 @@ log.info(f"Constructed neighbours, first entry: {neighbour_lst[0]}; last entry {
 # Initialize model, optimizer, and loss function
 #model = GeneHomologyGNN(num_genes=num_genes, embedding_dim=gene_id_embedding_dim, edge_feature_dim=edge_feature_dim, hidden_dim=hidden_dim)
 
-dataset = Data(x = gene_ids_ts, edge_index = edge_index_ts, edge_attr = edge_weight_ts)
+dataset = Data(x = gene_ids_ts, edge_index = edge_index_ts, edge_attr = edge_weight_ts, y = labels_ts)
 dataset.validate()
 dataset.node_feature_dim = gene_id_embedding_dim
 dataset.edge_feature_dim = edge_feature_dim
 dataset.neighbour_lst = neighbour_lst
 log.info(f"Constructed dataset from node, egde and index tensors: {dataset}")
 
+dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
+
 model = GCN(dataset = dataset, hidden_dim = hidden_dim, num_neighbours = args.neighbours)
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+
+# TODO: is this a good loss function for our scenario?
 criterion = torch.nn.BCELoss()
 num_epochs = 10
 
 # Training loop
 log.info("Entering training loop..")
 for epoch in track(range(num_epochs), description = "Training.."):
-    model.train()
-    # clear old gradients so only current batch gradients are used
-    optimizer.zero_grad()
-    #output = model(gene_ids_ts, edge_index, edge_attr_ts, batch, neighbour_lst)
 
-    # this calls the models forward function since model is callable
-    output = model(dataset)
-    loss = criterion(output, labels)
-    loss.backward()
-    optimizer.step()
-    
-    print(f'Epoch {epoch+1}, Loss: {loss.item()}')
+    for batch in dataloader:
+        # Extract data and labels from the batch
+        #inputs, labels = batch  # Assuming batch is a tupl
+        model.train()
+        # clear old gradients so only current batch gradients are used
+        optimizer.zero_grad()
+        #output = model(gene_ids_ts, edge_index, edge_attr_ts, batch, neighbour_lst)
+
+        # this calls the models forward function since model is callable
+        output = model(batch)
+        loss = criterion(output, labels_ts)
+        loss.backward()
+        optimizer.step()
+        
+        print(f'Epoch {epoch+1}, Loss: {loss.item()}')
 
 # Prediction example
 model.eval()
