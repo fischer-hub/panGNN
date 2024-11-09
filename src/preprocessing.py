@@ -24,6 +24,7 @@ def combine_neighbour_embeddings(gene_embeddings, neighbor_lst):
     Returns:
     node_features (tensor):   Tensor with combined neighbor features for each gene.
     """
+    log.debug(f"Got gene embeddings of shape: {gene_embeddings.shape}\n{gene_embeddings}")
     num_genes, embedding_dim = gene_embeddings.shape
     combined_features = []
 

@@ -46,12 +46,13 @@ from src.gnn import GCN
 # load annotations from gff files and format to pandas dataframe
 genome1_annotation_df = pp.load_gff(os.path.join('data', 'minimal_Cav_10DC88_RENAMED.gff'))
 log.info(f"Loaded annotation file of first genome: {os.path.join('data', 'minimal_Cav_10DC88_RENAMED.gff')}")
+log.debug(f"Genome 1 annotation dataframe:\n {genome1_annotation_df}")
 genome2_annotation_df = pp.load_gff(os.path.join('data', 'minimal_Cav_11DC096_RENAMED.gff'))
 log.info(f"Loaded annotation file of second genome: {os.path.join('data', 'minimal_Cav_11DC096_RENAMED.gff')}")
+log.debug(f"Genome 2 annotation dataframe:\n {genome2_annotation_df}")
 
 # total number of genes found in all annotation files
 num_genes = len(genome1_annotation_df.index) + len(genome2_annotation_df.index)
-log.debug(genome1_annotation_df)
 log.info(f"Total number of genes found in annotation files: {num_genes}")
 
 # load similarity bit scores from MMSeqs2 output CSV file to pandas dataframe
@@ -68,17 +69,12 @@ hidden_dim = 64
 # this (the edge features) later holds the similarity bit score of MMSeqs2 clustering for each two gene nodes connected by an edge
 edge_feature_dim = 10
 
-
-#print([list(genome1_annotation_df.index) + list(genome2_annotation_df.index)])
-
-# tensor holding the gene IDs for each gene in the annotation file, note tensors can not be created on strings (or lists of strings)
-
 # map string gene IDs to integer IDs and save in tensor, then embed the int IDs in vector with embedding layer
 gene_ids_lst = list(genome1_annotation_df.index) + list(genome2_annotation_df.index)
 gene_id_integer_dict = {gene: idx for idx, gene in enumerate(gene_ids_lst)}
 
 # reshape tensor to have correct dimensions
-gene_ids_ts = torch.tensor(list(gene_id_integer_dict.values())).reshape([-1, 1])
+gene_ids_ts = torch.tensor(list(gene_id_integer_dict.values()))
 
 # index specifying which nodes are connected by an edge in the graph, e.g.:
 # edge_index = torch.tensor([[0, 1],  # source nodes
