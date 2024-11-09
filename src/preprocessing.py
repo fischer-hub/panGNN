@@ -1,8 +1,50 @@
-import pickle, os, torch
+import pickle, os, torch, logging
 import pandas as pd
-from src.header import bcolors
+from rich.console import Console
+from rich.logging import RichHandler
 
-def construct_neighour_lst(num_genes: int, num_neighbours: int = 1):
+FORMAT = "%(message)s"
+logging.basicConfig(
+    level="NOTSET", format=FORMAT, datefmt="[%X]", handlers=[RichHandler()]
+)
+
+log = logging.getLogger("rich")
+
+
+def combine_neighbour_embeddings(gene_embeddings, neighbor_lst):
+    """
+    Combine each gene's embedding with its neighbors' embeddings.
+    
+    Args:
+    gene_embeddings (tensor): Tensor of shape [num_genes, embedding_dim]
+                              take into account.
+    neighbor_lst (list):      List where indices are gene integer indices and elems are tuples
+                              of the form (-i-th-upstream_neighbor,... , ith-downstream_neighbor).
+        
+    Returns:
+    node_features (tensor):   Tensor with combined neighbor features for each gene.
+    """
+    num_genes, embedding_dim = gene_embeddings.shape
+    combined_features = []
+
+    for gene_id in range(num_genes):
+        # Get the current gene's embedding
+        gene_feature = gene_embeddings[gene_id]
+        
+        # TODO: adjust this to work with more than 1 neighbour
+        # get neighbors' embeddings
+        upstream_id, downstream_id = neighbor_lst[gene_id]
+        upstream_feature= gene_embeddings[upstream_id] if upstream_id is not None else torch.zeros(embedding_dim)
+        downstream_feature= gene_embeddings[downstream_id] if downstream_id is not None else torch.zeros(embedding_dim)
+        
+        # Concatenate embeddings (upstream gene + gene + downstream gene)
+        combined_feature= torch.cat([upstream_feature, gene_feature, downstream_feature], dim=0)
+        combined_features.append(combined_feature)
+
+    return torch.stack(combined_features)
+
+
+def construct_neighbour_lst(num_genes: int, num_neighbours: int = 1):
     """Construct list where the index represents a integer gene ID and the tuple
     in that index is contains the predecessor(s) and successor(s) gene of the gene at 
     current index. The first gene hast a predecessor of type None, the last gene
@@ -33,9 +75,7 @@ def construct_neighour_lst(num_genes: int, num_neighbours: int = 1):
         
         neighour_lst.append(tuple(neighbours))
 
-    print(f"{bcolors.OKGREEN}Constructed neighbours, first entry: {neighour_lst[0]}{neighour_lst[1]}{neighour_lst[2]}: last entry {neighour_lst[-1]}; length: {len(neighour_lst)-1} {bcolors.ENDC}\n")
     return neighour_lst
-
 
 
 def map_edge_weights(edge_index, bit_score_dict, gene_ids_lst):
@@ -56,49 +96,50 @@ def map_edge_weights(edge_index, bit_score_dict, gene_ids_lst):
 
     if os.path.isfile('data/edge_features.pkl'):
         with open('data/edge_features.pkl', 'rb') as f:
-            print(f"{bcolors.OKGREEN}Found pickled edge features, loading..{bcolors.ENDC}")
+            log.info(f"Found pickled edge features, loading file..")
             edge_weight_lst = pickle.load(f)
     else:
 
         edge_weight_lst = []
         count = 0
 
-        for source_int_ID, target_int_ID in zip(edge_index[0], edge_index[1]):
-            #print(count / len(edge_index[1]) * 100, ' %')
-            #count = count+1
-            
-            # retrieve str IDs from integer IDs in the edge index
-            source_str_ID = gene_ids_lst[source_int_ID]
-            target_str_ID = gene_ids_lst[target_int_ID]
+        with Console().status("Mapping edge weights to respective edge index positions..") as status:
+            for source_int_ID, target_int_ID in zip(edge_index[0], edge_index[1]):
+                #print(count / len(edge_index[1]) * 100, ' %')
+                #count = count+1
+                
+                # retrieve str IDs from integer IDs in the edge index
+                source_str_ID = gene_ids_lst[source_int_ID]
+                target_str_ID = gene_ids_lst[target_int_ID]
 
-            # look up bit score for string IDs of the two genes and save to list
-            #print(f"Starting lookup for source node: ({source_str_ID}, {source_int_ID}); Target node: ({target_str_ID}, {target_int_ID})")
-            
-            try:
-                edge_weight = bit_score_dict[source_str_ID][target_str_ID]
-                edge_weight_lst.append(edge_weight)
-                #print(f"Bit score: {edge_weight}")
-            
-            except KeyError:
+                # look up bit score for string IDs of the two genes and save to list
+                #print(f"Starting lookup for source node: ({source_str_ID}, {source_int_ID}); Target node: ({target_str_ID}, {target_int_ID})")
+                
                 try:
-                    edge_weight = bit_score_dict[target_str_ID][source_str_ID]
+                    edge_weight = bit_score_dict[source_str_ID][target_str_ID]
                     edge_weight_lst.append(edge_weight)
                     #print(f"Bit score: {edge_weight}")
+                
                 except KeyError:
-                    edge_weight_lst.append(0)
-                    #print(f"Could not find gene pair in similarity score dataframe, assigning score 0.")
+                    try:
+                        edge_weight = bit_score_dict[target_str_ID][source_str_ID]
+                        edge_weight_lst.append(edge_weight)
+                        #print(f"Bit score: {edge_weight}")
+                    except KeyError:
+                        edge_weight_lst.append(0)
+                        #print(f"Could not find gene pair in similarity score dataframe, assigning score 0.")
 
     
     # pickle test data edge features for testing (mapping takes a while otherwise)
     if not os.path.isfile('data/edge_features.pkl'):
-        print(f"{bcolors.OKGREEN}Dumping edge feature list to pickle file..{bcolors.ENDC}")
+        log.info(f"Dumping edge feature list to pickle file..")
         with open('data/edge_features.pkl', 'wb') as f:
             pickle.dump(edge_weight_lst, f)
     
     # cast to float since edge weights have to be floats?
     edge_weight_ts = torch.tensor(edge_weight_lst).float()
 
-    print(f"{bcolors.OKGREEN}Successfully created edge feature list with tensor elem type: {edge_weight_ts.dtype}{bcolors.ENDC}")
+    log.info(f"Successfully created edge feature list with tensor elem type: {edge_weight_ts.dtype}")
     return edge_weight_ts
 
 
