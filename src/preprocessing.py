@@ -65,11 +65,11 @@ def load_ribap_groups(ribap_group_file, genome_name_lst):
         ribap_groups_df.dropna(inplace=True)
 
 
-    with Console().status("Constructing two way mapping for ortholog genes..") as status:
+    #with Console().status("Constructing two way mapping for ortholog genes..") as status:
         # not sure if this is the best way to get random access but oh well I never claimed to be good at this
-        for _, row in ribap_groups_df.iterrows():
-            ribap_groups_dict[row[genome_name_lst[0]]] = row[genome_name_lst[1]]
-            ribap_groups_dict[row[genome_name_lst[1]]] = row[genome_name_lst[0]]
+    for _, row in track(ribap_groups_df.iterrows(), description = 'Constructing two way mapping for ortholog genes..', transient = True):
+        ribap_groups_dict[row[genome_name_lst[0]]] = row[genome_name_lst[1]]
+        ribap_groups_dict[row[genome_name_lst[1]]] = row[genome_name_lst[0]]
 
     return ribap_groups_dict
 

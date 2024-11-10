@@ -10,3 +10,4 @@ dependencies:
   - bcbio-gff
   - pyg
   - rich
+  - matplotlib

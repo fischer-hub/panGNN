@@ -2,11 +2,15 @@ import torch, os, logging, argparse
 import torch.nn.functional as F
 from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader
+from torch_geometric.transforms import RandomLinkSplit
 from src.header import print_header
+from src.plot import plot_loss_accuracy
 from torch_geometric.data import Data
 from rich.logging import RichHandler
-from rich.progress import track
+from rich.progress import track, Progress
 from rich.traceback import install
+from rich.console import Console
+
 
 
 ###################
@@ -25,7 +29,9 @@ parser = argparse.ArgumentParser(
 #parser.add_argument('annotation_file_name', nargs = '?', default = os.path.join('data', 'Chlamydia_abortus_S26_3_strain_S26_3_full_genome_RENAMED.gff'))           # positional argument
 parser.add_argument('-l', '--log_level',  help = "set the level to print logs ['NOTSET', 'DEBUG', 'INFO', 'WARN', 'ERROR', 'CRITICAL']", default = 'INFO', type = str)
 parser.add_argument('-n', '--neighbours', help = 'number of genes from target gene to consider as neighbours', default = 1, type = int)
+parser.add_argument('-m', '--model',      help = 'path to save or load model from, depending on train or inference mode', default = 'model.pkl', type = str)
 parser.add_argument('-b', '--batch_size', help = 'set dataset batch size for model training', default = 32, type = int)
+parser.add_argument('-e', '--epochs',     help = 'set number of epochs for model training', default = 1, type = int)
 parser.add_argument('-d', '--debug',      help = 'set log level to DEBUG and print debug information while running', action='store_true')  # on/off flag
 parser.add_argument('-t', '--traceback',  help = 'set traceback standard python format (turns off rich formatting of traceback)', action = 'store_true')
 args = parser.parse_args()
@@ -126,40 +132,91 @@ dataset = Data(x = gene_ids_ts, edge_index = edge_index_ts, edge_attr = edge_wei
 dataset.validate()
 log.info(f"Constructed dataset from node, egde and index tensors: {dataset}")
 
-# DataLoader expects a list of Data() objects as input smh? or a dataset class
-dataloader = DataLoader([dataset], batch_size=args.batch_size, shuffle=True)
+
+transform = RandomLinkSplit(is_undirected=True)
+train_data, val_data, test_data = transform(dataset)
+log.debug(f"Split dataset into train, test and validation data:\n train: {train_data}\ntest: {test_data}\nvalidation: {val_data}")
+#dataset = train_data
+
+# DataLoader expects a list of Data() objects as input smh? or a dataset 
+log.info(f"Constructing dataloader with batch size: {args.batch_size}")
+dataloader = DataLoader([train_data], batch_size=args.batch_size, shuffle=True)
 
 model = GCN(dataset = dataset, hidden_dim = hidden_dim, num_neighbours = args.neighbours, node_feature_dim = gene_id_embedding_dim, neighbour_lst = neighbour_lst)
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
 # TODO: is this a good loss function for our scenario?
 criterion = torch.nn.BCELoss()
-num_epochs = 1
+num_epochs = args.epochs
 
-# Training loop
-log.info("Entering training loop..")
-for epoch in track(range(num_epochs), description = "Training.."):
+train_losses = []
+train_accuracies = []
 
-    for batch in dataloader:
-        #inputs, labels = batch  # Assuming batch is a tupl
-        model.train()
-        # clear old gradients so only current batch gradients are used
-        optimizer.zero_grad()
-        #output = model(gene_ids_ts, edge_index, edge_attr_ts, batch, neighbour_lst)
 
-        # this calls the models forward function since model is callable
-        log.debug('Calling forward step on current batch..')
-        output = model(batch)
-        log.debug('Calling loss function on current batch..')
-        loss = criterion(output, labels_ts)
-        log.debug('Calling backward step on current batch..')
-        loss.backward()
-        log.debug('Calling optimizer step on current batch..')
-        optimizer.step()
-        
-        print(f'Epoch {epoch+1}, Loss: {loss.item()}')
+if os.path.exists(os.path.join(args.model)):
+    log.info(f"Found model file '{args.model}' with trained parameter, restoring model state for inference..")
+    model.load_state_dict(torch.load(args.model))
+else:
+    # Training loop
+    log.info(f"Entering training loop with batch size: {args.batch_size}.")
+
+    with Progress(transient = True) as progress:
+
+        training_bar = progress.add_task("Epochs completed: ", total=num_epochs)
+        batch_bar    = progress.add_task("Training current batch:", total=len(dataloader))
+
+        for epoch in range(num_epochs):
+            correct = 0
+            running_loss = 0
+            total = 0
+
+            for batch in dataloader:
+
+                model.train()
+                # clear old gradients so only current batch gradients are used
+                optimizer.zero_grad()
+
+                # this calls the models forward function since model is callable
+                log.debug('Calling forward step on current batch..')
+                output = model(dataset)
+                log.debug('Calling loss function on current batch..')
+                log.debug(dataset)
+                loss = criterion(output, labels_ts)
+                log.debug('Calling backward step on current batch..')
+                loss.backward()
+                log.debug('Calling optimizer step on current batch..')
+                optimizer.step()
+                
+                # get some metrics, maybe do this in the model class?
+                log.info(f'Epoch {epoch+1}, Loss: {loss.item()}')
+                #running_loss += loss.item() * gene_ids_ts.size(0)
+                _, predicted = torch.max(output, 0)
+                total += labels_ts.size(0)
+                correct += (predicted == labels_ts).sum().item()
+
+                progress.update(batch_bar, advance = 1)
+
+
+            epoch_accuracy = 100 * correct / total
+
+            train_losses.append(loss.item())
+            train_accuracies.append(epoch_accuracy)
+            progress.update(training_bar, advance = 1)
+
+
+    log.info(f"Finished model training.\nPlotting metrics..")
+    log.debug(f"\nLoss: {train_losses}\nAccuracy: {train_accuracies}")
+    plot_loss_accuracy(num_epochs, train_losses, train_accuracies)
+    log.info(f"Saving model to file '{args.model}'")
+    torch.save(model.state_dict(), args.model)
 
 # Prediction example
 model.eval()
 with torch.no_grad():
-    pred = model(dataset)
+    with Console().status("Infering model on test data..") as status:
+        pred = model(test_data)
+    
+    accuracy = (pred == test_data.y).sum().item() / len(test_data.y)
+    log.info(f"Correctly predicted: {(pred == test_data.y).sum().item() } out of {len(test_data.y)} genes to be homologs.")
+    log.info(f"Accuracy on test dataset: {accuracy}")
+    log.info('Exiting.')
