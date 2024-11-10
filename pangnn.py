@@ -1,6 +1,7 @@
 import torch, os, logging, argparse
 import torch.nn.functional as F
-from torch_geometric.data import Data, DataLoader
+from torch_geometric.data import Data
+from torch_geometric.loader import DataLoader
 from src.header import print_header
 from torch_geometric.data import Data
 from rich.logging import RichHandler
@@ -18,20 +19,22 @@ print_header(True)
 parser = argparse.ArgumentParser(
                     prog='pangnn.py',
                     description='The heart and soul of PanGNN. TODO: write sometyhing useful here.',
-                    epilog='Greta Garbo and Monroe, Dietrich and DiMaggio, Marlon Brando, Jimmy Dean, On the cover of a magazine.')
+                    epilog='Greta Garbo and Monroe, Dietrich and DiMaggio, Marlon Brando, Jimmy Dean, On the cover of a magazine.',
+                    formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
 #parser.add_argument('annotation_file_name', nargs = '?', default = os.path.join('data', 'Chlamydia_abortus_S26_3_strain_S26_3_full_genome_RENAMED.gff'))           # positional argument
-parser.add_argument('-l', '--log_level',  help = "Set the level to print logs ['NOTSET', 'DEBUG', 'INFO', 'WARN', 'ERROR', 'CRITICAL', Default: 'INFO']", default = 'INFO')
-parser.add_argument('-n', '--neighbours', help = 'Number of genes from target gene to consider as neighbours.', default = 1)
-parser.add_argument('-d', '--debug',      help = 'Set log level to DEBUG and print debug information while running.', action='store_true')  # on/off flag
-parser.add_argument('-b', '--batch_size',  help = 'Set dataset batch size for model training.', default = 32)
+parser.add_argument('-l', '--log_level',  help = "set the level to print logs ['NOTSET', 'DEBUG', 'INFO', 'WARN', 'ERROR', 'CRITICAL']", default = 'INFO', type = str)
+parser.add_argument('-n', '--neighbours', help = 'number of genes from target gene to consider as neighbours', default = 1, type = int)
+parser.add_argument('-b', '--batch_size', help = 'set dataset batch size for model training', default = 32, type = int)
+parser.add_argument('-d', '--debug',      help = 'set log level to DEBUG and print debug information while running', action='store_true')  # on/off flag
+parser.add_argument('-t', '--traceback',  help = 'set traceback standard python format (turns off rich formatting of traceback)', action = 'store_true')
 args = parser.parse_args()
 
 # setup some terminal formatting and logging
 FORMAT = "%(message)s"
 logging.basicConfig(level=args.log_level if not args.debug else 'DEBUG', format=FORMAT, datefmt="[%X]", handlers=[RichHandler()])
 log = logging.getLogger("rich")
-install(show_locals=False)
+if not args.traceback: install(show_locals=True)
 
 # we can only import these after setting up the logger since src.preprocessing 
 # sets up another logger (for secret reasons) which overwrites the log level..
@@ -121,26 +124,23 @@ log.info(f"Constructed neighbours, first entry: {neighbour_lst[0]}; last entry {
 
 dataset = Data(x = gene_ids_ts, edge_index = edge_index_ts, edge_attr = edge_weight_ts, y = labels_ts)
 dataset.validate()
-dataset.node_feature_dim = gene_id_embedding_dim
-dataset.edge_feature_dim = edge_feature_dim
-dataset.neighbour_lst = neighbour_lst
 log.info(f"Constructed dataset from node, egde and index tensors: {dataset}")
 
-dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
+# DataLoader expects a list of Data() objects as input smh? or a dataset class
+dataloader = DataLoader([dataset], batch_size=args.batch_size, shuffle=True)
 
-model = GCN(dataset = dataset, hidden_dim = hidden_dim, num_neighbours = args.neighbours)
+model = GCN(dataset = dataset, hidden_dim = hidden_dim, num_neighbours = args.neighbours, node_feature_dim = gene_id_embedding_dim, neighbour_lst = neighbour_lst)
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
 # TODO: is this a good loss function for our scenario?
 criterion = torch.nn.BCELoss()
-num_epochs = 10
+num_epochs = 1
 
 # Training loop
 log.info("Entering training loop..")
 for epoch in track(range(num_epochs), description = "Training.."):
 
     for batch in dataloader:
-        # Extract data and labels from the batch
         #inputs, labels = batch  # Assuming batch is a tupl
         model.train()
         # clear old gradients so only current batch gradients are used
@@ -148,9 +148,13 @@ for epoch in track(range(num_epochs), description = "Training.."):
         #output = model(gene_ids_ts, edge_index, edge_attr_ts, batch, neighbour_lst)
 
         # this calls the models forward function since model is callable
+        log.debug('Calling forward step on current batch..')
         output = model(batch)
+        log.debug('Calling loss function on current batch..')
         loss = criterion(output, labels_ts)
+        log.debug('Calling backward step on current batch..')
         loss.backward()
+        log.debug('Calling optimizer step on current batch..')
         optimizer.step()
         
         print(f'Epoch {epoch+1}, Loss: {loss.item()}')
@@ -158,4 +162,4 @@ for epoch in track(range(num_epochs), description = "Training.."):
 # Prediction example
 model.eval()
 with torch.no_grad():
-    pred = model(gene_ids_ts, edge_index, edge_attr, batch, neighbour_lst)
+    pred = model(dataset)

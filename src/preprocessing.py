@@ -45,7 +45,7 @@ def map_labels_to_edge_index(edge_index, gene_ids_lst, ribap_groups_dict):
             with open('data/labels.pkl', 'wb') as f:
                 pickle.dump(label_lst, f)
 
-    return torch.tensor(label_lst)
+    return torch.tensor(label_lst).float()
 
 
 def load_ribap_groups(ribap_group_file, genome_name_lst):
