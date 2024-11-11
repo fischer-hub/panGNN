@@ -1,15 +1,12 @@
-import pickle, os, torch, logging
+import pickle, os, torch
 import pandas as pd
 from rich.console import Console
 from rich.progress import track
-from rich.logging import RichHandler
+from src.setup import log
 
-FORMAT = "%(message)s"
-logging.basicConfig(
-    level="NOTSET", format=FORMAT, datefmt="[%X]", handlers=[RichHandler()]
-)
 
-log = logging.getLogger("rich")
+
+
 
 def map_labels_to_edge_index(edge_index, gene_ids_lst, ribap_groups_dict):
     """Map labels for test dataset from RIBAP result table to respective edge

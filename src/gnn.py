@@ -1,7 +1,8 @@
 import torch
 import torch.nn.functional as F
 from torch_geometric.nn import GCNConv, SAGEConv
-from src.preprocessing import combine_neighbour_embeddings, log
+from src.preprocessing import combine_neighbour_embeddings
+from src.setup import log
 
 
 # GCN class based on the example discussed in the pytorch geometric docs
@@ -50,7 +51,8 @@ class GCN(torch.nn.Module):
         log.debug(f"Outputting nodes to decode function of shape: {nodes.shape}\n{nodes}")
 
         link_predictions = self.decode(nodes, edge_index)
-        link_predictions = torch.sigmoid(link_predictions)
+        #link_predictions = torch.sigmoid(link_predictions)
+        link_predictions = F.relu(link_predictions)
         log.debug(f"Outputting link prediction tensor of shape: {link_predictions.shape}\ntype:{link_predictions.dtype}\n{link_predictions}")
 
         return  link_predictions #F.log_softmax(nodes, dim=1) # i think this again reduces to one value which we dont want

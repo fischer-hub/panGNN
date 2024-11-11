@@ -1,0 +1,6 @@
+##gff-version 3
+##sequence-region contig1 1 1041170
+contig1	Prodigal:002006	CDS	1	204	.	+	0	ID=FFOKMCCD_00001;inference=ab initio prediction:Prodigal:002006;locus_tag=FFOKMCCD_00001;product=hypothetical protein
+contig1	Prodigal:002006	CDS	1040	1465	.	-	0	ID=FFOKMCCD_00002;inference=ab initio prediction:Prodigal:002006;locus_tag=FFOKMCCD_00002;product=hypothetical protein
+contig1	Prodigal:002006	CDS	2137	2361	.	+	0	ID=FFOKMCCD_00003;inference=ab initio prediction:Prodigal:002006;locus_tag=FFOKMCCD_00003;product=hypothetical protein
+contig1	Prodigal:002006	CDS	2682	4016	.	+	0	ID=FFOKMCCD_00004;eC_number=2.5.1.7;Name=murA;db_xref=COG:COG0766;gene=murA;inference=ab initio prediction:Prodigal:002006,similar to AA sequence:UniProtKB:P45025;locus_tag=FFOKMCCD_00004;product=UDP-N-acetylglucosamine 1-carboxyvinyltransferase

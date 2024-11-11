@@ -1,14 +1,14 @@
-import torch, os, logging, argparse
+from src.setup import log, args
+import torch, os
 import torch.nn.functional as F
 from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader
 from torch_geometric.transforms import RandomLinkSplit
-from src.header import print_header
 from src.plot import plot_loss_accuracy
+from src.predict import predict_homolog_genes
 from torch_geometric.data import Data
 from rich.logging import RichHandler
-from rich.progress import track, Progress
-from rich.traceback import install
+from rich.progress import Progress
 from rich.console import Console
 
 
@@ -17,30 +17,7 @@ from rich.console import Console
 ###### SETUP ######
 ###################
 
-print_header(True)
 
-# argparse stuff
-parser = argparse.ArgumentParser(
-                    prog='pangnn.py',
-                    description='The heart and soul of PanGNN. TODO: write sometyhing useful here.',
-                    epilog='Greta Garbo and Monroe, Dietrich and DiMaggio, Marlon Brando, Jimmy Dean, On the cover of a magazine.',
-                    formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-
-#parser.add_argument('annotation_file_name', nargs = '?', default = os.path.join('data', 'Chlamydia_abortus_S26_3_strain_S26_3_full_genome_RENAMED.gff'))           # positional argument
-parser.add_argument('-l', '--log_level',  help = "set the level to print logs ['NOTSET', 'DEBUG', 'INFO', 'WARN', 'ERROR', 'CRITICAL']", default = 'INFO', type = str)
-parser.add_argument('-n', '--neighbours', help = 'number of genes from target gene to consider as neighbours', default = 1, type = int)
-parser.add_argument('-m', '--model',      help = 'path to save or load model from, depending on train or inference mode', default = 'model.pkl', type = str)
-parser.add_argument('-b', '--batch_size', help = 'set dataset batch size for model training', default = 32, type = int)
-parser.add_argument('-e', '--epochs',     help = 'set number of epochs for model training', default = 1, type = int)
-parser.add_argument('-d', '--debug',      help = 'set log level to DEBUG and print debug information while running', action='store_true')  # on/off flag
-parser.add_argument('-t', '--traceback',  help = 'set traceback standard python format (turns off rich formatting of traceback)', action = 'store_true')
-args = parser.parse_args()
-
-# setup some terminal formatting and logging
-FORMAT = "%(message)s"
-logging.basicConfig(level=args.log_level if not args.debug else 'DEBUG', format=FORMAT, datefmt="[%X]", handlers=[RichHandler()])
-log = logging.getLogger("rich")
-if not args.traceback: install(show_locals=True)
 
 # we can only import these after setting up the logger since src.preprocessing 
 # sets up another logger (for secret reasons) which overwrites the log level..
@@ -54,14 +31,14 @@ from src.gnn import GCN
 
 
 # load annotations from gff files and format to pandas dataframe
-genome1_name = 'Cav_10DC88'
-genome1_annotation_df = pp.load_gff(os.path.join('data', 'minimal_Cav_10DC88_RENAMED.gff'))
-log.info(f"Loaded annotation file of first genome: {os.path.join('data', 'minimal_Cav_10DC88_RENAMED.gff')}")
+genome1_name = args.annotation.split(',')[0]
+genome1_annotation_df = pp.load_gff(genome1_name)
+log.info(f"Loaded annotation file of first genome: {genome1_name}")
 log.debug(f"Genome 1 annotation dataframe:\n {genome1_annotation_df}")
 
-genome2_name = 'Cav_11DC096'
-genome2_annotation_df = pp.load_gff(os.path.join('data', 'minimal_Cav_11DC096_RENAMED.gff'))
-log.info(f"Loaded annotation file of second genome: {os.path.join('data', 'minimal_Cav_11DC096_RENAMED.gff')}")
+genome2_name = args.annotation.split(',')[1]
+genome2_annotation_df = pp.load_gff(genome2_name)
+log.info(f"Loaded annotation file of second genome: {genome2_name}")
 log.debug(f"Genome 2 annotation dataframe:\n {genome2_annotation_df}")
 
 # total number of genes found in all annotation files
@@ -69,13 +46,8 @@ num_genes = len(genome1_annotation_df.index) + len(genome2_annotation_df.index)
 log.info(f"Total number of genes found in annotation files: {num_genes}")
 
 # load similarity bit scores from MMSeqs2 output CSV file to pandas dataframe
-sim_score_dict = pp.load_similarity_score(os.path.join('data', 'minimal_mmseq2_result.csv'))
-log.info(f"Loaded similarity scores file: {os.path.join('data', 'minimal_mmseq2_result.csv')}")
-
-# load holy ribap table to generate labels for test data set
-ribap_groups_dict = pp.load_ribap_groups(os.path.join('data', 'holy_python_ribap_95.csv'), [genome1_name, genome2_name])
-log.info(f"Loaded RIBAP groups file: {os.path.join('data', 'minimal_mmseq2_result.csv')}")
-log.debug(f"Got RIBAP groups dictionary:\n {next(iter(ribap_groups_dict.items()))}")
+sim_score_dict = pp.load_similarity_score(args.similarity)
+log.info(f"Loaded similarity scores file: {args.similarity}")
 
 # low embedding dim will reduce risk of overfitting but may prevent model form learning nuanced patterns
 # we later concat the embeddings of each gene ID (node) with its neighbouring gene ID embedding -> 3 * embedding dim
@@ -104,6 +76,9 @@ gene_ids_ts = torch.tensor(list(gene_id_integer_dict.values()))
 # fully connected edge index as follows (tensor magic happening):
 row = torch.arange(num_genes).repeat(num_genes)
 col = row.view(num_genes, num_genes).t().flatten()
+mask = (row != col)
+# remove self loops
+#edge_index_ts = torch.stack((row[mask], col[mask]), dim=0)
 edge_index_ts = torch.stack((row, col), dim=0)
 log.info(f"Edge index for fully connected graph successfully created.")
 
@@ -111,10 +86,6 @@ log.info(f"Edge index for fully connected graph successfully created.")
 #torch.set_printoptions(threshold=10_000) # set print limit for tensors
 #torch.set_printoptions(profile="full")
 
-# construct list of labels from ribap groups and format to match edge_index
-labels_ts = pp.map_labels_to_edge_index(edge_index_ts, gene_ids_lst, ribap_groups_dict)
-log.info('Created tensor of labels for training from RIBAP groups.')
-log.debug(f"Got tensor of labels of shape: {labels_ts.shape}\n{labels_ts}")
 
 # define the edge features (similarity bit scores from MMSeqs2, higher score ~ higher similarity)
 edge_weight_ts = pp.map_edge_weights(edge_index_ts, sim_score_dict, gene_ids_lst)#torch.randn((num_genes/2, edge_feature_dim))  # Edge features
@@ -128,7 +99,21 @@ log.info(f"Constructed neighbours, first entry: {neighbour_lst[0]}; last entry {
 # Initialize model, optimizer, and loss function
 #model = GeneHomologyGNN(num_genes=num_genes, embedding_dim=gene_id_embedding_dim, edge_feature_dim=edge_feature_dim, hidden_dim=hidden_dim)
 
-dataset = Data(x = gene_ids_ts, edge_index = edge_index_ts, edge_attr = edge_weight_ts, y = labels_ts)
+if args.command == 'train':
+    # load holy ribap table to generate labels for test data set
+    ribap_groups_dict = pp.load_ribap_groups(args.ribap_groups, [os.path.basename(genome1_name).split('.')[0].replace('_RENAMED', ''), os.path.basename(genome2_name).split('.')[0].replace('_RENAMED', '')])
+    log.info(f"Loaded RIBAP groups file: {args.ribap_groups}")
+    log.debug(f"Got RIBAP groups dictionary:\n {next(iter(ribap_groups_dict.items()))}")
+
+    # construct list of labels from ribap groups and format to match edge_index
+    labels_ts = pp.map_labels_to_edge_index(edge_index_ts, gene_ids_lst, ribap_groups_dict)
+    log.info('Created tensor of labels for training from RIBAP groups.')
+    log.debug(f"Got tensor of labels of shape: {labels_ts.shape}\n{labels_ts}")
+    dataset = Data(x = gene_ids_ts, edge_index = edge_index_ts, edge_attr = edge_weight_ts, y = labels_ts)
+else:
+    dataset = Data(x = gene_ids_ts, edge_index = edge_index_ts, edge_attr = edge_weight_ts)
+
+
 dataset.validate()
 log.info(f"Constructed dataset from node, egde and index tensors: {dataset}")
 
@@ -139,6 +124,7 @@ log.debug(f"Split dataset into train, test and validation data:\n train: {train_
 #dataset = train_data
 
 # DataLoader expects a list of Data() objects as input smh? or a dataset 
+args.batch_size = 1
 log.info(f"Constructing dataloader with batch size: {args.batch_size}")
 dataloader = DataLoader([train_data], batch_size=args.batch_size, shuffle=True)
 
@@ -147,25 +133,29 @@ optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
 # TODO: is this a good loss function for our scenario?
 criterion = torch.nn.BCELoss()
-num_epochs = args.epochs
+criterion = torch.nn.BCEWithLogitsLoss()
 
 train_losses = []
 train_accuracies = []
 
 
-if os.path.exists(os.path.join(args.model)):
-    log.info(f"Found model file '{args.model}' with trained parameter, restoring model state for inference..")
-    model.load_state_dict(torch.load(args.model))
-else:
+if args.command == 'predict' or os.path.exists(args.model_args):
+    if os.path.exists(args.model_args):
+        log.info(f"Found model file '{args.model_args}' with trained parameter, restoring model state for inference..")
+        model.load_state_dict(torch.load(args.model_args))
+        predict_homolog_genes(model, dataset)
+    else:
+        log.info(f"Could not infer model because model parameters file '{args.model_args}' was not found, exiting.")
+elif args.command == 'train':
     # Training loop
     log.info(f"Entering training loop with batch size: {args.batch_size}.")
 
     with Progress(transient = True) as progress:
 
-        training_bar = progress.add_task("Epochs completed: ", total=num_epochs)
+        training_bar = progress.add_task("Epochs completed: ", total=args.epochs)
         batch_bar    = progress.add_task("Training current batch:", total=len(dataloader))
 
-        for epoch in range(num_epochs):
+        for epoch in range(args.epochs):
             correct = 0
             running_loss = 0
             total = 0
@@ -206,17 +196,9 @@ else:
 
     log.info(f"Finished model training.\nPlotting metrics..")
     log.debug(f"\nLoss: {train_losses}\nAccuracy: {train_accuracies}")
-    plot_loss_accuracy(num_epochs, train_losses, train_accuracies)
-    log.info(f"Saving model to file '{args.model}'")
-    torch.save(model.state_dict(), args.model)
+    plot_loss_accuracy(args.epochs, train_losses, train_accuracies)
+    log.info(f"Saving model to file '{args.model_args}'")
+    torch.save(model.state_dict(), args.model_args)
 
-# Prediction example
-model.eval()
-with torch.no_grad():
-    with Console().status("Infering model on test data..") as status:
-        pred = model(test_data)
-    
-    accuracy = (pred == test_data.y).sum().item() / len(test_data.y)
-    log.info(f"Correctly predicted: {(pred == test_data.y).sum().item() } out of {len(test_data.y)} genes to be homologs.")
-    log.info(f"Accuracy on test dataset: {accuracy}")
-    log.info('Exiting.')
+    # get metrics on test dataset
+    predict_homolog_genes(model, test_data)
