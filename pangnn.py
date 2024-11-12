@@ -1,26 +1,11 @@
+from src.plot import plot_loss_accuracy, plot_graph
 from src.setup import log, args
 import torch, os
-import torch.nn.functional as F
 from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader
 from torch_geometric.transforms import RandomLinkSplit
-from src.plot import plot_loss_accuracy
 from src.predict import predict_homolog_genes
-from torch_geometric.data import Data
-from rich.logging import RichHandler
 from rich.progress import Progress
-from rich.console import Console
-
-
-
-###################
-###### SETUP ######
-###################
-
-
-
-# we can only import these after setting up the logger since src.preprocessing 
-# sets up another logger (for secret reasons) which overwrites the log level..
 import src.preprocessing as pp
 from src.gnn import GCN
 
@@ -66,6 +51,7 @@ gene_id_integer_dict = {gene: idx for idx, gene in enumerate(gene_ids_lst)}
 
 # reshape tensor to have correct dimensions
 gene_ids_ts = torch.tensor(list(gene_id_integer_dict.values()))
+log.debug(gene_ids_ts)
 
 # index specifying which nodes are connected by an edge in the graph, e.g.:
 # edge_index = torch.tensor([[0, 1],  # source nodes
@@ -81,6 +67,7 @@ mask = (row != col)
 #edge_index_ts = torch.stack((row[mask], col[mask]), dim=0)
 edge_index_ts = torch.stack((row, col), dim=0)
 log.info(f"Edge index for fully connected graph successfully created.")
+log.debug(edge_index_ts)
 
 # index of the element in the dict luckily), then for 
 #torch.set_printoptions(threshold=10_000) # set print limit for tensors
@@ -89,12 +76,13 @@ log.info(f"Edge index for fully connected graph successfully created.")
 
 # define the edge features (similarity bit scores from MMSeqs2, higher score ~ higher similarity)
 edge_weight_ts = pp.map_edge_weights(edge_index_ts, sim_score_dict, gene_ids_lst)#torch.randn((num_genes/2, edge_feature_dim))  # Edge features
-batch = torch.zeros(num_genes, dtype=torch.long)  # Batch vector for mini-batches if needed
+log.debug(edge_weight_ts)
+
+#batch = torch.zeros(num_genes, dtype=torch.long)  # Batch vector for mini-batches if needed
 
 # neighbour dictionary with each gene's upstream and downstream neighbours
 neighbour_lst = pp.construct_neighbour_lst(len(genome1_annotation_df.index)) + pp.construct_neighbour_lst(len(genome2_annotation_df.index), num_neighbours = args.neighbours)
 log.info(f"Constructed neighbours, first entry: {neighbour_lst[0]}; last entry {neighbour_lst[-1]}; length: {len(neighbour_lst)-1}")
-
 
 # Initialize model, optimizer, and loss function
 #model = GeneHomologyGNN(num_genes=num_genes, embedding_dim=gene_id_embedding_dim, edge_feature_dim=edge_feature_dim, hidden_dim=hidden_dim)
@@ -113,6 +101,10 @@ if args.command == 'train':
 else:
     dataset = Data(x = gene_ids_ts, edge_index = edge_index_ts, edge_attr = edge_weight_ts)
 
+
+
+plot_graph(dataset, gene_ids_lst, os.path.join('plots', 'input_graph.png'))
+quit()
 
 dataset.validate()
 log.info(f"Constructed dataset from node, egde and index tensors: {dataset}")
@@ -144,6 +136,7 @@ if args.command == 'predict' or os.path.exists(args.model_args):
         log.info(f"Found model file '{args.model_args}' with trained parameter, restoring model state for inference..")
         model.load_state_dict(torch.load(args.model_args))
         predict_homolog_genes(model, dataset)
+
     else:
         log.info(f"Could not infer model because model parameters file '{args.model_args}' was not found, exiting.")
 elif args.command == 'train':
@@ -201,4 +194,5 @@ elif args.command == 'train':
     torch.save(model.state_dict(), args.model_args)
 
     # get metrics on test dataset
-    predict_homolog_genes(model, test_data)
+    prediction = predict_homolog_genes(model, test_data)
+    

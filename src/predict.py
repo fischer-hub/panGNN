@@ -11,6 +11,11 @@ def predict_homolog_genes(model, dataset):
         dataset (class 'Data'): dataset containing the input graph, with structures
                                 node tensor, edge index, edge attribute tensor and
                                 y (labels tensor, optionally used for training)
+
+    Returns:
+        pred (tensor): tensor containing the final predictions for each pair of 
+                       nodes represented in the edge index
+        
     """
     model.eval()
     with torch.no_grad():
@@ -22,5 +27,7 @@ def predict_homolog_genes(model, dataset):
             log.info(f"Correctly predicted: {(pred == dataset.y).sum().item() } out of {len(dataset.y)} genes to be homologs.")
             log.info(f"Accuracy on test dataset: {accuracy}")
         else:
-            log.info('No labels supplied, can not calculate accuracy.')
+            log.error('No labels supplied, can not calculate accuracy.')
         log.info('Exiting.')
+    
+    return pred
