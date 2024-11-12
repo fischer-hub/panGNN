@@ -2,7 +2,7 @@ import pickle, os, torch
 import pandas as pd
 from rich.console import Console
 from rich.progress import track
-from src.setup import log
+from src.setup import log, args
 
 
 
@@ -16,7 +16,7 @@ def map_labels_to_edge_index(edge_index, gene_ids_lst, ribap_groups_dict):
         edge_index
     """
 
-    if os.path.isfile('data/labels.pkl'):
+    if os.path.isfile('data/labels.pkl') and args.cache:
         with open('data/labels.pkl', 'rb') as f:
             log.info(f"Found pickled labels, loading file..")
             label_lst = pickle.load(f)
@@ -37,7 +37,7 @@ def map_labels_to_edge_index(edge_index, gene_ids_lst, ribap_groups_dict):
             elif destination_gene_str_id in ribap_groups_dict and ribap_groups_dict[destination_gene_str_id] == source_gene_str_id:
                 label_lst[edge] = 1
 
-        if not os.path.isfile('data/labels.pkl'):
+        if not os.path.isfile('data/labels.pkl') and args.cache:
             log.info(f"Dumping labels list to pickle file..")
             with open('data/labels.pkl', 'wb') as f:
                 pickle.dump(label_lst, f)
@@ -155,7 +155,7 @@ def map_edge_weights(edge_index, bit_score_dict, gene_ids_lst):
     gene_ids_lst -- The list holding all gene IDs as strings, where the index of an ID in the list is its integer index.
     """
 
-    if os.path.isfile('data/edge_features.pkl'):
+    if os.path.isfile('data/edge_features.pkl') and args.cache:
         with open('data/edge_features.pkl', 'rb') as f:
             log.info(f"Found pickled edge features, loading file..")
             edge_weight_lst = pickle.load(f)
@@ -192,7 +192,7 @@ def map_edge_weights(edge_index, bit_score_dict, gene_ids_lst):
 
     
     # pickle test data edge features for testing (mapping takes a while otherwise)
-    if not os.path.isfile('data/edge_features.pkl'):
+    if not os.path.isfile('data/edge_features.pkl') and args.cache:
         log.info(f"Dumping edge feature list to pickle file..")
         with open('data/edge_features.pkl', 'wb') as f:
             pickle.dump(edge_weight_lst, f)

@@ -21,4 +21,4 @@ def plot_loss_accuracy(num_epochs, train_losses, train_accuracies):
     plt.legend()
 
     plt.tight_layout()
-    plt.show()
+    plt.savefig('loss_acc.png')

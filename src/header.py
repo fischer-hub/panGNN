@@ -13,7 +13,33 @@ class bcolors:
     LIGHTBLUE = '\033[38;5;33m'
 
 
-def print_header(print_ansi_esc = True):
+
+def format_args_string(args):
+    """Takes as input an argparse namspace object and returns its args as a
+    nicely formatted string for printing in the header message.
+
+    Args:
+        args (Namespace obj): argparse namespace object containing the programs arguments
+    
+    Returns:
+        args_str   (str): formatted string containing all key-value pairs from the argparse namespace object
+    """
+
+    args_str = f"{bcolors.YELLOW}{bcolors.BOLD}Parsed Arguments:\n"
+    for key, value in vars(args).items():
+        args_str += f"\t{bcolors.OKGREEN}{key+':':15} {bcolors.OKCYAN}{value}\n"
+
+    return args_str
+
+
+
+def print_header(print_ansi_esc = True, args = None):
+    """Prints the header message on program start.
+
+    Args:
+        print_ansi_esc (bool): use ansi escape codes for coloring of terminal output
+        args           (Namespace obj): argparse namespace object containing the programs arguments
+    """
 
     header = f"""
 {bcolors.PINK}    ____              _______   ___   __
@@ -24,5 +50,8 @@ def print_header(print_ansi_esc = True):
 
 
 {bcolors.PURPLE}Genes and pansexuals - version 0.0.1{bcolors.ENDC}
+
 """
+    
+    header += format_args_string(args)
     print(header)
