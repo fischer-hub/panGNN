@@ -46,6 +46,8 @@ edge_feature_dim = 10
 
 # map string gene IDs to integer IDs and save in tensor, then embed the int IDs in vector with embedding layer
 gene_ids_lst = list(genome1_annotation_df.index) + list(genome2_annotation_df.index)
+gene_ids_lst_train = list(genome1_annotation_df.index)[:int(len(genome1_annotation_df.index) * 0.7)] + list(genome2_annotation_df.index)[:int(len(genome2_annotation_df.index) * 0.7)]
+gene_ids_lst_test  = list(genome1_annotation_df.index) + list(genome2_annotation_df.index)
 gene_id_integer_dict = {gene: idx for idx, gene in enumerate(gene_ids_lst)}
 
 
@@ -87,7 +89,7 @@ log.info(f"Constructed neighbours, first entry: {neighbour_lst[0]}; last entry {
 # Initialize model, optimizer, and loss function
 #model = GeneHomologyGNN(num_genes=num_genes, embedding_dim=gene_id_embedding_dim, edge_feature_dim=edge_feature_dim, hidden_dim=hidden_dim)
 
-if args.command == 'train':
+if args.train:
     # load holy ribap table to generate labels for test data set
     ribap_groups_dict = pp.load_ribap_groups(args.ribap_groups, [os.path.basename(genome1_name).split('.')[0].replace('_RENAMED', ''), os.path.basename(genome2_name).split('.')[0].replace('_RENAMED', '')])
     log.info(f"Loaded RIBAP groups file: {args.ribap_groups}")
@@ -103,8 +105,7 @@ else:
 
 
 
-plot_graph(dataset, gene_ids_lst, os.path.join('plots', 'input_graph.png'))
-quit()
+if args.plot_graph: plot_graph(dataset, gene_ids_lst, os.path.join('plots', 'input_graph.png'))
 
 dataset.validate()
 log.info(f"Constructed dataset from node, egde and index tensors: {dataset}")
@@ -124,23 +125,28 @@ model = GCN(dataset = dataset, hidden_dim = hidden_dim, num_neighbours = args.ne
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
 # TODO: is this a good loss function for our scenario?
-criterion = torch.nn.BCELoss()
-criterion = torch.nn.BCEWithLogitsLoss()
+# criterion = torch.nn.BCELoss() # if your model outputs probabilities 
+criterion = torch.nn.BCEWithLogitsLoss() # if your model outputs raw logits and you want the loss function to handle the sigmoid activation internally
 
 train_losses = []
 train_accuracies = []
 
 
-if args.command == 'predict' or os.path.exists(args.model_args):
+if not args.train or os.path.exists(args.model_args):
     if os.path.exists(args.model_args):
         log.info(f"Found model file '{args.model_args}' with trained parameter, restoring model state for inference..")
         model.load_state_dict(torch.load(args.model_args))
         predict_homolog_genes(model, dataset)
 
     else:
-        log.info(f"Could not infer model because model parameters file '{args.model_args}' was not found, exiting.")
-elif args.command == 'train':
+        log.error(f"Could not infer model because model parameters file '{args.model_args}' was not found, exiting.")
+        quit()
+elif args.train:
     # Training loop
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    log.info(f"Training on device: {device}")
+    dataset.to(device)
+    model.to(device)
     log.info(f"Entering training loop with batch size: {args.batch_size}.")
 
     with Progress(transient = True) as progress:
@@ -194,5 +200,7 @@ elif args.command == 'train':
     torch.save(model.state_dict(), args.model_args)
 
     # get metrics on test dataset
-    prediction = predict_homolog_genes(model, test_data)
+    prediction_bin, prediction_scores = predict_homolog_genes(model, test_data)
+    log.debug(prediction_bin)
+    log.debug(labels_ts)
     

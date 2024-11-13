@@ -5,9 +5,8 @@ channels:
   - defaults
   - pyg
 dependencies:
-  - biopython
   - pandas
-  - bcbio-gff
   - pyg
   - rich
   - matplotlib
+  - networkx

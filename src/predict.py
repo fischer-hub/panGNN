@@ -2,7 +2,7 @@ import torch
 from rich.console import Console
 from src.setup import log
 
-def predict_homolog_genes(model, dataset):
+def predict_homolog_genes(model, dataset, binary_th = 0.5):
     """Infer the GNN with given trained model and predict homolog genes from
     input similarity graph.
 
@@ -20,14 +20,15 @@ def predict_homolog_genes(model, dataset):
     model.eval()
     with torch.no_grad():
         with Console().status("Infering model on test data..") as status:
-            pred = model(dataset)
+            edge_scores = model(dataset)
         
         if hasattr(dataset, 'y'):
-            accuracy = ((pred == dataset.y).sum().item()) / len(dataset.y)
-            log.info(f"Correctly predicted: {(pred == dataset.y).sum().item() } out of {len(dataset.y)} genes to be homologs.")
+            binary_prediction = torch.tensor((torch.sigmoid(edge_scores) >= binary_th).int())
+            accuracy = ((binary_prediction == dataset.y).sum().item()) / len(dataset.y)
+            log.info(f"Correctly predicted: {(binary_prediction == dataset.y).sum().item() } out of {len(dataset.y)} genes to be homologs.")
             log.info(f"Accuracy on test dataset: {accuracy}")
         else:
             log.error('No labels supplied, can not calculate accuracy.')
         log.info('Exiting.')
     
-    return pred
+    return (binary_prediction, edge_scores)

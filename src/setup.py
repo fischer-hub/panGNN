@@ -11,9 +11,10 @@ parser = argparse.ArgumentParser(
                     epilog='Greta Garbo and Monroe, Dietrich and DiMaggio, Marlon Brando, Jimmy Dean, On the cover of a magazine.',
                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-subparsers = parser.add_subparsers(dest="command", help="Available commands")
+#subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
 parser.add_argument('-d', '--debug',      help = 'set log level to DEBUG and print debug information while running', action='store_true')  # on/off flag
+parser.add_argument('-p', '--plot_graph', help = "plot input and output graph and save in './plots'", action='store_true')  # on/off flag
 parser.add_argument('-t', '--traceback',  help = 'set traceback standard python format (turns off rich formatting of traceback)', action = 'store_true')
 parser.add_argument('-c', '--cache',  	  help = 'cache computionally slow data structures', action = 'store_true')
 parser.add_argument('-l', '--log_level',  help = "set the level to print logs ['NOTSET', 'DEBUG', 'INFO', 'WARN', 'ERROR', 'CRITICAL']", default = 'INFO', type = str)
@@ -23,26 +24,30 @@ parser.add_argument('-a', '--annotation', help = 'path to the two annotation fil
 parser.add_argument('-s', '--similarity', help = 'path to the similarity score file (e.g tab seperated output of MMSeqs2)', default = os.path.join('data', 'dummy_dataset', 'dummy_mmseqs2.csv'), type = str)
 
 
-train_parser = subparsers.add_parser("train",     help="train a model on a input dataset")
-train_parser.add_argument('-b', '--batch_size',   help = 'set dataset batch size for model training', default = 32, type = int)
-train_parser.add_argument('-e', '--epochs',       help = 'set number of epochs for model training', default = 1, type = int)
-train_parser.add_argument('-r', '--ribap_groups', help = 'path to file holding the ribap groups calculated for the input genomes', default = os.path.join('data', 'dummy_dataset', 'dummy_ribap.csv'), type = str)
+#train_parser = subparsers.add_parser("train",     help="train a model on a input dataset")
+parser.add_argument('--train',              help = 'set pangnn into training mode', action='store_true')
+parser.add_argument('-b', '--batch_size',   help = 'set dataset batch size for model training', default = 32, type = int)
+parser.add_argument('-e', '--epochs',       help = 'set number of epochs for model training', default = 10, type = int)
+parser.add_argument('-r', '--ribap_groups', help = 'path to file holding the ribap groups calculated for the input genomes', default = os.path.join('data', 'holy_python_ribap_95.csv'), type = str)
 
-prediction_parser = subparsers.add_parser("predict", help="infer a trained model and predict homolog genes in the input dataset")
+#prediction_parser = subparsers.add_parser("predict", help="infer a trained model and predict homolog genes in the input dataset")
 
-#args = parser.parse_args()
+args = parser.parse_args()
 # Parse known args first
-args, remaining_args = parser.parse_known_args()
+#args, remaining_args = parser.parse_known_args()
 
 # Re-parse with global arguments included
-if args.command:
+#if args.command:
+    # Combine the parsed global args and command-specific args
+    #args = argparse.Namespace(**vars(args), **vars(command_args))
+    ### TODO: fix command agrs not parsed!!!
     # Parse global options after the 
-    command = args.command
-    command_parser = subparsers.choices[args.command]
-    command_args, remaining_args = command_parser.parse_known_args(remaining_args)
-    args = parser.parse_args(remaining_args)
-    args.command = command
-    args = argparse.Namespace(**vars(args), **vars(command_args))
+    #command = args.command
+    #command_parser = subparsers.choices[args.command]
+    #command_args, remaining_args = command_parser.parse_known_args(remaining_args)
+    #args = parser.parse_args(remaining_args)
+    #args.command = command
+    #args = argparse.Namespace(**vars(args), **vars(command_args))
 
 
 
@@ -54,7 +59,3 @@ if not args.traceback: install(show_locals=True)
 
 # print header text
 print_header(True, args)
-
-if not args.command:
-    log.error('Neither training mode nor prediction mode have been selected as subcommand. Beep boop exiting now.')
-    quit()

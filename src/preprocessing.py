@@ -1,11 +1,8 @@
 import pickle, os, torch
 import pandas as pd
 from rich.console import Console
-from rich.progress import track
+from rich.progress import track, Progress
 from src.setup import log, args
-
-
-
 
 
 def map_labels_to_edge_index(edge_index, gene_ids_lst, ribap_groups_dict):
@@ -162,20 +159,24 @@ def map_edge_weights(edge_index, bit_score_dict, gene_ids_lst):
     else:
 
         edge_weight_lst = []
-        count = 0
 
-        with Console().status("Mapping edge weights to respective edge index positions..") as status:
+
+        with Progress(transient = True) as progress:
+            edge_weight_bar = progress.add_task("Mapping edge weights to respective edge index positions..", total=len(edge_index[1]))
+            #with Console().status("Mapping edge weights to respective edge index positions..") as status:
             for source_int_ID, target_int_ID in zip(edge_index[0], edge_index[1]):
-                #print(count / len(edge_index[1]) * 100, ' %')
-                #count = count+1
-                
+
+                # add pseudo weight 1000 if we have a self loop
+                if source_int_ID == target_int_ID:
+                    edge_weight_lst.append(1000)
+                    continue
                 # retrieve str IDs from integer IDs in the edge index
                 source_str_ID = gene_ids_lst[source_int_ID]
                 target_str_ID = gene_ids_lst[target_int_ID]
 
                 # look up bit score for string IDs of the two genes and save to list
                 #print(f"Starting lookup for source node: ({source_str_ID}, {source_int_ID}); Target node: ({target_str_ID}, {target_int_ID})")
-                
+
                 try:
                     edge_weight = bit_score_dict[source_str_ID][target_str_ID]
                     edge_weight_lst.append(edge_weight)
@@ -187,9 +188,12 @@ def map_edge_weights(edge_index, bit_score_dict, gene_ids_lst):
                         edge_weight_lst.append(edge_weight)
                         #print(f"Bit score: {edge_weight}")
                     except KeyError:
+                        # do we want 0 as no similarity score? does this 'kill' neurons and preevent from learning?
                         edge_weight_lst.append(0)
                         #print(f"Could not find gene pair in similarity score dataframe, assigning score 0.")
-
+                
+                progress.update(edge_weight_bar, advance = 1)
+                
     
     # pickle test data edge features for testing (mapping takes a while otherwise)
     if not os.path.isfile('data/edge_features.pkl') and args.cache:

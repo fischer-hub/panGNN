@@ -57,6 +57,6 @@ class GCN(torch.nn.Module):
 
         return  link_predictions #F.log_softmax(nodes, dim=1) # i think this again reduces to one value which we dont want
     
-    def decode(self, z, edge_index):
+    def decode(self, z, edge_index, binary_th = 0.5):
         # calculate dot product between pairs of node embeddings to predict links
         return (z[edge_index[0]] * z[edge_index[1]]).sum(dim=1)

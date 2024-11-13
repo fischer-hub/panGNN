@@ -24,6 +24,10 @@ def plot_loss_accuracy(num_epochs, train_losses, train_accuracies, path = os.pat
     plt.legend()
 
     plt.tight_layout()
+
+    if not os.path.exists(os.path.dirname(path)):
+        os.mkdir(os.path.dirname(path))
+
     plt.savefig(path)
 
 
@@ -56,4 +60,7 @@ def plot_graph(dataset, gene_ids_lst, path):
     edge_labels = {(u, v): f"{d['edge_attr']:.2f}" for u, v, d in G.edges(data=True)}
     nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, label_pos=0.25)
 
+    if not os.path.exists(os.path.dirname(path)):
+        os.mkdir(os.path.dirname(path))
+        
     plt.savefig(path)
