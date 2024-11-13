@@ -21,8 +21,8 @@ class GCN(torch.nn.Module):
         log.debug(f"Expecting dims {combined_embedding_dim}; {hidden_dim} for first convolution layer.")
 
         # define convolution layers
-        self.conv1 = GCNConv(combined_embedding_dim, hidden_dim)
-        self.conv2 = GCNConv(hidden_dim, combined_embedding_dim)
+        self.conv1 = GCNConv(combined_embedding_dim, combined_embedding_dim)
+        self.conv2 = GCNConv(combined_embedding_dim, combined_embedding_dim)
 
 
     def forward(self, data):

@@ -47,7 +47,7 @@ edge_feature_dim = 10
 # map string gene IDs to integer IDs and save in tensor, then embed the int IDs in vector with embedding layer
 gene_ids_lst = list(genome1_annotation_df.index) + list(genome2_annotation_df.index)
 gene_ids_lst_train = list(genome1_annotation_df.index)[:int(len(genome1_annotation_df.index) * 0.7)] + list(genome2_annotation_df.index)[:int(len(genome2_annotation_df.index) * 0.7)]
-gene_ids_lst_test  = list(genome1_annotation_df.index) + list(genome2_annotation_df.index)
+gene_ids_lst_test = list(genome1_annotation_df.index)[int(len(genome1_annotation_df.index) * 0.7):] + list(genome2_annotation_df.index)[int(len(genome2_annotation_df.index) * 0.7):]
 gene_id_integer_dict = {gene: idx for idx, gene in enumerate(gene_ids_lst)}
 
 
@@ -151,7 +151,7 @@ elif args.train:
 
     with Progress(transient = True) as progress:
 
-        training_bar = progress.add_task("Epochs completed: ", total=args.epochs)
+        training_bar = progress.add_task("Epochs completed:", total=args.epochs)
         batch_bar    = progress.add_task("Training current batch:", total=len(dataloader))
 
         for epoch in range(args.epochs):

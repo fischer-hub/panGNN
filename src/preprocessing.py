@@ -22,7 +22,7 @@ def map_labels_to_edge_index(edge_index, gene_ids_lst, ribap_groups_dict):
         num_genes = len(edge_index[0])
         label_lst = [0] * num_genes
 
-        for edge in track(range(num_genes), description = 'Mapping labels to gene pairs in edge index', transient = True):
+        for edge in track(range(num_genes), description = 'Mapping labels to gene pairs in edge index..\n', transient = True):
 
             source_gene_int_id = edge_index[0][edge]
             destination_gene_int_id = edge_index[1][edge]
@@ -162,7 +162,7 @@ def map_edge_weights(edge_index, bit_score_dict, gene_ids_lst):
 
 
         with Progress(transient = True) as progress:
-            edge_weight_bar = progress.add_task("Mapping edge weights to respective edge index positions..", total=len(edge_index[1]))
+            edge_weight_bar = progress.add_task("Mapping edge weights to respective edge index positions..\n", total=len(edge_index[1]))
             #with Console().status("Mapping edge weights to respective edge index positions..") as status:
             for source_int_ID, target_int_ID in zip(edge_index[0], edge_index[1]):
 
