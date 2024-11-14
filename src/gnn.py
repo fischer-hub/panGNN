@@ -7,8 +7,9 @@ from src.setup import log
 
 # GCN class based on the example discussed in the pytorch geometric docs
 class GCN(torch.nn.Module):
-    def __init__(self, dataset, hidden_dim, num_neighbours, node_feature_dim, neighbour_lst):
+    def __init__(self, dataset, hidden_dim, num_neighbours, node_feature_dim, neighbour_lst, device):
         super().__init__()
+        self.device = device
 
         self.neighbour_lst = neighbour_lst
         
@@ -32,7 +33,7 @@ class GCN(torch.nn.Module):
         # TODO: does it make sense to call embedding on every forward step? the input doesnt change right?
         # or is this called on the convoluted node embeddings
         node_embeddings = self.embedding(nodes)
-        combined_embeddings = combine_neighbour_embeddings(node_embeddings, self.neighbour_lst)
+        combined_embeddings = combine_neighbour_embeddings(node_embeddings, data.neighbour_lst, self.device)
 
         log.debug(f"Got nodes tensor of shape: {combined_embeddings.shape}")
         log.debug(f"Got edge weights tensor of shape: {edge_weights.shape}")

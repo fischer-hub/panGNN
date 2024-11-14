@@ -16,12 +16,12 @@ from src.gnn import GCN
 
 
 # load annotations from gff files and format to pandas dataframe
-genome1_name = args.annotation.split(',')[0]
+genome1_name = args.annotation[0]
 genome1_annotation_df = pp.load_gff(genome1_name)
 log.info(f"Loaded annotation file of first genome: {genome1_name}")
 log.debug(f"Genome 1 annotation dataframe:\n {genome1_annotation_df}")
 
-genome2_name = args.annotation.split(',')[1]
+genome2_name = args.annotation[1]
 genome2_annotation_df = pp.load_gff(genome2_name)
 log.info(f"Loaded annotation file of second genome: {genome2_name}")
 log.debug(f"Genome 2 annotation dataframe:\n {genome2_annotation_df}")
@@ -100,9 +100,10 @@ if args.train:
     log.info('Created tensor of labels for training from RIBAP groups.')
     log.debug(f"Got tensor of labels of shape: {labels_ts.shape}\n{labels_ts}")
     dataset = Data(x = gene_ids_ts, edge_index = edge_index_ts, edge_attr = edge_weight_ts, y = labels_ts)
+    dataset.neighbour_lst = neighbour_lst
 else:
     dataset = Data(x = gene_ids_ts, edge_index = edge_index_ts, edge_attr = edge_weight_ts)
-
+    dataset.neighbour_lst = neighbour_lst
 
 
 if args.plot_graph: plot_graph(dataset, gene_ids_lst, os.path.join('plots', 'input_graph.png'))
@@ -110,23 +111,14 @@ if args.plot_graph: plot_graph(dataset, gene_ids_lst, os.path.join('plots', 'inp
 dataset.validate()
 log.info(f"Constructed dataset from node, egde and index tensors: {dataset}")
 
-
-transform = RandomLinkSplit(is_undirected=True)
-train_data, val_data, test_data = transform(dataset)
-log.debug(f"Split dataset into train, test and validation data:\n train: {train_data}\ntest: {test_data}\nvalidation: {val_data}")
-#dataset = train_data
-
-# DataLoader expects a list of Data() objects as input smh? or a dataset 
-args.batch_size = 1
-log.info(f"Constructing dataloader with batch size: {args.batch_size}")
-dataloader = DataLoader([train_data], batch_size=args.batch_size, shuffle=True)
-
-model = GCN(dataset = dataset, hidden_dim = hidden_dim, num_neighbours = args.neighbours, node_feature_dim = gene_id_embedding_dim, neighbour_lst = neighbour_lst)
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu") if args.gpu else 'cpu'
+model = GCN(dataset = dataset, hidden_dim = hidden_dim, num_neighbours = args.neighbours, node_feature_dim = gene_id_embedding_dim, neighbour_lst = neighbour_lst, device = device)
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
 # TODO: is this a good loss function for our scenario?
-# criterion = torch.nn.BCELoss() # if your model outputs probabilities 
-criterion = torch.nn.BCEWithLogitsLoss() # if your model outputs raw logits and you want the loss function to handle the sigmoid activation internally
+# criterion = torch.nn.BCELoss() # if your model outputs probabilities, outputs logits
+# nn.CrossEntropyLoss() # multi-class classification where each sample belongs to only one class out of multiple classes., outputs logits
+criterion = torch.nn.BCEWithLogitsLoss() # if your model outputs raw logits and you want the loss function to handle the sigmoid activation internally, outputs probabilities
 
 train_losses = []
 train_accuracies = []
@@ -143,7 +135,6 @@ if not args.train or os.path.exists(args.model_args):
         quit()
 elif args.train:
     # Training loop
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     log.info(f"Training on device: {device}")
     dataset.to(device)
     model.to(device)
@@ -152,38 +143,38 @@ elif args.train:
     with Progress(transient = True) as progress:
 
         training_bar = progress.add_task("Epochs completed:", total=args.epochs)
-        batch_bar    = progress.add_task("Training current batch:", total=len(dataloader))
+        #batch_bar    = progress.add_task("Training current batch:", total=len(dataloader))
 
         for epoch in range(args.epochs):
             correct = 0
             running_loss = 0
             total = 0
 
-            for batch in dataloader:
+            #for batch in dataloader:
 
-                model.train()
-                # clear old gradients so only current batch gradients are used
-                optimizer.zero_grad()
+            model.train()
+            # clear old gradients so only current batch gradients are used
+            optimizer.zero_grad()
 
-                # this calls the models forward function since model is callable
-                log.debug('Calling forward step on current batch..')
-                output = model(dataset)
-                log.debug('Calling loss function on current batch..')
-                log.debug(dataset)
-                loss = criterion(output, labels_ts)
-                log.debug('Calling backward step on current batch..')
-                loss.backward()
-                log.debug('Calling optimizer step on current batch..')
-                optimizer.step()
-                
-                # get some metrics, maybe do this in the model class?
-                log.info(f'Epoch {epoch+1}, Loss: {loss.item()}')
-                #running_loss += loss.item() * gene_ids_ts.size(0)
-                _, predicted = torch.max(output, 0)
-                total += labels_ts.size(0)
-                correct += (predicted == labels_ts).sum().item()
+            # this calls the models forward function since model is callable
+            log.debug('Calling forward step on current batch..')
+            output = model(dataset)
+            log.debug('Calling loss function on current batch..')
+            log.debug(dataset)
+            loss = criterion(output, labels_ts)
+            log.debug('Calling backward step on current batch..')
+            loss.backward()
+            log.debug('Calling optimizer step on current batch..')
+            optimizer.step()
+            
+            # get some metrics, maybe do this in the model class?
+            log.info(f'Epoch {epoch+1}, Loss: {loss.item()}')
+            #running_loss += loss.item() * gene_ids_ts.size(0)
+            _, predicted = torch.max(output, 0)
+            total += labels_ts.size(0)
+            correct += (predicted == labels_ts).sum().item()
 
-                progress.update(batch_bar, advance = 1)
+            #progress.update(batch_bar, advance = 1)
 
 
             epoch_accuracy = 100 * correct / total
@@ -200,7 +191,7 @@ elif args.train:
     torch.save(model.state_dict(), args.model_args)
 
     # get metrics on test dataset
-    prediction_bin, prediction_scores = predict_homolog_genes(model, test_data)
+    prediction_bin, prediction_scores = predict_homolog_genes(model, dataset)
     log.debug(prediction_bin)
     log.debug(labels_ts)
     

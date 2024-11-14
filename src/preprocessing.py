@@ -38,7 +38,8 @@ def map_labels_to_edge_index(edge_index, gene_ids_lst, ribap_groups_dict):
             log.info(f"Dumping labels list to pickle file..")
             with open('data/labels.pkl', 'wb') as f:
                 pickle.dump(label_lst, f)
-
+    
+    log.info(f"{sum(label_lst) / len(label_lst)} of edges in ground truth are positive.")
     return torch.tensor(label_lst).float()
 
 
@@ -68,7 +69,7 @@ def load_ribap_groups(ribap_group_file, genome_name_lst):
     return ribap_groups_dict
 
 
-def combine_neighbour_embeddings(gene_embeddings, neighbor_lst):
+def combine_neighbour_embeddings(gene_embeddings, neighbor_lst, device):
     """
     Combine each gene's embedding with its neighbors' embeddings.
     
@@ -92,9 +93,9 @@ def combine_neighbour_embeddings(gene_embeddings, neighbor_lst):
         # TODO: adjust this to work with more than 1 neighbour
         # get neighbors' embeddings
         upstream_id, downstream_id = neighbor_lst[gene_id]
-        upstream_feature= gene_embeddings[upstream_id] if upstream_id is not None else torch.zeros(embedding_dim)
-        downstream_feature= gene_embeddings[downstream_id] if downstream_id is not None else torch.zeros(embedding_dim)
-        
+        upstream_feature= gene_embeddings[upstream_id] if upstream_id is not None else torch.zeros(embedding_dim, device = device)
+        downstream_feature= gene_embeddings[downstream_id] if downstream_id is not None else torch.zeros(embedding_dim, device = device)
+
         # Concatenate embeddings (upstream gene + gene + downstream gene)
         combined_feature= torch.cat([upstream_feature, gene_feature, downstream_feature], dim=0)
         combined_features.append(combined_feature)
@@ -143,13 +144,15 @@ def map_edge_weights(edge_index, bit_score_dict, gene_ids_lst):
     nodes connected by the edge. So maps weights to the respective position of 
     its edge in the edge index.
 
-    Keyword arguments:
+    Args:
 
-    edge_index -- The edge index defining the nodes that are connected by each edge.
-
-    bit_score_dict -- The dictionary that holds for every pair of genes the according similarity bit score.
-
-    gene_ids_lst -- The list holding all gene IDs as strings, where the index of an ID in the list is its integer index.
+        edge_index (tensor): The edge index defining the nodes that are connected by each edge.
+        bit_score_dict (dict): The dictionary that holds for every pair of genes the according similarity bit score.
+        gene_ids_lst (list): The list holding all gene IDs as strings, where the index of an ID in the list is its integer index.
+    
+    Returns:
+        edge_weight_ts (tensor): tensor that defines for each node pair the 
+                                 similarity score of the nodes connected (edges weight)
     """
 
     if os.path.isfile('data/edge_features.pkl') and args.cache:

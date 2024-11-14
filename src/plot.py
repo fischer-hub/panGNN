@@ -2,6 +2,53 @@ import matplotlib.pyplot as plt
 import networkx as nx
 from torch_geometric.utils import to_networkx
 import os
+from sklearn.metrics import roc_curve, auc
+
+
+def plot_roc(labels, probabilities, path = os.path.join('plots', 'cm.png')):
+    """Plot confusion matrix plot for 'ground truth' labels and predicted
+    probabilities.
+
+    Args:
+        labels (tensor): labels describing whether or not two nodes are connected by an edge ('ground truth')
+        probabilities (tensor): predicted probability for two nodes to be connected by an edge
+        path (path): path to save roc-plot file to
+    """
+
+    
+
+def plot_roc(labels, probabilities, path = os.path.join('plots', 'roc.png')):
+    """Plot operator-receiver-curve plot for 'ground truth' labels and predicted
+    probabilities.
+
+    Args:
+        labels (tensor): labels describing whether or not two nodes are connected by an edge ('ground truth')
+        probabilities (tensor): predicted probability for two nodes to be connected by an edge
+        path (path): path to save roc-plot file to
+    
+    Returns:
+        roc_auc (float): fraction of area under the (roc) curve
+    """
+
+    fpr, tpr, thresholds = roc_curve(labels, probabilities)
+    roc_auc = auc(fpr, tpr)
+
+    plt.figure()
+    plt.plot(fpr, tpr, color='blue', label=f'ROC curve (AUC = {roc_auc:.2f})')
+    plt.plot([0, 1], [0, 1], color='gray', linestyle='--')  # diagonal line for random guessing
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title('Receiver Operating Characteristic (ROC) Curve')
+    plt.legend(loc="lower right")
+
+    if not os.path.exists(os.path.dirname(path)):
+        os.mkdir(os.path.dirname(path))
+
+    plt.savefig(path)
+
+    return roc_auc
 
 
 def plot_loss_accuracy(num_epochs, train_losses, train_accuracies, path = os.path.join('plots', 'loss_acc.png')):

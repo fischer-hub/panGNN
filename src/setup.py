@@ -20,12 +20,13 @@ parser.add_argument('-c', '--cache',  	  help = 'cache computionally slow data s
 parser.add_argument('-l', '--log_level',  help = "set the level to print logs ['NOTSET', 'DEBUG', 'INFO', 'WARN', 'ERROR', 'CRITICAL']", default = 'INFO', type = str)
 parser.add_argument('-m', '--model_args', help = 'path to save or load model from, depending on training or prediction mode', default = 'model.pkl', type = str)
 parser.add_argument('-n', '--neighbours', help = 'number of genes from target gene to consider as neighbours', default = 1, type = int)
-parser.add_argument('-a', '--annotation', help = 'path to the two annotation files in gff format of the two input genomes, seperated by comma', default = 'data/dummy_dataset/dummy1.gff,data/dummy_dataset/dummy2.gff', type = str)
+parser.add_argument('-a', '--annotation', help = 'path to the two annotation files in gff format of the two input genomes, seperated by tab', default = "data/dummy_dataset/dummy1.gff\tdata/dummy_dataset/dummy2.gff", type = str, nargs = 2)
 parser.add_argument('-s', '--similarity', help = 'path to the similarity score file (e.g tab seperated output of MMSeqs2)', default = os.path.join('data', 'dummy_dataset', 'dummy_mmseqs2.csv'), type = str)
 
 
 #train_parser = subparsers.add_parser("train",     help="train a model on a input dataset")
 parser.add_argument('--train',              help = 'set pangnn into training mode', action='store_true')
+parser.add_argument('-g', '--gpu',          help = 'train model on gpu if available', action = 'store_true')
 parser.add_argument('-b', '--batch_size',   help = 'set dataset batch size for model training', default = 32, type = int)
 parser.add_argument('-e', '--epochs',       help = 'set number of epochs for model training', default = 10, type = int)
 parser.add_argument('-r', '--ribap_groups', help = 'path to file holding the ribap groups calculated for the input genomes', default = os.path.join('data', 'holy_python_ribap_95.csv'), type = str)
