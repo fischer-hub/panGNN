@@ -87,7 +87,8 @@ def plot_graph(dataset, gene_ids_lst, path):
     edge index and egde attribute tensor.
     """
 
-    nodes, edge_index, edge_labels = dataset
+    edge_labels = dataset.edge_attr
+    plt.figure(3,figsize=(12,12)) 
 
     # convert dataset to NetworkX graph
     G = to_networkx(dataset, edge_attrs=['edge_attr'], node_attrs=['x'])
@@ -106,6 +107,24 @@ def plot_graph(dataset, gene_ids_lst, path):
     nx.draw_networkx_edges(G, pos, width=2)
     edge_labels = {(u, v): f"{d['edge_attr']:.2f}" for u, v, d in G.edges(data=True)}
     nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, label_pos=0.25)
+
+    if not os.path.exists(os.path.dirname(path)):
+        os.mkdir(os.path.dirname(path))
+        
+    plt.savefig(path)
+
+
+def plot_logit_distribution(logits, path = os.path.join('plots', 'logit_distribution.png')):
+
+    plt.figure()
+
+    values = logits.numpy()
+
+    plt.hist(values, bins=15, range = (min(values), max(values)))
+
+    plt.xlabel('Value Range')
+    plt.ylabel('Frequency')
+    plt.title('Distribution of Values')
 
     if not os.path.exists(os.path.dirname(path)):
         os.mkdir(os.path.dirname(path))

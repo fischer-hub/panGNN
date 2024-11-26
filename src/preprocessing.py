@@ -5,6 +5,23 @@ from rich.progress import track, Progress
 from src.setup import log, args
 
 
+
+def build_edge_index(sim_score_dict, gene_id_integer_dict):
+
+    # this only builds an index from edges where a similarity score exists, no 0 edges, no self edges
+
+    origin_idx, target_idx = [], []
+
+    for origin_id in sim_score_dict.keys():
+        for target_id in sim_score_dict[origin_id].keys():
+            if ('FFOKMCCD' in target_id or 'KCMFMKKO' in target_id) and ('FFOKMCCD' in origin_id or 'KCMFMKKO' in origin_id):
+                origin_idx.append(gene_id_integer_dict[origin_id])
+                target_idx.append(gene_id_integer_dict[target_id])
+
+    return torch.stack((torch.tensor(origin_idx), torch.tensor(target_idx)), dim=0)
+
+
+
 def map_labels_to_edge_index(edge_index, gene_ids_lst, ribap_groups_dict):
     """Map labels for test dataset from RIBAP result table to respective edge
     position in the edge index.
@@ -196,13 +213,14 @@ def map_edge_weights(edge_index, bit_score_dict, gene_ids_lst):
                         #print(f"Could not find gene pair in similarity score dataframe, assigning score 0.")
                 
                 progress.update(edge_weight_bar, advance = 1)
-                
+            
     
     # pickle test data edge features for testing (mapping takes a while otherwise)
     if not os.path.isfile('data/edge_features.pkl') and args.cache:
         log.info(f"Dumping edge feature list to pickle file..")
         with open('data/edge_features.pkl', 'wb') as f:
             pickle.dump(edge_weight_lst, f)
+    
     
     # cast to float since edge weights have to be floats?
     edge_weight_ts = torch.tensor(edge_weight_lst).float()

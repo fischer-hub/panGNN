@@ -7,7 +7,7 @@ from torch_geometric.transforms import RandomLinkSplit
 from src.predict import predict_homolog_genes
 from rich.progress import Progress
 import src.preprocessing as pp
-from src.gnn import GCN
+from src.gnn import MyGCN
 
 
 ###################
@@ -42,7 +42,7 @@ gene_id_embedding_dim = 64
 hidden_dim = 64
 
 # this (the edge features) later holds the similarity bit score of MMSeqs2 clustering for each two gene nodes connected by an edge
-edge_feature_dim = 10
+edge_feature_dim = 128
 
 # map string gene IDs to integer IDs and save in tensor, then embed the int IDs in vector with embedding layer
 gene_ids_lst = list(genome1_annotation_df.index) + list(genome2_annotation_df.index)
@@ -67,7 +67,8 @@ col = row.view(num_genes, num_genes).t().flatten()
 mask = (row != col)
 # remove self loops
 #edge_index_ts = torch.stack((row[mask], col[mask]), dim=0)
-edge_index_ts = torch.stack((row, col), dim=0)
+#edge_index_ts = torch.stack((row, col), dim=0)
+edge_index_ts = pp.build_edge_index(sim_score_dict, gene_id_integer_dict)
 log.info(f"Edge index for fully connected graph successfully created.")
 log.debug(edge_index_ts)
 
@@ -77,8 +78,11 @@ log.debug(edge_index_ts)
 
 
 # define the edge features (similarity bit scores from MMSeqs2, higher score ~ higher similarity)
-edge_weight_ts = pp.map_edge_weights(edge_index_ts, sim_score_dict, gene_ids_lst)#torch.randn((num_genes/2, edge_feature_dim))  # Edge features
-log.debug(edge_weight_ts)
+edge_weight_ts = pp.map_edge_weights(edge_index_ts, sim_score_dict, gene_ids_lst)#torch.randn((num_genes/2, edge_feature_dim))  # Edge 
+
+# center data? this introduces nans in the 
+#edge_weight_ts = torch.floor(edge_weight_ts - (edge_weight_ts.max()/2))
+#edge_weight_ts = edge_weight_ts.float()
 
 #batch = torch.zeros(num_genes, dtype=torch.long)  # Batch vector for mini-batches if needed
 
@@ -112,13 +116,13 @@ dataset.validate()
 log.info(f"Constructed dataset from node, egde and index tensors: {dataset}")
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu") if args.gpu else 'cpu'
-model = GCN(dataset = dataset, hidden_dim = hidden_dim, num_neighbours = args.neighbours, node_feature_dim = gene_id_embedding_dim, neighbour_lst = neighbour_lst, device = device)
-optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+model = MyGCN(dataset = dataset, hidden_dim = hidden_dim, num_neighbours = args.neighbours, node_feature_dim = gene_id_embedding_dim, neighbour_lst = neighbour_lst, device = device)
+optimizer = torch.optim.Adam(model.parameters(), lr=0.003)
 
 # TODO: is this a good loss function for our scenario?
 # criterion = torch.nn.BCELoss() # if your model outputs probabilities, outputs logits
 # nn.CrossEntropyLoss() # multi-class classification where each sample belongs to only one class out of multiple classes., outputs logits
-criterion = torch.nn.BCEWithLogitsLoss() # if your model outputs raw logits and you want the loss function to handle the sigmoid activation internally, outputs probabilities
+criterion = torch.nn.BCEWithLogitsLoss(pos_weight = torch.tensor([1.5])) # if your model outputs raw logits and you want the loss function to handle the sigmoid activation internally, outputs probabilities
 
 train_losses = []
 train_accuracies = []
@@ -167,8 +171,6 @@ elif args.train:
             log.debug('Calling optimizer step on current batch..')
             optimizer.step()
             
-            # get some metrics, maybe do this in the model class?
-            log.info(f'Epoch {epoch+1}, Loss: {loss.item()}')
             #running_loss += loss.item() * gene_ids_ts.size(0)
             _, predicted = torch.max(output, 0)
             total += labels_ts.size(0)
@@ -176,11 +178,15 @@ elif args.train:
 
             #progress.update(batch_bar, advance = 1)
 
-
             epoch_accuracy = 100 * correct / total
+            binary_prediction = torch.tensor((torch.sigmoid(output) >= 0.5).int())
+            accuracy = ((binary_prediction == labels_ts).sum().item()) / len(labels_ts)
+
+            # get some metrics, maybe do this in the model class?
+            log.info(f'Epoch {epoch+1}, Loss: {loss.item()}, Acc: {accuracy}')
 
             train_losses.append(loss.item())
-            train_accuracies.append(epoch_accuracy)
+            train_accuracies.append(accuracy)
             progress.update(training_bar, advance = 1)
 
 

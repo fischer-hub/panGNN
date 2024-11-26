@@ -1,12 +1,12 @@
 import torch
 import torch.nn.functional as F
-from torch_geometric.nn import GCNConv, SAGEConv
+from torch_geometric.nn import GCNConv, ChebConv
 from src.preprocessing import combine_neighbour_embeddings
 from src.setup import log
 
 
 # GCN class based on the example discussed in the pytorch geometric docs
-class GCN(torch.nn.Module):
+class MyGCN(torch.nn.Module):
     def __init__(self, dataset, hidden_dim, num_neighbours, node_feature_dim, neighbour_lst, device):
         super().__init__()
         self.device = device
@@ -22,8 +22,11 @@ class GCN(torch.nn.Module):
         log.debug(f"Expecting dims {combined_embedding_dim}; {hidden_dim} for first convolution layer.")
 
         # define convolution layers
-        self.conv1 = GCNConv(combined_embedding_dim, combined_embedding_dim)
-        self.conv2 = GCNConv(combined_embedding_dim, combined_embedding_dim)
+        self.conv1 = GCNConv(combined_embedding_dim, 128)
+        #self.conv2 = DenseGCNConv(128, 128)
+        self.conv2 = GCNConv(128, combined_embedding_dim)
+
+        self.activation_fct = torch.nn.LeakyReLU()
 
 
     def forward(self, data):
@@ -44,20 +47,22 @@ class GCN(torch.nn.Module):
         # only takes edge weights (scalars)
         log.debug('Passing data to convolution layer 1..')
         nodes = self.conv1(combined_embeddings, edge_index, edge_weights)
-        log.debug('Passing data to activation layer (ReLU)..')
-        nodes = F.relu(nodes)
+        log.debug('Passing data to activation function..')
+        #nodes = F.relu(nodes)
+        #nodes = self.activation_fct(nodes)
+        nodes = torch.sigmoid(nodes)
         log.debug('Passing data to convolution layer 2..')
         #nodes = F.dropout(nodes, training=self.training) # what does this do??
         nodes = self.conv2(nodes, edge_index, edge_weights)
         log.debug(f"Outputting nodes to decode function of shape: {nodes.shape}\n{nodes}")
 
         link_predictions = self.decode(nodes, edge_index)
+        #link_predictions = F.softmax(link_predictions)
         #link_predictions = torch.sigmoid(link_predictions)
-        link_predictions = F.relu(link_predictions)
         log.debug(f"Outputting link prediction tensor of shape: {link_predictions.shape}\ntype:{link_predictions.dtype}\n{link_predictions}")
 
-        return  link_predictions #F.log_softmax(nodes, dim=1) # i think this again reduces to one value which we dont want
+        return  link_predictions #F.log_softmax(nodes, dim=1)
     
-    def decode(self, z, edge_index, binary_th = 0.5):
+    def decode(self, z, edge_index):
         # calculate dot product between pairs of node embeddings to predict links
         return (z[edge_index[0]] * z[edge_index[1]]).sum(dim=1)
