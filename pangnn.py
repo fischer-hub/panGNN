@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 from src.plot import plot_loss_accuracy, plot_graph
 from src.setup import log, args
 import torch, os
