@@ -22,9 +22,9 @@ class MyGCN(torch.nn.Module):
         log.debug(f"Expecting dims {combined_embedding_dim}; {hidden_dim} for first convolution layer.")
 
         # define convolution layers
-        self.conv1 = GCNConv(combined_embedding_dim, 128)
+        self.conv1 = GCNConv(64, 128)
         #self.conv2 = DenseGCNConv(128, 128)
-        self.conv2 = GCNConv(128, combined_embedding_dim)
+        self.conv2 = GCNConv(128, 64)
 
         self.activation_fct = torch.nn.LeakyReLU()
 
@@ -35,8 +35,8 @@ class MyGCN(torch.nn.Module):
 
         # TODO: does it make sense to call embedding on every forward step? the input doesnt change right?
         # or is this called on the convoluted node embeddings
-        node_embeddings = self.embedding(nodes)
-        combined_embeddings = combine_neighbour_embeddings(node_embeddings, data.neighbour_lst, self.device)
+        combined_embeddings = self.embedding(nodes)
+        #combined_embeddings = combine_neighbour_embeddings(node_embeddings, data.neighbour_lst, self.device)
 
         log.debug(f"Got nodes tensor of shape: {combined_embeddings.shape}")
         log.debug(f"Got edge weights tensor of shape: {edge_weights.shape}")
@@ -48,9 +48,9 @@ class MyGCN(torch.nn.Module):
         log.debug('Passing data to convolution layer 1..')
         nodes = self.conv1(combined_embeddings, edge_index, edge_weights)
         log.debug('Passing data to activation function..')
-        #nodes = F.relu(nodes)
+        nodes = F.relu(nodes)
         #nodes = self.activation_fct(nodes)
-        nodes = torch.sigmoid(nodes)
+        #nodes = torch.sigmoid(nodes)
         log.debug('Passing data to convolution layer 2..')
         #nodes = F.dropout(nodes, training=self.training) # what does this do??
         nodes = self.conv2(nodes, edge_index, edge_weights)

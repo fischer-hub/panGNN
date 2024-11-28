@@ -6,19 +6,39 @@ from src.setup import log, args
 
 
 
-def build_edge_index(sim_score_dict, gene_id_integer_dict):
+def build_edge_index(sim_score_dict, gene_id_integer_dict, fully_connected = False, self_loops = False):
+    """Build an edge index for partially or fully connected input graph from similarity scores and gene IDs.
 
-    # this only builds an index from edges where a similarity score exists, no 0 edges, no self edges
+    Args:
+        sim_score_dict (dict): python dictionary containing for every pair of genes in the MMSeqs2 output a similarity score
+        gene_id_integer_dict (dict): python dictionary containing for every string gene ID its integer ID counterpart
+        fully_connected (bool, optional): bool indicating whether or not to build an edge index for a fully connected graph, that is every node has an edge to every other node in the graph. Defaults to False.
+        self_loops (bool, optional): bool indicating wheterh or not an edge from a node to itself is added to the edge index. Defaults to False.
 
-    origin_idx, target_idx = [], []
+    Returns:
+        pytorch tensor: pytorch geometric edge index 
+    """
 
-    for origin_id in sim_score_dict.keys():
-        for target_id in sim_score_dict[origin_id].keys():
-            if ('FFOKMCCD' in target_id or 'KCMFMKKO' in target_id) and ('FFOKMCCD' in origin_id or 'KCMFMKKO' in origin_id):
-                origin_idx.append(gene_id_integer_dict[origin_id])
-                target_idx.append(gene_id_integer_dict[target_id])
+    if fully_connected:
+        num_genes = len(list(gene_id_integer_dict.keys()))
+        row = torch.arange(num_genes).repeat(num_genes)
+        col = row.view(num_genes, num_genes).t().flatten()
+        mask = (row != col)
+        edge_index_ts = torch.stack((row, col), dim=0) if self_loops else torch.stack((row[mask], col[mask]), dim=0) 
+    else:
+        origin_idx, target_idx = [], []
 
-    return torch.stack((torch.tensor(origin_idx), torch.tensor(target_idx)), dim=0)
+        for origin_id in sim_score_dict.keys():
+            for target_id in sim_score_dict[origin_id].keys():
+                # skip self loop edges if self_loops is false
+                if not self_loops and (target_id == origin_id):
+                    continue
+                if ('FFOKMCCD' in target_id or 'KCMFMKKO' in target_id) and ('FFOKMCCD' in origin_id or 'KCMFMKKO' in origin_id):
+                    origin_idx.append(gene_id_integer_dict[origin_id])
+                    target_idx.append(gene_id_integer_dict[target_id])
+
+        edge_index_ts = torch.stack((torch.tensor(origin_idx), torch.tensor(target_idx)), dim=0)
+    return edge_index_ts
 
 
 

@@ -5,15 +5,36 @@ import os
 from sklearn.metrics import roc_curve, auc
 
 
-def plot_roc(labels, probabilities, path = os.path.join('plots', 'cm.png')):
-    """Plot confusion matrix plot for 'ground truth' labels and predicted
-    probabilities.
+def plot_simscore_class(sim_score, labels, path = os.path.join('plots', 'score_class.png')):
+    """Plot 
+
 
     Args:
-        labels (tensor): labels describing whether or not two nodes are connected by an edge ('ground truth')
-        probabilities (tensor): predicted probability for two nodes to be connected by an edge
-        path (path): path to save roc-plot file to
+        labels (tensor): 
     """
+
+    plt.figure()
+    plt.scatter(list(labels), list(sim_score), alpha=0.7, c=labels, cmap='coolwarm', edgecolor='k')
+
+    # Add labels and title
+    plt.xticks([0, 1], labels=["Heterolog Gene Pair", "Homolog Gene Pair"])
+    plt.xlabel("Class")
+    plt.ylabel("Similarity Score")
+    plt.title("Similarity Score Distribution by Class")
+
+    # Add grid
+    plt.grid(alpha=0.3)
+    
+    if not os.path.exists(os.path.dirname(path)):
+        os.mkdir(os.path.dirname(path))
+
+    plt.savefig(path)
+
+    plt.title("Log Transformed Similarity Score Distribution by Class")
+    plt.ylabel("Log Similarity Score")
+    plt.yscale('log')  # Apply log scale to y-axis
+    plt.savefig(os.path.join('plots', 'score_class_log.png'))
+
 
     
 
