@@ -33,7 +33,10 @@ def build_edge_index(sim_score_dict, gene_id_integer_dict, fully_connected = Fal
                 # skip self loop edges if self_loops is false
                 if not self_loops and (target_id == origin_id):
                     continue
-                if ('FFOKMCCD' in target_id or 'KCMFMKKO' in target_id) and ('FFOKMCCD' in origin_id or 'KCMFMKKO' in origin_id):
+                # when using part of the input genomes from ribap we might have gene pairs in the sim_score_dict 
+                # that are not actually loaded in the gene dict, this probably slows down the edge index creation tho
+                # so we might need to remove this check once we have a model / use the full dataset as input..
+                if origin_id in gene_id_integer_dict.keys() and target_id in gene_id_integer_dict.keys():
                     origin_idx.append(gene_id_integer_dict[origin_id])
                     target_idx.append(gene_id_integer_dict[target_id])
 
