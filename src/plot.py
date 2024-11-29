@@ -5,7 +5,7 @@ import os
 from sklearn.metrics import roc_curve, auc
 
 
-def plot_simscore_class(sim_score, labels, path = os.path.join('plots', 'score_class.png')):
+def plot_simscore_class(dataset, path = os.path.join('plots', 'score_class.png')):
     """Plot 
 
 
@@ -13,6 +13,8 @@ def plot_simscore_class(sim_score, labels, path = os.path.join('plots', 'score_c
         labels (tensor): 
     """
 
+    sim_score = dataset.edge_weight_ts
+    labels = dataset.labels_ts
     plt.figure()
     plt.scatter(list(labels), list(sim_score), alpha=0.7, c=labels, cmap='coolwarm', edgecolor='k')
 
@@ -99,7 +101,7 @@ def plot_loss_accuracy(num_epochs, train_losses, train_accuracies, path = os.pat
     plt.savefig(path)
 
 
-def plot_graph(dataset, gene_ids_lst, path):
+def plot_graph(dataset, path):
     """Plot a graph as png based on input dataset consisting of node tensor,
     edge index and egde attribute tensor.
 
@@ -114,7 +116,7 @@ def plot_graph(dataset, gene_ids_lst, path):
     # convert dataset to NetworkX graph
     G = to_networkx(dataset, edge_attrs=['edge_attr'], node_attrs=['x'])
     # map integer gene ids back to original string ids
-    egde_label_mapping = {i: gene_ids_lst[i] for i in range(len(gene_ids_lst))}
+    egde_label_mapping = {i: dataset.gene_ids_lst[i] for i in range(len(dataset.gene_ids_lst))}
     G = nx.relabel_nodes(G, egde_label_mapping)
 
     # whatever this does

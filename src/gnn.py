@@ -7,12 +7,10 @@ from src.setup import log
 
 # GCN class based on the example discussed in the pytorch geometric docs
 class MyGCN(torch.nn.Module):
-    def __init__(self, dataset, hidden_dim, num_neighbours, node_feature_dim, neighbour_lst, device):
+    def __init__(self, dataset, hidden_dim, num_neighbours, node_feature_dim, device):
         super().__init__()
         self.device = device
 
-        self.neighbour_lst = neighbour_lst
-        
         # embedding layer for node features
         self.embedding = torch.nn.Embedding(dataset.x.shape[0], node_feature_dim)
 
@@ -22,11 +20,11 @@ class MyGCN(torch.nn.Module):
         log.debug(f"Expecting dims {combined_embedding_dim}; {hidden_dim} for first convolution layer.")
 
         # define convolution layers
-        self.conv1 = GCNConv(64, 128)
+        self.conv1 = GCNConv(64, 128, add_self_loops = False)
         #self.conv2 = DenseGCNConv(128, 128)
-        self.conv2 = GCNConv(128, 64)
+        self.conv2 = GCNConv(128, 64, add_self_loops = False)
 
-        self.activation_fct = torch.nn.LeakyReLU()
+        self.leaky_relu = torch.nn.LeakyReLU()
 
 
     def forward(self, data):
@@ -41,6 +39,8 @@ class MyGCN(torch.nn.Module):
         log.debug(f"Got nodes tensor of shape: {combined_embeddings.shape}")
         log.debug(f"Got edge weights tensor of shape: {edge_weights.shape}")
         log.debug(f"Got edge index of shape: {edge_index.shape}")
+
+        edge_weights = edge_weights * data.neighbour_edge_weights
 
         # NOTE: data.edge_attr only contains a tensor with bit scores so basically an edge weight
         # edge attributes can be multiple features embedded, not only a scalar but GCNConv 
