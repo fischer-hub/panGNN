@@ -73,6 +73,10 @@ class HomogenousDataset(Dataset):
         self.edge_index.to(device)
         self.y.to(device)
 
+    def scale_weights(self):
+        """Scale the similarity scores on the edges of the input graph by the gene neighbourhood similarity factor
+        """
+        self.edge_weight_ts = self.edge_weight_ts * self.neighbour_edge_weights
     
     #def split_dataset(self, train, test, validation = 0):
     

@@ -40,7 +40,6 @@ class MyGCN(torch.nn.Module):
         log.debug(f"Got edge weights tensor of shape: {edge_weights.shape}")
         log.debug(f"Got edge index of shape: {edge_index.shape}")
 
-        edge_weights = edge_weights * data.neighbour_edge_weights
 
         # NOTE: data.edge_attr only contains a tensor with bit scores so basically an edge weight
         # edge attributes can be multiple features embedded, not only a scalar but GCNConv 
