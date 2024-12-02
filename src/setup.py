@@ -19,7 +19,7 @@ parser.add_argument('-c', '--cache',  	  help = 'cache computionally slow data s
 parser.add_argument('-l', '--log_level',  help = "set the level to print logs ['NOTSET', 'DEBUG', 'INFO', 'WARN', 'ERROR', 'CRITICAL']", default = 'INFO', type = str)
 parser.add_argument('-m', '--model_args', help = 'path to save or load model from, depending on training or prediction mode', default = 'model.pkl', type = str)
 parser.add_argument('-n', '--neighbours', help = 'number of genes from target gene to consider as neighbours', default = 1, type = int)
-parser.add_argument('-a', '--annotation', help = 'path to the two annotation files in gff format of the two input genomes, seperated by tab', default = ["data/dummy_dataset/dummy1.gff", "data/dummy_dataset/dummy2.gff"], type = str, nargs = 2)
+parser.add_argument('-a', '--annotation', help = 'path to the two annotation files in gff format of the two input genomes, seperated by tab', default = ["data/dummy_dataset/dummy1.gff", "data/dummy_dataset/dummy2.gff"], type = str, nargs = '*')
 parser.add_argument('-s', '--similarity', help = 'path to the similarity score file (e.g tab seperated output of MMSeqs2)', default = os.path.join('data', 'dummy_dataset', 'dummy_mmseqs2.csv'), type = str)
 
 # train mode args
