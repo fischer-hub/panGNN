@@ -7,10 +7,10 @@ from torch_geometric.loader import DataLoader
 from torch_geometric.transforms import RandomLinkSplit
 from src.predict import predict_homolog_genes
 from rich.progress import Progress
-import src.preprocessing as pp
 from src.dataset import HomogenousDataset
 from src.gnn import MyGCN
-
+from src.simulate import generate_data
+from src.postprocessing import write_groups_file
 
 ###################
 ### ENTRY POINT ###
@@ -29,6 +29,8 @@ hidden_dim = 64
 edge_feature_dim = 128
 
 #batch = torch.zeros(num_genes, dtype=torch.long)  # Batch vector for mini-batches if needed
+
+generate_data(20000, 5, 5, 0.5, 0.5, 0.02)
 
 train_dataset = HomogenousDataset(args.annotation, args.similarity, args.ribap_groups, args.neighbours) if args.train else HomogenousDataset(args.annotation, args.similarity, args.neighbours)
 train_dataset.generate_graph_data()
@@ -59,7 +61,7 @@ if not args.train or os.path.exists(args.model_args):
     if os.path.exists(args.model_args):
         log.info(f"Found model file '{args.model_args}' with trained parameter, restoring model state for inference..")
         model.load_state_dict(torch.load(args.model_args))
-        predict_homolog_genes(model, train_dataset= train_dataset, test_dataset= test_dataset)
+        prediction_bin, prediction_scores = predict_homolog_genes(model, train_dataset= train_dataset, test_dataset= test_dataset)
 
     else:
         log.error(f"Could not infer model because model parameters file '{args.model_args}' was not found, exiting.")
@@ -120,3 +122,4 @@ elif args.train:
     prediction_bin, prediction_scores = predict_homolog_genes(model, train_dataset=train_dataset, test_dataset=test_dataset)
     log.debug(prediction_bin)
     
+write_groups_file(test_dataset, prediction_bin)

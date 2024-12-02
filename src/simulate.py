@@ -12,6 +12,7 @@ def simulate_bit_scores(expectation_value, dispersion, bit_scores_lst, indices =
 
     if indices:
         # Sample from the Beta distribution
+        scores = np.random.gamma(shape, scale, size = len(indices))
 
         for idx, score in zip(indices, scores):
             bit_scores_lst[idx] = score
