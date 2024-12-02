@@ -197,9 +197,8 @@ def load_ribap_groups(ribap_group_file, genome_name_lst):
     with open(ribap_group_file) as ribap_file_handle:
 
         ribap_groups_df = pd.read_csv(ribap_file_handle, comment = '#', sep = '\t', header = 0)
-        #ribap_groups_df.set_index(ribap_groups_df.columns[0], inplace = True)
         ribap_groups_df.drop(ribap_groups_df.columns.difference(genome_name_lst), axis = 1, inplace=True)
-        #ribap_groups_df.dropna(inplace=True) #TODO : CARE THIS MIGHT DROP A WHLE ROW AND WE LOSE TRUTH LABELS
+
 
     for i in range(len(genome_name_lst)-1):
         for j in range(1, len(genome_name_lst)):
@@ -208,7 +207,6 @@ def load_ribap_groups(ribap_group_file, genome_name_lst):
                 if not pd.isna(row[genome_name_lst[j]]) and not pd.isna(row[genome_name_lst[i]]):
                     ribap_groups_dict_tmp[row[genome_name_lst[i]]] = row[genome_name_lst[j]]
                     ribap_groups_dict_tmp[row[genome_name_lst[j]]] = row[genome_name_lst[i]]
-
     
         ribap_groups_dict.update(ribap_groups_dict_tmp)
 
