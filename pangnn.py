@@ -34,6 +34,7 @@ generate_data(20000, 5, 5, 0.5, 0.5, 0.02)
 
 train_dataset = HomogenousDataset(args.annotation, args.similarity, args.ribap_groups, args.neighbours) if args.train else HomogenousDataset(args.annotation, args.similarity, args.neighbours)
 train_dataset.generate_graph_data()
+train_dataset.scale_weights()
 
 if args.plot_graph: plot_graph(train_dataset, os.path.join('plots', 'input_graph.png'))
 
@@ -56,6 +57,7 @@ log.info(f"edge weights sum : {train_dataset.edge_weight_ts.sum()}")
 
 test_dataset = HomogenousDataset([os.path.join('data', 'Cga_08-1274-3_RENAMED.gff'), os.path.join('data', 'Cga_12-4358_RENAMED.gff')], args.similarity, args.ribap_groups, args.neighbours)
 test_dataset.generate_graph_data()
+test_dataset.scale_weights()
 
 if not args.train or os.path.exists(args.model_args):
     if os.path.exists(args.model_args):

@@ -4,7 +4,7 @@ from rich.progress import track, Progress
 from src.setup import log, args
 
 
-def generate_neighbour_edge_features(neighbour_lst, edge_index):
+def generate_neighbour_edge_features(neighbour_lst, edge_index, sim_score_dict, gene_id_lst):
 
     neighbour_edge_weights = []
     neighbour_lst = list(neighbour_lst)
@@ -20,14 +20,33 @@ def generate_neighbour_edge_features(neighbour_lst, edge_index):
         
         for gene_id1, gene_id2 in zip(neighbour_tpl1, neighbour_tpl2):
             
-            if gene_id1 == gene_id2:
-                score += (1/len(neighbour_tpl1))
-            
-        neighbour_edge_weights.append(score)
+            # one of the two gene IDs is None type and we can not look it up without crashing
+            if not gene_id1 or not gene_id2:
+                continue
+            # this will never be true if we exclude self edges since the neighbours are from different species and we have unique gene ids fpr each species
+            # we have to compare the similarity of the neighbours maybe here. something like the mean sim score of the neighbours maybe?
+            #if gene_id1 == gene_id2:
+            #    print(origin_gene_id, neighbour_tpl1, target_gene_id, neighbour_tpl2)
+            #    score += (1/len(neighbour_tpl1))
 
-    if sum(neighbour_edge_weights) == (score_default * len(neighbour_edge_weights)):
-        log.warning(f"It seems no two genes in the data have a similar neighbourhood, how odd! I would check the data if I was you ;)")
-        time.sleep(5)
+            # do another one of the slowest score lookups of all time to get the sim score of the neighbours of our current nodes connected by the edge
+            gene_1_str_id = gene_id_lst[gene_id1]
+            gene_2_str_id = gene_id_lst[gene_id2]
+
+            try:
+                score += sim_score_dict[gene_1_str_id][gene_2_str_id]
+            
+            except KeyError:
+                try:
+                    score += sim_score_dict[gene_2_str_id][gene_1_str_id]
+                except KeyError:
+                    score += 0
+
+        # save the average similarity bit score of the neighbouring genes of the two genes connected by this edge
+        if score != 1: 
+            score = (score/len(neighbour_tpl1))
+
+        neighbour_edge_weights.append(score)
 
     return torch.tensor(neighbour_edge_weights)
 

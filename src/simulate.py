@@ -33,8 +33,6 @@ def generate_data(num_genes_per_genome, num_gene_families1, num_gene_families2, 
     random.shuffle(genome_2)
 
 
-    print(genome_1)
-
     gene_id_integer_dict1 = {gene: idx for idx, gene in enumerate(genome_1)}
     gene_id_integer_dict2 = {gene: idx for idx, gene in enumerate(genome_2)}
     gene_ids1_lst = list(gene_id_integer_dict1.values())

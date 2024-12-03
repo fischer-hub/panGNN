@@ -34,10 +34,11 @@ class HomogenousDataset(Dataset):
             num_genes += len(genome_annotation_df.index)
             
             self.gene_ids_lst += list(genome_annotation_df.index)
-            self.neighbour_lst += construct_neighbour_lst(len(genome_annotation_df.index), self.num_neighbours)
 
             genome_name_lst.append(os.path.basename(gff_file).split('.')[0].replace('_RENAMED', ''))
 
+        
+        self.neighbour_lst = construct_neighbour_lst(num_genes, self.num_neighbours)
 
         # total number of genes found in all annotation files
         log.info(f"Total number of genes found in annotation files: {num_genes}")
@@ -52,9 +53,7 @@ class HomogenousDataset(Dataset):
         log.info(f"Edge index successfully created.")
         
         self.edge_weight_ts = map_edge_weights(self.edge_index_ts, sim_score_dict, self.gene_ids_lst) #torch.randn((num_genes/2, edge_feature_dim))  # Edge 
-        
-
-        self.neighbour_edge_weights = generate_neighbour_edge_features(self.neighbour_lst, self.edge_index_ts)
+        self.neighbour_edge_weights_ts = generate_neighbour_edge_features(self.neighbour_lst, self.edge_index_ts, sim_score_dict, self.gene_ids_lst)
 
 
         if self.ribap_groups_file:
@@ -89,7 +88,9 @@ class HomogenousDataset(Dataset):
     def scale_weights(self):
         """Scale the similarity scores on the edges of the input graph by the gene neighbourhood similarity factor
         """
-        self.edge_weight_ts = self.edge_weight_ts * self.neighbour_edge_weights
+        self.edge_weight_ts = self.edge_weight_ts * self.neighbour_edge_weights_ts
+        self.edge_attr = self.edge_weight_ts
+
     
     #def split_dataset(self, train, test, validation = 0):
     

@@ -25,7 +25,11 @@ def write_groups_file(dataset, binary_prediction):
         # there was no edge predicted between these nodes
         else:
             continue
+
+
     log.info("Writing output file 'holiest_of_all_tables.csv' ..")
+
     with open(os.path.join('data', 'holiest_of_all_tables.csv'), 'w') as group_output_file:
+        
         for idx, set in enumerate(sets):
             group_output_file.write(f"group_{idx}, {', '.join([gene_ids_lst[gene_id] for gene_id in list(set)])}")

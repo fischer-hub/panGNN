@@ -20,9 +20,9 @@ class MyGCN(torch.nn.Module):
         log.debug(f"Expecting dims {combined_embedding_dim}; {hidden_dim} for first convolution layer.")
 
         # define convolution layers
-        self.conv1 = GCNConv(64, 128, add_self_loops = False)
+        self.conv1 = GCNConv(64, 128, add_self_loops = True)
         #self.conv2 = DenseGCNConv(128, 128)
-        self.conv2 = GCNConv(128, 64, add_self_loops = False)
+        self.conv2 = GCNConv(128, 64, add_self_loops = True)
 
         self.leaky_relu = torch.nn.LeakyReLU()
 
@@ -52,7 +52,7 @@ class MyGCN(torch.nn.Module):
         #nodes = torch.sigmoid(nodes)
         log.debug('Passing data to convolution layer 2..')
         #nodes = F.dropout(nodes, training=self.training) # what does this do??
-        nodes = self.conv2(nodes, edge_index, edge_weights)
+        nodes = self.conv2(nodes, edge_index, data.neighbour_edge_weights_ts)
         log.debug(f"Outputting nodes to decode function of shape: {nodes.shape}\n{nodes}")
 
         link_predictions = self.decode(nodes, edge_index)

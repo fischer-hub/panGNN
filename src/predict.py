@@ -33,10 +33,10 @@ def predict_homolog_genes(model, test_dataset, binary_th = 0.5, train_dataset = 
             
             if train_dataset:
                 probablilities_train = torch.sigmoid(edge_scores_train)
-                binary_prediction_train = torch.tensor((probablilities_train >= binary_th).int())
+                binary_prediction_train = (probablilities_train >= binary_th).int()
 
             probablilities = torch.sigmoid(edge_scores)
-            binary_prediction = torch.tensor((probablilities >= binary_th).int())
+            binary_prediction = (probablilities >= binary_th).int()
             print(probablilities)
             print(binary_prediction)
             auc = plot_roc(test_dataset.y, probablilities)
