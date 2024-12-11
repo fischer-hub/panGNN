@@ -35,7 +35,7 @@ def plot_simscore_class(dataset, path = os.path.join('plots', 'score_class.png')
     plt.title("Log Transformed Similarity Score Distribution by Class")
     plt.ylabel("Log Similarity Score")
     plt.yscale('log')  # Apply log scale to y-axis
-    plt.savefig(os.path.join('plots', 'score_class_log.png'))
+    plt.savefig(f"{path.replace('.png', '_log.png')}")
 
 
     
@@ -141,7 +141,10 @@ def plot_logit_distribution(logits, path = os.path.join('plots', 'logit_distribu
 
     plt.figure()
 
-    values = logits.numpy()
+    try:
+        values = logits.numpy()
+    except Exception:
+        values = logits
 
     plt.hist(values, bins=15, range = (min(values), max(values)))
 

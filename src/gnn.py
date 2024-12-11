@@ -22,7 +22,8 @@ class MyGCN(torch.nn.Module):
         # define convolution layers
         self.conv1 = GCNConv(64, 128, add_self_loops = True)
         #self.conv2 = DenseGCNConv(128, 128)
-        self.conv2 = GCNConv(128, 64, add_self_loops = True)
+        #self.conv2 = GCNConv(128, 128, add_self_loops = True)
+        self.conv3 = GCNConv(128, 64, add_self_loops = True)
 
         self.leaky_relu = torch.nn.LeakyReLU()
 

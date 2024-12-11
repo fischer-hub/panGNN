@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from src.plot import plot_loss_accuracy, plot_graph, plot_simscore_class
+from src.plot import plot_loss_accuracy, plot_graph, plot_simscore_class, plot_logit_distribution
 from src.setup import log, args
 import torch, os
 from torch_geometric.data import Data
@@ -30,11 +30,15 @@ edge_feature_dim = 128
 
 #batch = torch.zeros(num_genes, dtype=torch.long)  # Batch vector for mini-batches if needed
 
-generate_data(20000, 5, 5, 0.5, 0.5, 0.02)
+simuoated_dataset = generate_data(20000, 5, 5, 0.5, 0.5, 0.02)
 
 train_dataset = HomogenousDataset(args.annotation, args.similarity, args.ribap_groups, args.neighbours) if args.train else HomogenousDataset(args.annotation, args.similarity, args.neighbours)
+
 train_dataset.generate_graph_data()
+plot_logit_distribution(train_dataset.edge_weight_ts, path= os.path.join('plots', 'sim_score_distribution_unscaled.png'))
 train_dataset.scale_weights()
+
+plot_logit_distribution(train_dataset.edge_weight_ts, path= os.path.join('plots', 'sim_score_distribution_scaled.png'))
 
 if args.plot_graph: plot_graph(train_dataset, os.path.join('plots', 'input_graph.png'))
 
