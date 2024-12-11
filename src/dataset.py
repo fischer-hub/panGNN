@@ -87,12 +87,22 @@ class HomogenousDataset(Dataset):
             self.val.labels_ts = map_labels_to_edge_index(self.val.edge_index_ts, self.gene_ids_lst, self.ribap_groups_dict)
             log.info('Created tensor of labels for training from RIBAP groups.')
         else:
-            self.labels_ts = None
+            self.train.labels_ts = None
+            self.test.labels_ts = None
+            self.val.labels_ts = None
 
-        self.x = self.gene_ids_ts
-        self.edge_attr = self.edge_weight_ts
-        self.edge_index = self.edge_index_ts
-        self.y = self.labels_ts
+        self.train.x = self.gene_ids_ts
+        self.test.x = self.gene_ids_ts
+        self.val.x = self.gene_ids_ts
+        self.train.edge_attr = self.edge_weight_ts
+        self.test.edge_attr = self.edge_weight_ts
+        self.val.edge_attr = self.edge_weight_ts
+        self.train.edge_index = self.edge_index_ts
+        self.test.edge_index = self.edge_index_ts
+        self.val.edge_index = self.edge_index_ts
+        self.train.y = self.labels_ts
+        self.test.y = self.labels_ts
+        self.val.y = self.labels_ts
     
     def len(self):
         return len(self.gene_ids_lst)
@@ -101,16 +111,37 @@ class HomogenousDataset(Dataset):
         return Data(self.gene_ids_ts, self.edge_index_ts, self.edge_weight_ts, self.labels_ts)
     
     def to(self, device):
-        self.x.to(device)
-        self.edge_attr.to(device)
-        self.edge_index.to(device)
-        self.y.to(device)
+
+        if not self.train.x:
+            log.warn(f"Graph data not ready to load to device {device}, creating graph data now.")
+
+        self.generate_graph_data()
+        self.train.x.to(device)
+        self.test.x.to(device)
+        self.val.x.to(device)
+        self.train.edge_attr.to(device)
+        self.test.edge_attr.to(device)
+        self.val.edge_attr.to(device)
+        self.train.edge_index.to(device)
+        self.test.edge_index.to(device)
+        self.val.edge_index.to(device)
+        self.train.y.to(device)
+        self.test.y.to(device)
+        self.val.y.to(device)
 
     def scale_weights(self):
         """Scale the similarity scores on the edges of the input graph by the gene neighbourhood similarity factor
         """
-        self.edge_weight_ts = self.edge_weight_ts * self.neighbour_edge_weights_ts
-        self.edge_attr = self.edge_weight_ts
+        if not self.train.edge_weight_ts:
+            log.warn(f"Graph data not ready to be scaled, creating graph data now.")
+            self.generate_graph_data()
+
+        self.train.edge_weight_ts = self.train.edge_weight_ts * self.train.neighbour_edge_weights_ts
+        self.test.edge_weight_ts = self.edge_wtest.eight_ts * self.neighbour_edtest.ge_weights_ts
+        self.val.edge_weight_ts = self.edge_val.weight_ts * self.neighbour_val.edge_weights_ts
+        self.train.edge_attr = self.train.edge_weight_ts
+        self.test.edge_attr = self.edge_wtest.eight_ts
+        self.val.edge_attr = self.edge_val.weight_ts
 
     def save(self, path):
         with open(path, 'wb') as f:
@@ -119,7 +150,5 @@ class HomogenousDataset(Dataset):
     def load(self, path):
         with open(path, 'rb') as f:
             self = pickle.load(f)
-
-    def split_dataset(self, train, test, validation = 0):
     
 
