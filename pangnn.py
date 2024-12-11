@@ -32,22 +32,22 @@ edge_feature_dim = 128
 
 simuoated_dataset = generate_data(20000, 5, 5, 0.5, 0.5, 0.02)
 
-train_dataset = HomogenousDataset(args.annotation, args.similarity, args.ribap_groups, args.neighbours) if args.train else HomogenousDataset(args.annotation, args.similarity, args.neighbours)
+dataset = HomogenousDataset(args.annotation, args.similarity, args.ribap_groups, args.neighbours) if args.train else HomogenousDataset(args.annotation, args.similarity, args.neighbours)
 
-train_dataset.generate_graph_data()
-plot_logit_distribution(train_dataset.edge_weight_ts, path= os.path.join('plots', 'sim_score_distribution_unscaled.png'))
-train_dataset.scale_weights()
+dataset.train.generate_graph_data()
+plot_logit_distribution(dataset.train.edge_weight_ts, path= os.path.join('plots', 'sim_score_distribution_unscaled.png'))
+dataset.train.scale_weights()
 
-plot_logit_distribution(train_dataset.edge_weight_ts, path= os.path.join('plots', 'sim_score_distribution_scaled.png'))
+plot_logit_distribution(dataset.train.edge_weight_ts, path= os.path.join('plots', 'sim_score_distribution_scaled.png'))
 
-if args.plot_graph: plot_graph(train_dataset, os.path.join('plots', 'input_graph.png'))
+if args.plot_graph: plot_graph(dataset.train, os.path.join('plots', 'input_graph.png'))
 
-plot_simscore_class(train_dataset)
+plot_simscore_class(dataset.train)
 
-log.info(f"Constructed dataset from node, egde and index tensors: {train_dataset}")
+log.info(f"Constructed dataset from node, egde and index tensors: {dataset.train}")
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu") if args.gpu else 'cpu'
-model = MyGCN(dataset = train_dataset, hidden_dim = hidden_dim, num_neighbours = args.neighbours, node_feature_dim = gene_id_embedding_dim, device = device)
+model = MyGCN(dataset = dataset.train, hidden_dim = hidden_dim, num_neighbours = args.neighbours, node_feature_dim = gene_id_embedding_dim, device = device)
 optimizer = torch.optim.Adam(model.parameters(), lr=0.002)
 
 # TODO: is this a good loss function for our scenario?
@@ -57,17 +57,16 @@ criterion = torch.nn.BCEWithLogitsLoss(pos_weight = torch.tensor([1.5])) # if yo
 
 train_losses = []
 train_accuracies = []
-log.info(f"edge weights sum : {train_dataset.edge_weight_ts.sum()}")
+log.info(f"edge weights sum : {dataset.train.edge_weight_ts.sum()}")
 
-test_dataset = HomogenousDataset([os.path.join('data', 'Cga_08-1274-3_RENAMED.gff'), os.path.join('data', 'Cga_12-4358_RENAMED.gff')], args.similarity, args.ribap_groups, args.neighbours)
-test_dataset.generate_graph_data()
-test_dataset.scale_weights()
+dataset.test.generate_graph_data()
+dataset.test.scale_weights()
 
 if not args.train or os.path.exists(args.model_args):
     if os.path.exists(args.model_args):
         log.info(f"Found model file '{args.model_args}' with trained parameter, restoring model state for inference..")
         model.load_state_dict(torch.load(args.model_args))
-        prediction_bin, prediction_scores = predict_homolog_genes(model, train_dataset= train_dataset, test_dataset= test_dataset)
+        prediction_bin, prediction_scores = predict_homolog_genes(model, dataset.train= dataset.train, dataset.test= dataset.test)
 
     else:
         log.error(f"Could not infer model because model parameters file '{args.model_args}' was not found, exiting.")
@@ -76,7 +75,7 @@ if not args.train or os.path.exists(args.model_args):
 elif args.train:
     # Training loop
     log.info(f"Training on device: {device}")
-    train_dataset.to(device)
+    dataset.train.to(device)
     model.to(device)
     log.info(f"Entering training loop with batch size: {args.batch_size}.")
 
@@ -98,17 +97,17 @@ elif args.train:
 
             # this calls the models forward function since model is callable
             log.debug('Calling forward step on current batch..')
-            output = model(train_dataset)
+            output = model(dataset.train)
             log.debug('Calling loss function on current batch..')
-            log.debug(train_dataset)
-            loss = criterion(output, train_dataset.labels_ts)
+            log.debug(dataset.train)
+            loss = criterion(output, dataset.train.labels_ts)
             log.debug('Calling backward step on current batch..')
             loss.backward()
             log.debug('Calling optimizer step on current batch..')
             optimizer.step()
             
             binary_prediction = torch.tensor((torch.sigmoid(output) >= 0.5).int())
-            accuracy = ((binary_prediction == train_dataset.labels_ts).sum().item()) / len(train_dataset.labels_ts)
+            accuracy = ((binary_prediction == dataset.train.labels_ts).sum().item()) / len(dataset.train.labels_ts)
 
             # get some metrics, maybe do this in the model class?
             log.info(f'Epoch {epoch+1}, Loss: {loss.item()}, Acc: {accuracy}')
@@ -125,7 +124,7 @@ elif args.train:
     torch.save(model.state_dict(), args.model_args)
 
     # get metrics on test dataset
-    prediction_bin, prediction_scores = predict_homolog_genes(model, train_dataset=train_dataset, test_dataset=test_dataset)
+    prediction_bin, prediction_scores = predict_homolog_genes(model, dataset.train=dataset.train, dataset.test=dataset.test)
     log.debug(prediction_bin)
     
-write_groups_file(test_dataset, prediction_bin)
+write_groups_file(dataset.test, prediction_bin)
