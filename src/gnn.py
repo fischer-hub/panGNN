@@ -12,8 +12,8 @@ class MyGCN(torch.nn.Module):
         self.device = device
 
         # embedding layer for node features
-        #self.embedding = torch.nn.Embedding(dataset.x.shape[0], node_feature_dim)
-        self.embedding = torch.nn.Linear(dataset.x.shape[0], node_feature_dim)
+        self.embedding = torch.nn.Embedding(dataset.x.shape[0], node_feature_dim)
+        #self.embedding = torch.nn.Linear(dataset.x.shape[0], node_feature_dim)
 
         # input dim is dim of feature vector (embedding) * neighbours (*2 since we have one neighbour in each direction) encoded per node
         # -> embedding vector + (embedding vector * num neighbours * 2)
@@ -21,7 +21,7 @@ class MyGCN(torch.nn.Module):
         log.debug(f"Expecting dims {combined_embedding_dim}; {hidden_dim} for first convolution layer.")
 
         # define convolution layers
-        self.conv1 = GCNConv(node_feature_dim, 128, add_self_loops = True)
+        self.conv1 = GCNConv(dataset.x.shape[0], 128, add_self_loops = True)
         #self.conv2 = DenseGCNConv(128, 128)
         #self.conv2 = GCNConv(128, 128, add_self_loops = True)
         self.conv3 = GCNConv(128, 64, add_self_loops = True)
@@ -35,7 +35,8 @@ class MyGCN(torch.nn.Module):
 
         # TODO: does it make sense to call embedding on every forward step? the input doesnt change right?
         # or is this called on the convoluted node embeddings
-        combined_embeddings = self.embedding(nodes)
+        #combined_embeddings = self.embedding(nodes)
+        combined_embeddings = nodes
         #combined_embeddings = combine_neighbour_embeddings(node_embeddings, data.neighbour_lst, self.device)
 
         log.debug(f"Got nodes tensor of shape: {combined_embeddings.shape}")

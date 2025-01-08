@@ -9,7 +9,7 @@ def build_adjacency_vectors(num_neighbours, gene_id_lst):
     vector_lst = []
 
     for gene_id in gene_id_lst:
-        vector = torch.tensor([0] * len(gene_id_lst))
+        vector = torch.tensor([0] * len(gene_id_lst), dtype = torch.float32)
         for i in range(-num_neighbours, num_neighbours+1):
             if (gene_id + i) > 0:
                 vector[i] = 1

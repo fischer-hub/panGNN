@@ -35,13 +35,14 @@ class MyObject:
     def __init__(self, attribute1, attribute2):
         self.test = attribute1
         self.train = attribute2
+
 dataset = MyObject
 dataset.train = HomogenousDataset(args.annotation, args.similarity, args.ribap_groups, args.neighbours) if args.train else HomogenousDataset(args.annotation, args.similarity, args.neighbours)
 dataset.test = HomogenousDataset(['data/Cga_08-1274-3_RENAMED.gff', 'data/Cga_12-4358_RENAMED.gff'], args.similarity, args.ribap_groups, args.neighbours)
 dataset.train.generate_graph_data()
 dataset.test.generate_graph_data()
-dataset.train.scale_weights()
-dataset.test.scale_weights()
+#dataset.train.scale_weights()
+#dataset.test.scale_weights()
 log.info(f"Constructed dataset from node, egde and index tensors: {dataset.train.data_lst}")
 
 #plot_logit_distribution(dataset.train.edge_weight_ts, path= os.path.join('plots', 'sim_score_distribution_unscaled.png'))
@@ -61,12 +62,12 @@ log.info(f"Constructed dataset from node, egde and index tensors: {dataset.train
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu") if args.gpu else 'cpu'
 model = MyGCN(dataset = dataset.train, hidden_dim = hidden_dim, num_neighbours = args.neighbours, node_feature_dim = gene_id_embedding_dim, device = device)
-optimizer = torch.optim.Adam(model.parameters(), lr=0.002)
+optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
 # TODO: is this a good loss function for our scenario?
 # criterion = torch.nn.BCELoss() # if your model outputs probabilities, outputs logits
 # nn.CrossEntropyLoss() # multi-class classification where each sample belongs to only one class out of multiple classes., outputs logits
-criterion = torch.nn.BCEWithLogitsLoss(pos_weight = torch.tensor([1.5])) # if your model outputs raw logits and you want the loss function to handle the sigmoid activation internally, outputs probabilities
+criterion = torch.nn.BCEWithLogitsLoss() # if your model outputs raw logits and you want the loss function to handle the sigmoid activation internally, outputs probabilities
 
 train_losses = []
 train_accuracies = []

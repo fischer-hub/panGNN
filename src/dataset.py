@@ -72,6 +72,8 @@ class HomogenousDataset(Dataset):
         self.neighbour_edge_weights_ts = generate_neighbour_edge_features(self.neighbour_lst, self.edge_index_ts, sim_score_dict, self.gene_ids_lst)
         
         self.adjacency_vectors_ts = build_adjacency_vectors(num_neighbours = 2, gene_id_lst = self.gene_ids_ts)
+        #print(self.adjacency_vectors_ts[0].dtype)
+        #quit()
 
         if self.ribap_groups_file:
 
@@ -108,6 +110,7 @@ class HomogenousDataset(Dataset):
         
 
         self.x = self.adjacency_vectors_ts
+        #self.x = self.gene_ids_ts
         self.edge_attr = self.edge_weight_ts
         self.edge_index = self.edge_index_ts
         self.y = self.labels_ts
