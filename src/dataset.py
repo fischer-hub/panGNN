@@ -41,6 +41,7 @@ class HomogenousDataset(Dataset):
         genome_name_lst = []
         num_genes = 0
         self.data_lst = []
+        self.gene_id_position_dict = {}
 
         # load annotations from gff files and format to pandas dataframe
         for gff_file in track(self.gff_files, description='Loading annotation files..', transient=True):
@@ -51,6 +52,10 @@ class HomogenousDataset(Dataset):
             num_genes += len(genome_annotation_df.index)
             
             self.gene_ids_lst += list(genome_annotation_df.index)
+            
+            # for each string gene ID save its normalized position in the gff file into the dictionary
+            self.gene_id_position_dict.update({gene: (idx / len(list(genome_annotation_df.index))) for idx, gene in enumerate(list(genome_annotation_df.index))})
+
 
             genome_name_lst.append(os.path.basename(gff_file).split('.')[0].replace('_RENAMED', ''))
 
@@ -60,6 +65,7 @@ class HomogenousDataset(Dataset):
         log.info(f"Total number of genes found in annotation files: {num_genes}")
         self.gene_id_integer_dict = {gene: idx for idx, gene in enumerate(self.gene_ids_lst)}
         self.gene_ids_ts = torch.tensor(list(self.gene_id_integer_dict.values()))
+        normalized_gene_positions_ts = torch.tensor(list(self.gene_id_position_dict.values())).unsqueeze(1)
 
         # load similarity bit scores from MMSeqs2 output CSV file to pandas dataframe
         sim_score_dict = load_similarity_score(self.similarity_score_file)
@@ -104,12 +110,13 @@ class HomogenousDataset(Dataset):
         #    graph = Data(x, torch.stack((torch.tensor(component[1]), torch.tensor(component[2]))), edge_weight_ts, y)
         #    graph.neighbour_edge_weights_ts = neighbour_edge_weights_ts
         #    self.data_lst.append(graph)
-        data = Data(self.adjacency_vectors_ts, self.edge_index_ts, self.edge_weight_ts, self.labels_ts)
+        data = Data(normalized_gene_positions_ts, self.edge_index_ts, self.edge_weight_ts, self.labels_ts)
         data.neighbour_edge_weights_ts = self.neighbour_edge_weights_ts
         self.data_lst = [data]
         
 
-        self.x = self.adjacency_vectors_ts
+        self.x = normalized_gene_positions_ts
+        #self.x = self.adjacency_vectors_ts
         #self.x = self.gene_ids_ts
         self.edge_attr = self.edge_weight_ts
         self.edge_index = self.edge_index_ts
