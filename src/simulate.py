@@ -6,7 +6,6 @@ from src.dataset import Data, HomogenousDataset
 from src.preprocessing import construct_neighbour_lst, generate_neighbour_edge_features
 
 
-
 def simulate_bit_scores(expectation_value, dispersion, bit_scores_lst, indices = None):
 
     # Calculate shape (k) and scale (theta) from mean and variance
@@ -71,7 +70,6 @@ def generate_data(num_genes_per_genome, num_gene_families1, num_gene_families2, 
     neighbour_weight_lst = simulate_bit_scores(20, 10, neighbour_weight_lst, paralogs_out_indices)
     #for i in paralogs_out_indices: labels_lst[i] = 1
 
-
     tmp_lst = list(zip(labels_lst, edge_weights_lst, neighbour_weight_lst))
     random.shuffle(tmp_lst)
     labels_lst, edge_weights_lst, neighbour_weight_lst = zip(*tmp_lst)
@@ -85,7 +83,7 @@ def generate_data(num_genes_per_genome, num_gene_families1, num_gene_families2, 
     dataset.edge_weight_ts = torch.tensor(edge_weights_lst)
     dataset.labels_ts = torch.tensor(labels_lst)
     dataset.y = torch.tensor(labels_lst)
-    dataset.neighbour_edge_weights_ts =torch.tesnor(neighbour_weight_lst)
+    dataset.neighbour_edge_weights_ts =torch.tensor(neighbour_weight_lst)
     plot_simscore_class(dataset, os.path.join('plots', 'simulated_sim_score_class.png'))
 
 

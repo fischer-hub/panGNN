@@ -6,7 +6,7 @@ from sklearn.metrics import confusion_matrix
 import torch.nn.functional as F
 
 
-def predict_homolog_genes(model, test_dataset, binary_th = 0.5, train_dataset = None):
+def predict_homolog_genes(model, train_dataset = None, test_dataset = None, binary_th = 0.5):
     """Infer the GNN with given trained model and predict homolog genes from
     input similarity graph.
 
@@ -22,6 +22,7 @@ def predict_homolog_genes(model, test_dataset, binary_th = 0.5, train_dataset = 
         
     """
     model.eval()
+    print(test_dataset)
     with torch.no_grad():
         with Console().status("Infering model on test data..") as status:
             edge_scores = model(test_dataset)

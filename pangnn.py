@@ -30,21 +30,34 @@ edge_feature_dim = 128
 
 #batch = torch.zeros(num_genes, dtype=torch.long)  # Batch vector for mini-batches if needed
 
-simuoated_dataset = generate_data(20000, 5, 5, 0.5, 0.5, 0.02)
-
-dataset = HomogenousDataset(args.annotation, args.similarity, args.ribap_groups, args.neighbours) if args.train else HomogenousDataset(args.annotation, args.similarity, args.neighbours)
-
+#simuoated_dataset = generate_data(20000, 5, 5, 0.5, 0.5, 0.02)
+class MyObject:
+    def __init__(self, attribute1, attribute2):
+        self.test = attribute1
+        self.train = attribute2
+dataset = MyObject
+dataset.train = HomogenousDataset(args.annotation, args.similarity, args.ribap_groups, args.neighbours) if args.train else HomogenousDataset(args.annotation, args.similarity, args.neighbours)
+dataset.test = HomogenousDataset(['data/Cga_08-1274-3_RENAMED.gff', 'data/Cga_12-4358_RENAMED.gff'], args.similarity, args.ribap_groups, args.neighbours)
 dataset.train.generate_graph_data()
-plot_logit_distribution(dataset.train.edge_weight_ts, path= os.path.join('plots', 'sim_score_distribution_unscaled.png'))
+dataset.test.generate_graph_data()
 dataset.train.scale_weights()
+dataset.test.scale_weights()
+log.info(f"Constructed dataset from node, egde and index tensors: {dataset.train.data_lst}")
 
-plot_logit_distribution(dataset.train.edge_weight_ts, path= os.path.join('plots', 'sim_score_distribution_scaled.png'))
+#plot_logit_distribution(dataset.train.edge_weight_ts, path= os.path.join('plots', 'sim_score_distribution_unscaled.png'))
+#dataset.scale_weights()
+#dataset.train.concate_edge_weights()
+#dataset.split_data()
 
-if args.plot_graph: plot_graph(dataset.train, os.path.join('plots', 'input_graph.png'))
+#plot_logit_distribution(dataset.train.edge_weight_ts, path= os.path.join('plots', 'sim_score_distribution_scaled.png'))
 
-plot_simscore_class(dataset.train)
+#if args.plot_graph: plot_graph(dataset.train, os.path.join('plots', 'input_graph.png'))
 
-log.info(f"Constructed dataset from node, egde and index tensors: {dataset.train}")
+#plot_simscore_class(dataset.train)
+
+log.info(f"Constructed dataset from node, egde and index tensors: {dataset.train.data_lst}")
+#log.info(f"Constructed {dataset.train[1].x}")
+#log.info(f"Constructed {dataset.train[1].edge_index}")
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu") if args.gpu else 'cpu'
 model = MyGCN(dataset = dataset.train, hidden_dim = hidden_dim, num_neighbours = args.neighbours, node_feature_dim = gene_id_embedding_dim, device = device)
@@ -59,14 +72,11 @@ train_losses = []
 train_accuracies = []
 log.info(f"edge weights sum : {dataset.train.edge_weight_ts.sum()}")
 
-dataset.test.generate_graph_data()
-dataset.test.scale_weights()
-
 if not args.train or os.path.exists(args.model_args):
     if os.path.exists(args.model_args):
         log.info(f"Found model file '{args.model_args}' with trained parameter, restoring model state for inference..")
         model.load_state_dict(torch.load(args.model_args))
-        prediction_bin, prediction_scores = predict_homolog_genes(model, dataset.train= dataset.train, dataset.test= dataset.test)
+        prediction_bin, prediction_scores = predict_homolog_genes(model, dataset.train.data_lst[0], dataset.test.data_lst[0])
 
     else:
         log.error(f"Could not infer model because model parameters file '{args.model_args}' was not found, exiting.")
@@ -75,8 +85,8 @@ if not args.train or os.path.exists(args.model_args):
 elif args.train:
     # Training loop
     log.info(f"Training on device: {device}")
-    dataset.train.to(device)
-    model.to(device)
+    #dataset.train.to(device)
+    #model.to(device)
     log.info(f"Entering training loop with batch size: {args.batch_size}.")
 
     with Progress(transient = True) as progress:
@@ -85,36 +95,34 @@ elif args.train:
         #batch_bar    = progress.add_task("Training current batch:", total=len(dataloader))
 
         for epoch in range(args.epochs):
-            correct = 0
-            running_loss = 0
             total = 0
 
-            #for batch in dataloader:
+            for batch in dataset.train:
 
-            model.train()
-            # clear old gradients so only current batch gradients are used
-            optimizer.zero_grad()
+                model.train()
+                # clear old gradients so only current batch gradients are used
+                optimizer.zero_grad()
 
-            # this calls the models forward function since model is callable
-            log.debug('Calling forward step on current batch..')
-            output = model(dataset.train)
-            log.debug('Calling loss function on current batch..')
-            log.debug(dataset.train)
-            loss = criterion(output, dataset.train.labels_ts)
-            log.debug('Calling backward step on current batch..')
-            loss.backward()
-            log.debug('Calling optimizer step on current batch..')
-            optimizer.step()
-            
-            binary_prediction = torch.tensor((torch.sigmoid(output) >= 0.5).int())
-            accuracy = ((binary_prediction == dataset.train.labels_ts).sum().item()) / len(dataset.train.labels_ts)
+                # this calls the models forward function since model is callable
+                log.debug('Calling forward step on current batch..')
+                output = model(batch)
+                log.debug('Calling loss function on current batch..')
+                log.debug(batch)
+                loss = criterion(output, batch.y)
+                log.debug('Calling backward step on current batch..')
+                loss.backward()
+                log.debug('Calling optimizer step on current batch..')
+                optimizer.step()
+                
+                binary_prediction = torch.tensor((torch.sigmoid(output) >= 0.5).int())
+                accuracy = ((binary_prediction == batch.y).sum().item()) / len(batch.y)
 
-            # get some metrics, maybe do this in the model class?
-            log.info(f'Epoch {epoch+1}, Loss: {loss.item()}, Acc: {accuracy}')
+                # get some metrics, maybe do this in the model class?
+                log.info(f'Epoch {epoch+1}, Loss: {loss.item()}, Acc: {accuracy}')
 
-            train_losses.append(loss.item())
-            train_accuracies.append(accuracy)
-            progress.update(training_bar, advance = 1)
+                train_losses.append(loss.item())
+                train_accuracies.append(accuracy)
+                progress.update(training_bar, advance = 1)
 
 
     log.info(f"Finished model training.\nPlotting metrics..")
@@ -124,7 +132,7 @@ elif args.train:
     torch.save(model.state_dict(), args.model_args)
 
     # get metrics on test dataset
-    prediction_bin, prediction_scores = predict_homolog_genes(model, dataset.train=dataset.train, dataset.test=dataset.test)
+    prediction_bin, prediction_scores = predict_homolog_genes(model, dataset.train.data_lst[0], dataset.test.data_lst[0])
     log.debug(prediction_bin)
     
-write_groups_file(dataset.test, prediction_bin)
+#write_groups_file(dataset.test, prediction_bin)

@@ -4,6 +4,25 @@ from rich.progress import track, Progress
 from src.setup import log, args
 
 
+def build_adjacency_vectors(num_neighbours, gene_id_lst):
+
+    vector_lst = []
+
+    for gene_id in gene_id_lst:
+        vector = torch.tensor([0] * len(gene_id_lst))
+        for i in range(-num_neighbours, num_neighbours+1):
+            if (gene_id + i) > 0:
+                vector[i] = 1
+            else:
+                continue
+        vector_lst.append(vector)
+    
+    return torch.stack(vector_lst)
+
+
+
+
+
 def generate_neighbour_edge_features(neighbour_lst, edge_index, sim_score_dict, gene_id_lst):
 
     neighbour_edge_weights = []
