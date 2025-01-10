@@ -31,19 +31,13 @@ edge_feature_dim = 128
 #batch = torch.zeros(num_genes, dtype=torch.long)  # Batch vector for mini-batches if needed
 
 #simuoated_dataset = generate_data(20000, 5, 5, 0.5, 0.5, 0.02)
-class MyObject:
-    def __init__(self, attribute1, attribute2):
-        self.test = attribute1
-        self.train = attribute2
 
-dataset = MyObject
-dataset.train = HomogenousDataset(args.annotation, args.similarity, args.ribap_groups, args.neighbours) if args.train else HomogenousDataset(args.annotation, args.similarity, args.neighbours)
-dataset.test = HomogenousDataset(['data/Cga_08-1274-3_RENAMED.gff', 'data/Cga_12-4358_RENAMED.gff'], args.similarity, args.ribap_groups, args.neighbours)
-dataset.train.generate_graph_data()
-dataset.test.generate_graph_data()
-#dataset.train.scale_weights()
-#dataset.test.scale_weights()
-log.info(f"Constructed dataset from node, egde and index tensors: {dataset.train.data_lst}")
+dataset = HomogenousDataset(args.annotation, args.similarity, args.ribap_groups, args.neighbours) if args.train else HomogenousDataset(args.annotation, args.similarity, args.neighbours)
+
+dataset.generate_graph_data()
+dataset.split_data()
+
+log.info(f"Constructed train dataset from node, egde and index tensors: {dataset.train}")
 
 #plot_logit_distribution(dataset.train.edge_weight_ts, path= os.path.join('plots', 'sim_score_distribution_unscaled.png'))
 #dataset.scale_weights()
@@ -56,7 +50,7 @@ log.info(f"Constructed dataset from node, egde and index tensors: {dataset.train
 
 #plot_simscore_class(dataset.train)
 
-log.info(f"Constructed dataset from node, egde and index tensors: {dataset.train.data_lst}")
+log.info(f"Constructed test dataset from node, egde and index tensors: {dataset.test}")
 #log.info(f"Constructed {dataset.train[1].x}")
 #log.info(f"Constructed {dataset.train[1].edge_index}")
 

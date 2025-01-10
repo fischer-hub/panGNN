@@ -1,6 +1,6 @@
 import pickle, os, torch, time
 import pandas as pd
-from rich.progress import track, Progress
+from rich.progress import track, Progress, Console
 from src.setup import log, args
 
 def build_adjacency_vectors(num_neighbours, gene_id_lst):
@@ -22,7 +22,7 @@ def build_adjacency_vectors(num_neighbours, gene_id_lst):
 
     vector_lst = []
 
-    for gene_id in gene_id_lst:
+    for gene_id in track(gene_id_lst, transient = True, description = 'Building adjacency vectors..'):
         vector = torch.tensor([0] * len(gene_id_lst), dtype = torch.float32)
         for i in range(-num_neighbours, num_neighbours+1):
             if (gene_id + i) > 0:
@@ -152,7 +152,7 @@ def map_edge_weights(edge_index, bit_score_dict, gene_ids_lst):
     # cast to float since edge weights have to be floats?
     edge_weight_ts = torch.tensor(edge_weight_lst).float()
 
-    log.info(f"Successfully created edge feature list with tensor elem type: {edge_weight_ts.dtype}")
+    log.info(f"Successfully created edge feature tensor with elem type: {edge_weight_ts.dtype}")
     return edge_weight_ts
     
 
@@ -170,12 +170,14 @@ def build_edge_index(sim_score_dict, gene_id_integer_dict, fully_connected = Fal
     """
 
     if fully_connected:
+        log.info(f"Building fully connected edge index..")
         num_genes = len(list(gene_id_integer_dict.keys()))
         row = torch.arange(num_genes).repeat(num_genes)
         col = row.view(num_genes, num_genes).t().flatten()
         mask = (row != col)
         edge_index_ts = torch.stack((row, col), dim=0) if self_loops else torch.stack((row[mask], col[mask]), dim=0) 
     else:
+        log.info(f"Building partially connected edge index from similarity scores..")
         origin_idx, target_idx = [], []
 
         for origin_id in sim_score_dict.keys():
@@ -202,6 +204,7 @@ def map_labels_to_edge_index(edge_index, gene_ids_lst, ribap_groups_dict):
     Args:
         edge_index
     """
+    log.info('Mapping labels to gene pairs in edge index..')
 
     if os.path.isfile('data/labels.pkl') and args.cache:
         with open('data/labels.pkl', 'rb') as f:
@@ -239,17 +242,17 @@ def load_ribap_groups(ribap_group_file, genome_name_lst):
     Args:
         ribap_group_file (string, path object): Filename of the file containing the ribap groups.
     """
-
     ribap_groups_dict = {}
     ribap_groups_dict_tmp = {}
     
+    log.info(f"Loading RIBAP groups file: {ribap_group_file}")
+
     with open(ribap_group_file) as ribap_file_handle:
 
         ribap_groups_df = pd.read_csv(ribap_file_handle, comment = '#', sep = '\t', header = 0)
         ribap_groups_df.drop(ribap_groups_df.columns.difference(genome_name_lst), axis = 1, inplace=True)
 
-
-    for i in range(len(genome_name_lst)-1):
+    for i in track(range(len(genome_name_lst)-1), transient = True, description = "Constructing two way mapping for ortholog genes.."):
         for j in range(1, len(genome_name_lst)):
             # not sure if this is the best way to get random access but oh well I never claimed to be good at this
             for _, row in ribap_groups_df.iterrows():#, description = 'Constructing two way mapping for ortholog genes..', transient = True):
@@ -415,7 +418,10 @@ def load_gff(annotation_file_name):
         annotation_df = pd.read_csv(gff_handle, comment = '#', sep = '\t', 
                                     names = ['seqname', 'source', 'feature', 
                                              'start', 'end', 'score', 'strand', 
-                                             'frame', 'attribute'])
+                                             'frame', 'attribute'],
+                                    dtype={'seqname': str, 'source': str, 'feature': str,
+                                           'start': 'Int64', 'end': 'Int64', 'score': str,
+                                           'strand': str, 'frame': str, 'attribute': str})
 
     annotation_df = annotation_df.dropna()
     annotation_df['gene_id'] = annotation_df.attribute.str.replace(';.*', '', regex = True)
@@ -426,6 +432,8 @@ def load_gff(annotation_file_name):
 
 
 def load_similarity_score(similarity_score_file):
+
+    log.info(f"Loading similarity scores file: {similarity_score_file}")
     with open(similarity_score_file) as sim_score_handle:
 
         sim_score_df = pd.read_csv(sim_score_handle, comment = '#', sep = '\t', 

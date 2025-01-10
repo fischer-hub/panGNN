@@ -88,3 +88,23 @@ def separate_components(edge_index):
 
 
     return connected_components
+
+
+""" def get_connected_comnponents(edge_index):
+
+    connected_components = []
+
+    # iterate over all edges in the edge index tensor
+    for origin_node, target_node in zip(edge_index[0], edge_index[1]):
+        # check if the edge is already part of a connected component, an edge is part of a connected component
+        # if one of its nodes is already part of the component, the ids in the edge index are the indices of the
+        # nodes in the original node list
+        for idx, component in enumerate(connected_components):
+            # current edge is already part of a connected component, add the node as well if not alredy present
+            if origin_node in component or target_node in component:
+                component.append(origin_node)
+                component.append(target_node)
+            # current edge is not part of a connected component, create a new one
+            else:
+                connected_components.append([origin_node, target_node]) """
+            

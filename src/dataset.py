@@ -4,8 +4,9 @@ from src.helper import separate_components, concat_graph_data
 import torch, os, pickle
 from torch_geometric.data import Dataset, Data
 from rich.progress import track
-import math
-
+from scipy.sparse import csr_array
+from scipy.sparse.csgraph import connected_components
+from torch_geometric.utils.convert import to_scipy_sparse_matrix
 
 class HomogenousDataset(Dataset):
     """Class holding the input graph datastructures.
@@ -69,47 +70,60 @@ class HomogenousDataset(Dataset):
 
         # load similarity bit scores from MMSeqs2 output CSV file to pandas dataframe
         sim_score_dict = load_similarity_score(self.similarity_score_file)
-        log.info(f"Loaded similarity scores file: {self.similarity_score_file}")
 
         self.edge_index_ts = build_edge_index(sim_score_dict, self.gene_id_integer_dict, fully_connected = False)
-        log.info(f"Edge index successfully created.")
         
         self.edge_weight_ts = map_edge_weights(self.edge_index_ts, sim_score_dict, self.gene_ids_lst) #torch.randn((num_genes/2, edge_feature_dim))  # Edge 
-        self.neighbour_edge_weights_ts = generate_neighbour_edge_features(self.neighbour_lst, self.edge_index_ts, sim_score_dict, self.gene_ids_lst)
+        #self.neighbour_edge_weights_ts = generate_neighbour_edge_features(self.neighbour_lst, self.edge_index_ts, sim_score_dict, self.gene_ids_lst)
+        self.neighbour_edge_weights_ts = None
         
-        self.adjacency_vectors_ts = build_adjacency_vectors(num_neighbours = 2, gene_id_lst = self.gene_ids_ts)
-        #print(self.adjacency_vectors_ts[0].dtype)
-        #quit()
+        #self.adjacency_vectors_ts = build_adjacency_vectors(num_neighbours = 2, gene_id_lst = self.gene_ids_ts)
+
 
         if self.ribap_groups_file:
 
             # load holy ribap table to generate labels for test data set
             self.ribap_groups_dict = load_ribap_groups(self.ribap_groups_file, genome_name_lst)
-            log.info(f"Loaded RIBAP groups file: {self.ribap_groups_file}")
-            log.debug(f"Got RIBAP groups dictionary:\n {next(iter(self.ribap_groups_dict.items()))}")
 
             # construct list of labels from ribap groups and format to match edge_index
             self.labels_ts = map_labels_to_edge_index(self.edge_index_ts, self.gene_ids_lst, self.ribap_groups_dict)
-            log.info('Created tensor of labels for training from RIBAP groups.')
         else:
             self.labels_ts = None
 
         
         #connected_components = separate_components(self.edge_index_ts)
-#
-        #for component in connected_components:
-        #    old_index = torch.tensor(component[0])
-        #    # x is a tensor of categorical node IDs where a nodes index is in edge_index if it is connected to an edge,
-        #    # so we have to either remap the indices in edge_index to the new x, or use the whole tensor for each data 
-        #    # object so the indices work out 
-        #    #x = torch.tensor(list(set(component[1] + component[2])))
-        #    x = self.gene_ids_ts
-        #    edge_weight_ts = torch.index_select(self.edge_weight_ts, 0, old_index)
-        #    neighbour_edge_weights_ts = torch.index_select(self.neighbour_edge_weights_ts, 0, old_index)
-        #    y = torch.index_select(self.labels_ts, 0, old_index) if self.labels_ts is not None else None
-        #    graph = Data(x, torch.stack((torch.tensor(component[1]), torch.tensor(component[2]))), edge_weight_ts, y)
-        #    graph.neighbour_edge_weights_ts = neighbour_edge_weights_ts
-        #    self.data_lst.append(graph)
+
+        adj_matrix = to_scipy_sparse_matrix(self.edge_index_ts)
+        graph = csr_array(adj_matrix)
+        n_components, labels = connected_components(csgraph=graph, directed=False, return_labels=True)
+
+        connected_components_nodes = [[] for x in range(n_components)]
+        for idx, label in enumerate(labels):
+            connected_components_nodes[label].append(idx)
+
+        for component_nodes in track(connected_components_nodes, description='Generating subgraphs from connected components..', transient=True):
+            old_index = torch.tensor(component_nodes)
+            # x is a tensor of categorical node IDs where a nodes index is in edge_index if it is connected to an edge,
+            # so we have to either remap the indices in edge_index to the new x, or use the whole tensor for each data 
+            # object so the indices work out 
+            #x = torch.tensor(list(set(component[1] + component[2])))
+            x = old_index
+
+            component_edge_index = [[], []]
+            
+            for node in component_nodes:
+                for origin_node, target_node in zip(self.edge_index_ts[0], self.edge_index_ts[1]):
+                    if node == origin_node or node == target_node:
+                        component_edge_index[0].append(origin_node)
+                        component_edge_index[1].append(target_node)
+
+            edge_weight_ts = torch.index_select(self.edge_weight_ts, 0, old_index)
+            #neighbour_edge_weights_ts = torch.index_select(self.neighbour_edge_weights_ts, 0, old_index)
+            y = torch.index_select(self.labels_ts, 0, old_index) if self.labels_ts is not None else None
+            graph = Data(x, torch.stack((torch.tensor(component_edge_index[0]), torch.tensor(component_edge_index[1]))), edge_weight_ts, y)
+            graph.neighbour_edge_weights_ts = None # neighbour_edge_weights_ts
+            self.data_lst.append(graph)
+        
         data = Data(normalized_gene_positions_ts, self.edge_index_ts, self.edge_weight_ts, self.labels_ts)
         data.neighbour_edge_weights_ts = self.neighbour_edge_weights_ts
         self.data_lst = [data]
