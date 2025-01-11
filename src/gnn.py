@@ -42,7 +42,7 @@ class MyGCN(torch.nn.Module):
         log.debug(f"Got nodes tensor of shape: {combined_embeddings.shape}")
         log.debug(f"Got nodes tensor of shape: {combined_embeddings}")
         log.debug(f"Got edge weights tensor of shape: {edge_weights.shape}")
-        log.debug(f"Got edge index of shape: {edge_index.shape}")
+        log.debug(f"Got edge index of shape: {edge_index.shape}, {edge_index.dtype}")
 
 
         # NOTE: data.edge_attr only contains a tensor with bit scores so basically an edge weight
@@ -56,7 +56,8 @@ class MyGCN(torch.nn.Module):
         #nodes = torch.sigmoid(nodes)
         log.debug('Passing data to convolution layer 2..')
         #nodes = F.dropout(nodes, training=self.training) # what does this do??
-        nodes = self.conv3(nodes, edge_index, data.neighbour_edge_weights_ts)
+        #nodes = self.conv3(nodes, edge_index, data.neighbour_edge_weights_ts)
+        nodes = self.conv3(nodes, edge_index, edge_weights)
         log.debug(f"Outputting nodes to decode function of shape: {nodes.shape}\n{nodes}")
 
         link_predictions = self.decode(nodes, edge_index)

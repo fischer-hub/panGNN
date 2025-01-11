@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from src.plot import plot_loss_accuracy, plot_graph, plot_simscore_class, plot_logit_distribution
 from src.setup import log, args
-import torch, os
+import torch, os, random
 from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader
 from torch_geometric.transforms import RandomLinkSplit
@@ -37,7 +37,7 @@ dataset = HomogenousDataset(args.annotation, args.similarity, args.ribap_groups,
 dataset.generate_graph_data()
 dataset.split_data()
 
-log.info(f"Constructed train dataset from node, egde and index tensors: {dataset.train}")
+log.info(f"Constructed train dataset from node, egde and index tensors: {dataset.train[0]}")
 
 #plot_logit_distribution(dataset.train.edge_weight_ts, path= os.path.join('plots', 'sim_score_distribution_unscaled.png'))
 #dataset.scale_weights()
@@ -86,12 +86,15 @@ elif args.train:
     with Progress(transient = True) as progress:
 
         training_bar = progress.add_task("Epochs completed:", total=args.epochs)
-        #batch_bar    = progress.add_task("Training current batch:", total=len(dataloader))
+        batch_bar    = progress.add_task("Training current batch:", total=len(dataset.train))
 
         for epoch in range(args.epochs):
             total = 0
 
-            for batch in dataset.train:
+            # shuffle list of input graphs so the model sees the data in different order every time 
+            random.shuffle(dataset.train)
+
+            for batch_num, batch in enumerate(dataset.train):
 
                 model.train()
                 # clear old gradients so only current batch gradients are used
@@ -112,11 +115,14 @@ elif args.train:
                 accuracy = ((binary_prediction == batch.y).sum().item()) / len(batch.y)
 
                 # get some metrics, maybe do this in the model class?
-                log.info(f'Epoch {epoch+1}, Loss: {loss.item()}, Acc: {accuracy}')
+                log.info(f'Epoch {epoch+1}, {batch_num}, Loss: {loss.item()}, Acc: {accuracy}')
 
                 train_losses.append(loss.item())
                 train_accuracies.append(accuracy)
-                progress.update(training_bar, advance = 1)
+                progress.update(batch_bar, advance = 1)
+            
+            progress.update(training_bar, advance = 1)
+            progress.reset(batch_bar)
 
 
     log.info(f"Finished model training.\nPlotting metrics..")

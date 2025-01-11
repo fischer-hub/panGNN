@@ -170,14 +170,12 @@ def build_edge_index(sim_score_dict, gene_id_integer_dict, fully_connected = Fal
     """
 
     if fully_connected:
-        log.info(f"Building fully connected edge index..")
         num_genes = len(list(gene_id_integer_dict.keys()))
         row = torch.arange(num_genes).repeat(num_genes)
         col = row.view(num_genes, num_genes).t().flatten()
         mask = (row != col)
         edge_index_ts = torch.stack((row, col), dim=0) if self_loops else torch.stack((row[mask], col[mask]), dim=0) 
     else:
-        log.info(f"Building partially connected edge index from similarity scores..")
         origin_idx, target_idx = [], []
 
         for origin_id in sim_score_dict.keys():
@@ -204,8 +202,6 @@ def map_labels_to_edge_index(edge_index, gene_ids_lst, ribap_groups_dict):
     Args:
         edge_index
     """
-    log.info('Mapping labels to gene pairs in edge index..')
-
     if os.path.isfile('data/labels.pkl') and args.cache:
         with open('data/labels.pkl', 'rb') as f:
             log.info(f"Found pickled labels, loading file..")
@@ -215,7 +211,7 @@ def map_labels_to_edge_index(edge_index, gene_ids_lst, ribap_groups_dict):
         num_genes = len(edge_index[0])
         label_lst = [0] * num_genes
 
-        for edge in track(range(num_genes), description = 'Mapping labels to gene pairs in edge index..\n', transient = True):
+        for edge in range(num_genes):
 
             source_gene_int_id = edge_index[0][edge]
             destination_gene_int_id = edge_index[1][edge]
@@ -360,38 +356,34 @@ def map_edge_weights(edge_index, bit_score_dict, gene_ids_lst):
         edge_weight_lst = []
 
 
-        with Progress(transient = True) as progress:
-            edge_weight_bar = progress.add_task("Mapping edge weights to respective edge index positions..\n", total=len(edge_index[1]))
-            #with Console().status("Mapping edge weights to respective edge index positions..") as status:
-            for source_int_ID, target_int_ID in zip(edge_index[0], edge_index[1]):
+        for source_int_ID, target_int_ID in zip(edge_index[0], edge_index[1]):
 
-                # add pseudo weight 1000 if we have a self loop
-                if source_int_ID == target_int_ID:
-                    edge_weight_lst.append(1000)
-                    continue
-                # retrieve str IDs from integer IDs in the edge index
-                source_str_ID = gene_ids_lst[source_int_ID]
-                target_str_ID = gene_ids_lst[target_int_ID]
+            # add pseudo weight 1000 if we have a self loop
+            if source_int_ID == target_int_ID:
+                edge_weight_lst.append(1000)
+                continue
+            # retrieve str IDs from integer IDs in the edge index
+            source_str_ID = gene_ids_lst[source_int_ID]
+            target_str_ID = gene_ids_lst[target_int_ID]
 
-                # look up bit score for string IDs of the two genes and save to list
-                #print(f"Starting lookup for source node: ({source_str_ID}, {source_int_ID}); Target node: ({target_str_ID}, {target_int_ID})")
+            # look up bit score for string IDs of the two genes and save to list
+            #print(f"Starting lookup for source node: ({source_str_ID}, {source_int_ID}); Target node: ({target_str_ID}, {target_int_ID})")
 
+            try:
+                edge_weight = bit_score_dict[source_str_ID][target_str_ID]
+                edge_weight_lst.append(edge_weight)
+                #print(f"Bit score: {edge_weight}")
+            
+            except KeyError:
                 try:
-                    edge_weight = bit_score_dict[source_str_ID][target_str_ID]
+                    edge_weight = bit_score_dict[target_str_ID][source_str_ID]
                     edge_weight_lst.append(edge_weight)
                     #print(f"Bit score: {edge_weight}")
-                
                 except KeyError:
-                    try:
-                        edge_weight = bit_score_dict[target_str_ID][source_str_ID]
-                        edge_weight_lst.append(edge_weight)
-                        #print(f"Bit score: {edge_weight}")
-                    except KeyError:
-                        # do we want 0 as no similarity score? does this 'kill' neurons and preevent from learning?
-                        edge_weight_lst.append(0)
-                        #print(f"Could not find gene pair in similarity score dataframe, assigning score 0.")
-                
-                progress.update(edge_weight_bar, advance = 1)
+                    # do we want 0 as no similarity score? does this 'kill' neurons and preevent from learning?
+                    edge_weight_lst.append(0)
+                    #print(f"Could not find gene pair in similarity score dataframe, assigning score 0.")
+            
             
     
     # pickle test data edge features for testing (mapping takes a while otherwise)
@@ -404,7 +396,6 @@ def map_edge_weights(edge_index, bit_score_dict, gene_ids_lst):
     # cast to float since edge weights have to be floats?
     edge_weight_ts = torch.tensor(edge_weight_lst).float()
 
-    log.info(f"Successfully created edge feature list with tensor elem type: {edge_weight_ts.dtype}")
     return edge_weight_ts
 
 
