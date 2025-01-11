@@ -29,7 +29,7 @@ class HomogenousDataset(Dataset):
         self.num_neighbours = num_neighbours
         self.ribap_groups_file = ribap_groups_file
         self.data_lst = []
-        self.gene_ids_lst = []
+        self.gene_str_ids_lst = []
         self.neighbour_lst = []
         self.train = []
         self.test = []
@@ -52,7 +52,7 @@ class HomogenousDataset(Dataset):
             log.debug(f"Genome 1 annotation dataframe:\n {genome_annotation_df}")
             num_genes += len(genome_annotation_df.index)
             
-            self.gene_ids_lst += list(genome_annotation_df.index)
+            self.gene_str_ids_lst += list(genome_annotation_df.index)
             
             # for each string gene ID save its normalized position in the gff file into the dictionary
             self.gene_id_position_dict.update({gene: (idx / len(list(genome_annotation_df.index))) for idx, gene in enumerate(list(genome_annotation_df.index))})
@@ -64,7 +64,7 @@ class HomogenousDataset(Dataset):
 
         # total number of genes found in all annotation files
         log.info(f"Total number of genes found in annotation files: {num_genes}")
-        self.gene_id_integer_dict = {gene: idx for idx, gene in enumerate(self.gene_ids_lst)}
+        self.gene_id_integer_dict = {gene: idx for idx, gene in enumerate(self.gene_str_ids_lst)}
         self.gene_ids_ts = torch.tensor(list(self.gene_id_integer_dict.values()))
         normalized_gene_positions_ts = torch.tensor(list(self.gene_id_position_dict.values())).unsqueeze(1)
 
@@ -73,8 +73,8 @@ class HomogenousDataset(Dataset):
 
         self.edge_index_ts = build_edge_index(sim_score_dict, self.gene_id_integer_dict, fully_connected = False)
         
-        self.edge_weight_ts = map_edge_weights(self.edge_index_ts, sim_score_dict, self.gene_ids_lst) #torch.randn((num_genes/2, edge_feature_dim))  # Edge 
-        #self.neighbour_edge_weights_ts = generate_neighbour_edge_features(self.neighbour_lst, self.edge_index_ts, sim_score_dict, self.gene_ids_lst)
+        self.edge_weight_ts = map_edge_weights(self.edge_index_ts, sim_score_dict, self.gene_str_ids_lst) #torch.randn((num_genes/2, edge_feature_dim))  # Edge 
+        #self.neighbour_edge_weights_ts = generate_neighbour_edge_features(self.neighbour_lst, self.edge_index_ts, sim_score_dict, self.gene_str_ids_lst)
         self.neighbour_edge_weights_ts = None
         
         #self.adjacency_vectors_ts = build_adjacency_vectors(num_neighbours = 2, gene_id_lst = self.gene_ids_ts)
@@ -86,7 +86,7 @@ class HomogenousDataset(Dataset):
             self.ribap_groups_dict = load_ribap_groups(self.ribap_groups_file, genome_name_lst)
 
             # construct list of labels from ribap groups and format to match edge_index
-            self.labels_ts = map_labels_to_edge_index(self.edge_index_ts, self.gene_ids_lst, self.ribap_groups_dict)
+            self.labels_ts = map_labels_to_edge_index(self.edge_index_ts, self.gene_str_ids_lst, self.ribap_groups_dict)
         else:
             self.labels_ts = None
 
@@ -97,44 +97,47 @@ class HomogenousDataset(Dataset):
         graph = csr_array(adj_matrix)
         n_components, labels = connected_components(csgraph=graph, directed=False, return_labels=True)
 
+        log.debug(f"Number of connected components: {n_components}, in total number of nodes: {num_genes}")
+
         connected_components_nodes = [[] for x in range(n_components)]
+        
         for idx, label in enumerate(labels):
             connected_components_nodes[label].append(idx)
 
-        for component_nodes in track(connected_components_nodes, description='Generating subgraphs from connected components..', transient=True):
-            old_index = torch.tensor(component_nodes)
+        for idx, component_nodes in enumerate(connected_components_nodes): #, description='Generating subgraphs from connected components..', transient=True):
+            x = torch.tensor(component_nodes)
             # x is a tensor of categorical node IDs where a nodes index is in edge_index if it is connected to an edge,
             # so we have to either remap the indices in edge_index to the new x, or use the whole tensor for each data 
             # object so the indices work out 
-            #x = torch.tensor(list(set(component[1] + component[2])))
-            x = old_index
 
-            component_edge_index = [[], []]
-            
-            for node in component_nodes:
-                for origin_node, target_node in zip(self.edge_index_ts[0], self.edge_index_ts[1]):
-                    if node == origin_node or node == target_node:
-                        component_edge_index[0].append(origin_node)
-                        component_edge_index[1].append(target_node)
+            log.debug(f"subsetting similarity score dict for component nodes.. {component_nodes} {idx/len(connected_components_nodes) *100} % done.")
+            gene_str_ids_lst = [self.gene_str_ids_lst[i] for i in component_nodes]
+            sub_sim_score_dict = dict((gene_str_id, sim_score_dict[gene_str_id]) for gene_str_id in gene_str_ids_lst if gene_str_id in sim_score_dict)
 
-            edge_weight_ts = torch.index_select(self.edge_weight_ts, 0, old_index)
-            #neighbour_edge_weights_ts = torch.index_select(self.neighbour_edge_weights_ts, 0, old_index)
-            y = torch.index_select(self.labels_ts, 0, old_index) if self.labels_ts is not None else None
-            graph = Data(x, torch.stack((torch.tensor(component_edge_index[0]), torch.tensor(component_edge_index[1]))), edge_weight_ts, y)
+            component_edge_index = build_edge_index(sub_sim_score_dict, self.gene_id_integer_dict, fully_connected = False)
+            component_edge_weight_ts = map_edge_weights(component_edge_index, sub_sim_score_dict, self.gene_str_ids_lst)
+
+            if self.ribap_groups_file:
+                component_labels_ts = map_labels_to_edge_index(component_edge_index, self.gene_str_ids_lst, self.ribap_groups_dict)
+            else:
+                component_labels_ts = None
+
+
+            graph_data = Data(x, component_edge_index, component_edge_weight_ts, component_labels_ts)
             graph.neighbour_edge_weights_ts = None # neighbour_edge_weights_ts
-            self.data_lst.append(graph)
+            self.data_lst.append(graph_data)
         
-        data = Data(normalized_gene_positions_ts, self.edge_index_ts, self.edge_weight_ts, self.labels_ts)
-        data.neighbour_edge_weights_ts = self.neighbour_edge_weights_ts
-        self.data_lst = [data]
+        #data = Data(normalized_gene_positions_ts, self.edge_index_ts, self.edge_weight_ts, self.labels_ts)
+        #data.neighbour_edge_weights_ts = self.neighbour_edge_weights_ts
+        #self.data_lst = [data]
         
 
-        self.x = normalized_gene_positions_ts
+        #self.x = normalized_gene_positions_ts
         #self.x = self.adjacency_vectors_ts
         #self.x = self.gene_ids_ts
-        self.edge_attr = self.edge_weight_ts
-        self.edge_index = self.edge_index_ts
-        self.y = self.labels_ts
+        #self.edge_attr = self.edge_weight_ts
+        #self.edge_index = self.edge_index_ts
+        #self.y = self.labels_ts
 
     
     def split_data(self, split = (0.7, 0.15, 0.15), batch_size = 32):

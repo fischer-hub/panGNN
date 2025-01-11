@@ -156,7 +156,7 @@ def map_edge_weights(edge_index, bit_score_dict, gene_ids_lst):
     return edge_weight_ts
     
 
-def build_edge_index(sim_score_dict, gene_id_integer_dict, fully_connected = False, self_loops = False):
+def build_edge_index(sim_score_dict, gene_id_integer_dict, fully_connected = False, self_loops = False, ):
     """Build an edge index for partially or fully connected input graph from similarity scores and gene IDs.
 
     Args:
@@ -232,7 +232,7 @@ def map_labels_to_edge_index(edge_index, gene_ids_lst, ribap_groups_dict):
             with open('data/labels.pkl', 'wb') as f:
                 pickle.dump(label_lst, f)
     
-    log.info(f"{sum(label_lst) / len(label_lst)} of edges in ground truth are positive.")
+    #log.info(f"{sum(label_lst) / len(label_lst)} of edges in ground truth are positive.")
     return torch.tensor(label_lst).float()
 
 

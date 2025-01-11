@@ -65,7 +65,7 @@ criterion = torch.nn.BCEWithLogitsLoss() # if your model outputs raw logits and 
 
 train_losses = []
 train_accuracies = []
-log.info(f"edge weights sum : {dataset.train.edge_weight_ts.sum()}")
+log.info(f"edge weights sum : {dataset.train.edge_attr.sum()}")
 
 if not args.train or os.path.exists(args.model_args):
     if os.path.exists(args.model_args):
