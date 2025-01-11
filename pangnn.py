@@ -65,13 +65,12 @@ criterion = torch.nn.BCEWithLogitsLoss() # if your model outputs raw logits and 
 
 train_losses = []
 train_accuracies = []
-log.info(f"edge weights sum : {dataset.train.edge_attr.sum()}")
 
 if not args.train or os.path.exists(args.model_args):
     if os.path.exists(args.model_args):
         log.info(f"Found model file '{args.model_args}' with trained parameter, restoring model state for inference..")
         model.load_state_dict(torch.load(args.model_args))
-        prediction_bin, prediction_scores = predict_homolog_genes(model, dataset.train.data_lst[0], dataset.test.data_lst[0])
+        prediction_bin, prediction_scores = predict_homolog_genes(model, dataset.train, dataset.test)
 
     else:
         log.error(f"Could not infer model because model parameters file '{args.model_args}' was not found, exiting.")
