@@ -2,6 +2,7 @@ import torch
 from rich.console import Console
 from src.setup import log
 from src.plot import plot_roc, plot_logit_distribution
+from src.helper import concat_graph_data
 from sklearn.metrics import confusion_matrix
 import torch.nn.functional as F
 
@@ -22,12 +23,13 @@ def predict_homolog_genes(model, train_dataset = None, test_dataset = None, bina
         
     """
     model.eval()
-    print(test_dataset)
     with torch.no_grad():
         with Console().status("Infering model on test data..") as status:
             edge_scores = model(test_dataset)
+
             if train_dataset:
-                edge_scores_train = model(train_dataset)
+                concat_train = concat_graph_data(train_dataset)
+                edge_scores_train = model(concat_train)
         
         if hasattr(test_dataset, 'y'):
             log.info('Calculating metrics..')
@@ -52,7 +54,7 @@ def predict_homolog_genes(model, train_dataset = None, test_dataset = None, bina
 
             accuracy_test = ((binary_prediction == test_dataset.y).sum().item()) / len(test_dataset.y)
             if train_dataset: 
-                accuracy_train = ((binary_prediction_train == train_dataset.y).sum().item()) / len(train_dataset.y)
+                accuracy_train = ((binary_prediction_train == concat_train.y).sum().item()) / len(concat_train.y)
             guess = ((random_pred == test_dataset.y).sum().item()) / len(test_dataset.y)
             log.info("\n\n----------METRICS----------\n")
             log.info(f"Correctly predicted: {(binary_prediction == test_dataset.y).sum().item() } out of {len(test_dataset.y)} edges.")

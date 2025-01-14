@@ -35,7 +35,35 @@ edge_feature_dim = 128
 dataset = HomogenousDataset(args.annotation, args.similarity, args.ribap_groups, args.neighbours) if args.train else HomogenousDataset(args.annotation, args.similarity, args.neighbours)
 
 dataset.generate_graph_data()
-dataset.split_data()
+dataset.split_data(batch_size = args.batch_size)
+
+""" import umap
+import matplotlib.pyplot as plt
+import pandas as pd
+import numpy as np
+from sklearn.decomposition import PCA
+umap_model = umap.UMAP(n_components=3, random_state=42)
+dist = []
+for origin_node, target_node in zip(dataset.test.edge_index[0], dataset.test.edge_index[1]):
+    dist.append(abs(dataset.test.x[origin_node] - dataset.test.x[target_node]) * 10000)
+
+#log.info(len(dataset.test.edge_attr), len(dist))
+edge_features = np.column_stack((dataset.test.edge_attr, dist))  # Shape: [num_edges, 2]
+edge_embedding_2d = umap_model.fit_transform(edge_features)
+#pca = PCA(n_components=2)  # Reduce to 2 dimensions
+#edge_embedding_2d = umap.fit_transform(edge_features)
+fig = plt.figure(figsize=(10, 8))
+ax = fig.add_subplot(111, projection='3d')
+scatter = ax.scatter(edge_embedding_2d[:, 0], edge_embedding_2d[:, 1], edge_embedding_2d[:, 2], 
+                     c=dataset.test.y, cmap='Spectral', s=5)
+ax.set_title("3D UMAP Projection of Edge Features")
+ax.set_xlabel("UMAP Dimension 1")
+ax.set_ylabel("UMAP Dimension 2")
+ax.set_zlabel("UMAP Dimension 3")
+
+fig.colorbar(scatter, label="Edge Labels")
+plt.show()
+quit() """
 
 log.info(f"Constructed train dataset from node, egde and index tensors: {dataset.train[0]}")
 
@@ -93,6 +121,7 @@ elif args.train:
 
             # shuffle list of input graphs so the model sees the data in different order every time 
             random.shuffle(dataset.train)
+            accuracy = []
 
             for batch_num, batch in enumerate(dataset.train):
 
@@ -110,16 +139,17 @@ elif args.train:
                 loss.backward()
                 log.debug('Calling optimizer step on current batch..')
                 optimizer.step()
-                
-                binary_prediction = torch.tensor((torch.sigmoid(output) >= 0.5).int())
-                accuracy = ((binary_prediction == batch.y).sum().item()) / len(batch.y)
 
-                # get some metrics, maybe do this in the model class?
-                log.info(f'Epoch {epoch+1}, {batch_num}, Loss: {loss.item()}, Acc: {accuracy}')
-
-                train_losses.append(loss.item())
-                train_accuracies.append(accuracy)
                 progress.update(batch_bar, advance = 1)
+                
+                binary_prediction = (torch.sigmoid(output) >= 0.5).int()
+                accuracy.append(((binary_prediction == batch.y).sum().item()) / len(batch.y))
+
+            # get some metrics, maybe do this in the model class?
+            log.info(f'Epoch {epoch+1}, Loss: {loss.item()}, Acc: {sum(accuracy) / len(accuracy)}')
+
+            train_losses.append(loss.item())
+            train_accuracies.append(sum(accuracy) / len(accuracy))
             
             progress.update(training_bar, advance = 1)
             progress.reset(batch_bar)
@@ -132,7 +162,7 @@ elif args.train:
     torch.save(model.state_dict(), args.model_args)
 
     # get metrics on test dataset
-    prediction_bin, prediction_scores = predict_homolog_genes(model, dataset.train.data_lst[0], dataset.test.data_lst[0])
+    prediction_bin, prediction_scores = predict_homolog_genes(model, dataset.train, dataset.test)
     log.debug(prediction_bin)
     
 #write_groups_file(dataset.test, prediction_bin)

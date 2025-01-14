@@ -7,14 +7,32 @@ The idea is to use not only the commonly used sequence identity to predict wheth
 
 We gene annotation from Prokka for the gene neighbourhood information and run MMSeq on this annotation to cluster genes with similar sequences. This somehow has to be incorporated into a datastructure that we can feed to the graph neural network. Then do some smart convolution and design a training and test dataset. Profit
 
+Now the question is, does this information separate the datapoints somehow?
+
+![Alt text](./plots/scatter_sim_score_dist.png)
+
+Not linearly..
+
+![Alt text](./plots/umap_sim_score_dist.png)
+![Alt text](./plots/umap3d_sim_score_dist.png)
+
+Maybe non linearly?
+
+
+
 # current state
 
-The current design is shown below, where we have as input two input genomes a and b. For each gene in these genomes a node is created holding its two (for now) neighbour genes as described above, where the Prokka gene IDs of the actual gene in that node is mapped to an integer ID and embedded in a feature vector. Additionally the two neighbour gene IDs are also integer encoded and the embedding vectors are concatenated to hold the information of both the actual gene and its neighbours. If no neirghbour is available a 0 vector is used for the embedding. The network is fully connected (there should also be self looping edges but I didnt know how to properly draw thos in draw.io, Id like to test whether these self loops anyway give any information for prediction accuracy). The edges of each node pair hold the similarity bit score caluclated by MMSeqs2 (or 0 if no score was calculated, although this could bias the prediction depending on which threshold MMSeqs2 uses to filter low similarity pairs I think?).
+Currently, the genes are loaded from the GFF files, the similarity scores are loaded from the MMSeqs2 output and used to generate edges between all pairs of genes that have a similarity score. The RIBAP output table (holy table) is then used to check for which pairs of genes both genes are part of the same ribap group, these are assumed to be of prediction class 1 (homolog). The similarity scores are mapped to the edge weights of the input graph in the PyG Data object. Additionally the normalized position of each gene (the position in its GFF file normalized by the total number of genes in that file) is used as node features. Then every gene is represented by a node containing its normalized position and is connected by edges that represent the similarity bit score to its connected gene (node). The idea here is, that genes that are in close proximity in their genomes will be learned to have a higher chance to be homolog when their similarity score is also high, compared to high similarity scores but very different positional node features.
 
-Would then also be interesting if the design works for pairwise species homology predictions if we can scale it to take more genomes at once, e.g.: the bit scores we already have for all input genomes at once anyway. Not sure if it works so easy to input such a multitude bigger feature space. But for now lets get it running on this minimal example.
+The similarity input graph is then seperated into all individual connected components (sub-graphs), see:
 
+![Alt text](./plots/input_graph.png)
 
-![Alt text](./assets/panGNN_example_graph.svg)
+Since genes below the MMSeqs2 similarity threshold will not have an edge connecting them in the input graph, they will not have any influence on each other and the trainiong weights (at least I hope so) in the GNN. The convolution can only occur between nodes connected by a node and only nodes that have a similarity score will be used in the encoding and predcition step. So we can use this to seperate the data into small bits and batch them in groups that we want to train on (also we can use some part of the data like that for test and validation set for now), without destroying relationships in the data (e.g. by randomly sub sampling graphs and breaking edges). The order of the batches is also shuffled during the model training so reduce the risk of fitting the model to the order of the data instead of the data itself.
+
+The first layer of the GNN is a linear (embedding) layer, putting the one dimensional node (input) features into the hidden dim space (which is 64 for now). This is followed by a convolution layer that incorporates the edge weights of each node, it performs a weighted sum of the edge weights connected to each node before multiplying with the learnable parameter matrix. Next is a ReLU activation layer and another convolution layer. After this the node embeddings are decoded by calculating the dot product between pairs of node embeddings to predict links between them. The resulting values (logits if you will so in ML slang I guess) are then fed to a binary cross entropy loss function that applies a sigmoid function to the logits before calculating the loss between them and the 'ground truth' (binary) labels.
+
+However, its not performing very well right now.
 
 # get started
 Install the dependencies first using e.g. the conda environment file in the project directory and activate conda environment:

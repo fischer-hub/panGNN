@@ -1,9 +1,9 @@
 from src.preprocessing import load_gff, load_similarity_score, load_ribap_groups, build_edge_index, map_edge_weights, map_labels_to_edge_index, construct_neighbour_lst, generate_neighbour_edge_features, build_adjacency_vectors
-from src.setup import log
+from src.setup import log, args
 from src.helper import separate_components, concat_graph_data
 import torch, os, pickle
 from torch_geometric.data import Dataset, Data
-from rich.progress import track, Console
+from rich.progress import track, Console, Progress
 from scipy.sparse import csr_array
 from scipy.sparse.csgraph import connected_components
 from torch_geometric.utils.convert import to_scipy_sparse_matrix
@@ -93,10 +93,17 @@ class HomogenousDataset(Dataset):
             # construct list of labels from ribap groups and format to match edge_index
             with Console().status("Mapping labels to gene pairs in edge index.") as status:
                 self.labels_ts = map_labels_to_edge_index(self.edge_index_ts, self.gene_str_ids_lst, self.ribap_groups_dict)
+                log.info(f"{self.labels_ts.sum().item() / len(self.labels_ts) * 100} % of labels are in positive class.")
                 log.info('Successfully mapped labels to gene pairs in edge index')
         else:
             self.labels_ts = None
 
+        if args.batch_size == 1:
+            log.info('Batch size set to 1, skipping seperation of connected components.')
+            graph_data = Data(normalized_gene_positions_ts, self.edge_index_ts, self.edge_weight_ts, self.labels_ts)
+            #graph_data = Data(self.gene_ids_ts, self.edge_index_ts, self.edge_weight_ts, self.labels_ts)
+            self.data_lst.append(graph_data)
+            return
         
         #connected_components = separate_components(self.edge_index_ts)
 
@@ -110,32 +117,52 @@ class HomogenousDataset(Dataset):
         
         for idx, label in enumerate(labels):
             connected_components_nodes[label].append(idx)
+    
+        with Progress(transient = True) as progress:
+            subgraph_bar = progress.add_task("Generating subgraphs from connected components..", total=len(connected_components_nodes))
 
-        for idx, component_nodes in track(enumerate(connected_components_nodes), description='Generating subgraphs from connected components..', transient=True):
-            x = torch.tensor(component_nodes).unsqueeze(1)
-            # x is a tensor of categorical node IDs where a nodes index is in edge_index if it is connected to an edge,
-            # so we have to either remap the indices in edge_index to the new x, or use the whole tensor for each data 
-            # object so the indices work out 
 
-            log.debug(f"subsetting similarity score dict for component nodes.. {component_nodes} {idx/len(connected_components_nodes) *100} % done.")
-            gene_str_ids_lst = [self.gene_str_ids_lst[i] for i in component_nodes]
-            sub_sim_score_dict = dict((gene_str_id, sim_score_dict[gene_str_id]) for gene_str_id in gene_str_ids_lst if gene_str_id in sim_score_dict)
+            for idx, component_nodes in enumerate(connected_components_nodes):
+                x = torch.tensor(component_nodes).unsqueeze(1)
+                # x is a tensor of categorical node IDs where a nodes index is in edge_index if it is connected to an edge,
+                # so we have to either remap the indices in edge_index to the new x, or use the whole tensor for each data 
+                # object so the indices work out 
 
-            component_edge_index = build_edge_index(sub_sim_score_dict, self.gene_id_integer_dict, fully_connected = False)
-            component_edge_weight_ts = map_edge_weights(component_edge_index, sub_sim_score_dict, self.gene_str_ids_lst)
+                log.debug(f"subsetting similarity score dict for component nodes.. {component_nodes} {idx/len(connected_components_nodes) *100} % done.")
 
-            if self.ribap_groups_file:
-                component_labels_ts = map_labels_to_edge_index(component_edge_index, self.gene_str_ids_lst, self.ribap_groups_dict)
-            else:
-                component_labels_ts = None
+                gene_str_ids_lst = [self.gene_str_ids_lst[i] for i in component_nodes]
+                component_normalized_gene_positions_ts = torch.tensor([normalized_gene_positions_ts[i] for i in component_nodes])
 
-            # we use as node list for each graph the whole list since the edge index referes to indices in the node list, otherwise we have to remap all edge indices to their
-            # match the updated sub list of nodes of the graph, which I would like to avoid (I hope this doesnt affect the model since it should anyway only make predictions for nodes that are connected by an edge?)
-            graph_data = Data(self.gene_ids_ts.unsqueeze(1), component_edge_index, component_edge_weight_ts, component_labels_ts)
-            graph.neighbour_edge_weights_ts = None # neighbour_edge_weights_ts
-            self.data_lst.append(graph_data)
+                sub_sim_score_dict = dict((gene_str_id, sim_score_dict[gene_str_id]) for gene_str_id in gene_str_ids_lst if gene_str_id in sim_score_dict)
 
-        log.info('Successfully generated graph data for all sub-graphs in the input')
+                component_edge_index = build_edge_index(sub_sim_score_dict, self.gene_id_integer_dict, fully_connected = False)
+                component_edge_weight_ts = map_edge_weights(component_edge_index, sub_sim_score_dict, self.gene_str_ids_lst)
+
+                if self.ribap_groups_file:
+                    component_labels_ts = map_labels_to_edge_index(component_edge_index, self.gene_str_ids_lst, self.ribap_groups_dict)
+                else:
+                    component_labels_ts = None
+
+                # we use as node list for each graph the whole list since the edge index referes to indices in the node list, otherwise we have to remap all edge indices to their
+                # match the updated sub list of nodes of the graph, which I would like to avoid (I hope this doesnt affect the model since it should anyway only make predictions for nodes that are connected by an edge?)
+                # EDIT: as you can see i added tghe mapping to the sub graph nodes..
+                node_sub_graph_mapping = None
+                if len(component_edge_index[0]) > 0:
+
+                    node_sub_graph_mapping = {old_idx: new_idx for new_idx, old_idx in enumerate(component_nodes)}
+
+                    for idx in range(len(component_edge_index[0])):
+                        edge = [component_edge_index[0][idx], component_edge_index[1][idx]]
+                        component_edge_index[0][idx] = node_sub_graph_mapping[edge[0].item()]
+                        component_edge_index[1][idx] = node_sub_graph_mapping[edge[1].item()]
+                
+                #graph_data = Data(self.gene_ids_ts.unsqueeze(1), component_edge_index, component_edge_weight_ts, component_labels_ts)
+                graph_data = Data(component_normalized_gene_positions_ts.unsqueeze(1), component_edge_index, component_edge_weight_ts, component_labels_ts)
+                graph.neighbour_edge_weights_ts = None # neighbour_edge_weights_ts
+                self.data_lst.append(graph_data)
+                progress.update(subgraph_bar, advance=1)
+
+            log.info('Successfully generated graph data for all sub-graphs in the input')
         
         
         #data = Data(normalized_gene_positions_ts, self.edge_index_ts, self.edge_weight_ts, self.labels_ts)
@@ -158,6 +185,12 @@ class HomogenousDataset(Dataset):
             split (tuple, optional): . fraction of the graphs to go to train, test and validation sets respectively. Defaults to (0.7, 0.15, 0.15).
             batch_size (int, optional): number of graphs to trasin on in a single batch. Defaults to 32.
         """
+        if args.batch_size == 1:
+            log.info('Batch size set to 1, train and test datasets are the same.')
+            self.train = self.data_lst
+            self.test = self.data_lst[0]
+            return
+        
         # calculate train, test, val split and batches for train data
         num_train_data = int(len(self.data_lst) * split[0])
         num_test_data = int(len(self.data_lst) * split[1])
