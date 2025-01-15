@@ -84,7 +84,7 @@ log.info(f"Constructed test dataset from node, egde and index tensors: {dataset.
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu") if args.gpu else 'cpu'
 model = MyGCN(dataset = dataset.train, hidden_dim = hidden_dim, num_neighbours = args.neighbours, node_feature_dim = gene_id_embedding_dim, device = device)
-optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+optimizer = torch.optim.Adam(model.parameters(), lr=0.00005)
 
 # TODO: is this a good loss function for our scenario?
 # criterion = torch.nn.BCELoss() # if your model outputs probabilities, outputs logits

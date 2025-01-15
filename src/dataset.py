@@ -66,7 +66,7 @@ class HomogenousDataset(Dataset):
         log.info(f"Total number of genes found in annotation files: {num_genes}")
         self.gene_id_integer_dict = {gene: idx for idx, gene in enumerate(self.gene_str_ids_lst)}
         self.gene_ids_ts = torch.tensor(list(self.gene_id_integer_dict.values()))
-        normalized_gene_positions_ts = torch.tensor(list(self.gene_id_position_dict.values())).unsqueeze(1)
+        normalized_gene_positions_ts = torch.tensor([pos * num_genes for pos in list(self.gene_id_position_dict.values())]).unsqueeze(1)
 
         # load similarity bit scores from MMSeqs2 output CSV file to pandas dataframe
         sim_score_dict = load_similarity_score(self.similarity_score_file)

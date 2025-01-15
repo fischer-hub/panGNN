@@ -21,11 +21,11 @@ class MyGCN(torch.nn.Module):
         log.debug(f"Expecting dims {combined_embedding_dim}; {hidden_dim} for first convolution layer.")
 
         # define convolution layers
-        self.conv_in = GCNConv(64, 128, add_self_loops = True)
+        self.conv_in = GCNConv(64, 512, add_self_loops = True)
         #self.conv2 = DenseGCNConv(128, 128)
         #self.conv2 = GCNConv(128, 128, add_self_loops = True)
-        self.conv_hidden = GCNConv(128, 128, add_self_loops = True)
-        self.conv_out = GCNConv(128, 64, add_self_loops = True)
+        self.conv_hidden = GCNConv(512, 512, add_self_loops = True)
+        self.conv_out = GCNConv(512, 64, add_self_loops = True)
 
         self.leaky_relu = torch.nn.LeakyReLU()
 

@@ -400,19 +400,26 @@ def map_edge_weights(edge_index, bit_score_dict, gene_ids_lst):
 
 
 
-def load_gff(annotation_file_name):
+def load_gff(annotation_file_name, start_gene = 'hemB'):
     """
     Loads an annotation file in GFF format and returns a pandas dataframe.
     """
     with open(annotation_file_name) as gff_handle:
 
-        annotation_df = pd.read_csv(gff_handle, comment = '#', sep = '\t', 
-                                    names = ['seqname', 'source', 'feature', 
-                                             'start', 'end', 'score', 'strand', 
+        annotation_df = pd.read_csv(gff_handle, comment = '#', sep = '\t',
+                                    names = ['seqname', 'source', 'feature',
+                                             'start', 'end', 'score', 'strand',
                                              'frame', 'attribute'],
                                     dtype={'seqname': str, 'source': str, 'feature': str,
                                            'start': 'Int64', 'end': 'Int64', 'score': str,
                                            'strand': str, 'frame': str, 'attribute': str})
+        
+    start_gene_idx = annotation_df.index.get_loc(annotation_df.index[annotation_df['attribute'].str.contains(r"{start_gene}", na=False)][0])
+
+    df1 = annotation_df.iloc[start_gene_idx:, :]
+    df2 = annotation_df.iloc[:start_gene_idx, :]
+
+    annotation_df = df1.append(df2)
 
     annotation_df = annotation_df.dropna()
     annotation_df['gene_id'] = annotation_df.attribute.str.replace(';.*', '', regex = True)
