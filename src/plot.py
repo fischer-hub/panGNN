@@ -54,10 +54,17 @@ def plot_roc(labels, probabilities, path = os.path.join('plots', 'roc.png')):
     """
 
     fpr, tpr, thresholds = roc_curve(labels, probabilities)
+
+    youden_index = tpr - fpr
+
+    # Find the optimal threshold
+    optimal_idx = youden_index.argmax()
+    optimal_threshold = thresholds[optimal_idx]
+
     roc_auc = auc(fpr, tpr)
 
     plt.figure()
-    plt.plot(fpr, tpr, color='blue', label=f'ROC curve (AUC = {roc_auc:.2f})')
+    plt.plot(fpr, tpr, color='blue', label=f'ROC curve (AUC = {roc_auc:.2f}), opt. th {optimal_threshold:.2f}')
     plt.plot([0, 1], [0, 1], color='gray', linestyle='--')  # diagonal line for random guessing
     plt.xlim([0.0, 1.0])
     plt.ylim([0.0, 1.05])
@@ -74,12 +81,13 @@ def plot_roc(labels, probabilities, path = os.path.join('plots', 'roc.png')):
     return roc_auc
 
 
-def plot_loss_accuracy(num_epochs, train_losses, train_accuracies, path = os.path.join('plots', 'loss_acc.png')):
+def plot_loss_accuracy(num_epochs, train_losses, train_accuracies, val_losses, val_accuracies, path = os.path.join('plots', 'loss_acc.png')):
     # Plot Loss
     plt.figure(figsize=(12, 5))
 
     plt.subplot(1, 2, 1)
     plt.plot(range(1, num_epochs + 1), train_losses, marker='o', color='b', label='Training Loss')
+    plt.plot(range(1, num_epochs + 1), val_losses, marker='o', color='y', label='Validation Loss')
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
     plt.title('Training Loss over Epochs')
@@ -88,6 +96,7 @@ def plot_loss_accuracy(num_epochs, train_losses, train_accuracies, path = os.pat
     # Plot Accuracy
     plt.subplot(1, 2, 2)
     plt.plot(range(1, num_epochs + 1), train_accuracies, marker='o', color='g', label='Training Accuracy')
+    plt.plot(range(1, num_epochs + 1), val_accuracies, marker='o', color='y', label='Validation Accuracy')
     plt.xlabel('Epoch')
     plt.ylabel('Accuracy (%)')
     plt.title('Training Accuracy over Epochs')

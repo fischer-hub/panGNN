@@ -57,10 +57,12 @@ class MyGCN(torch.nn.Module):
         nodes = F.relu(nodes)
         #nodes = self.activation_fct(nodes)
         #nodes = torch.sigmoid(nodes)
-        #nodes = self.conv_hidden(nodes, edge_index, edge_weights)
-        #nodes = F.relu(nodes)
-        nodes = F.dropout(nodes, training=self.training) # what does this do??
+        nodes = self.conv_hidden(nodes, edge_index, edge_weights)
+        nodes = F.relu(nodes)
+        #nodes = F.dropout(nodes, training=self.training, p = 0.0001) # what does this do??
         #nodes = self.conv3(nodes, edge_index, data.neighbour_edge_weights_ts)
+        nodes = self.conv_hidden(nodes, edge_index, edge_weights)
+        nodes = F.relu(nodes)
         nodes = self.conv_out(nodes, edge_index, edge_weights)
         log.debug(f"Outputting nodes to decode function of shape: {nodes.shape}\n{nodes}")
 

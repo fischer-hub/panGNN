@@ -1,7 +1,7 @@
 from src.preprocessing import load_gff, load_similarity_score, load_ribap_groups, build_edge_index, map_edge_weights, map_labels_to_edge_index, construct_neighbour_lst, generate_neighbour_edge_features, build_adjacency_vectors
 from src.setup import log, args
 from src.helper import separate_components, concat_graph_data
-import torch, os, pickle
+import torch, os, pickle, random
 from torch_geometric.data import Dataset, Data
 from rich.progress import track, Console, Progress
 from scipy.sparse import csr_array
@@ -47,6 +47,11 @@ class HomogenousDataset(Dataset):
         # load annotations from gff files and format to pandas dataframe
         for gff_file in track(self.gff_files, description='Loading annotation files..', transient=True):
             genome_annotation_df = load_gff(gff_file)
+
+            if 'hemB' not in genome_annotation_df.iloc[0].values[-1]:
+                log.error('Annotation data does not start with start gene, uncentered gene data will lead to falsy gene positions.')
+                log.error(f"Annotation data starts with '{genome_annotation_df.iloc[0].values}'")
+
             genome_annotation_df_lst.append(genome_annotation_df)
             log.info(f"Loaded annotation file of genome number {len(genome_annotation_df_lst)}: {gff_file}")
             log.debug(f"Genome 1 annotation dataframe:\n {genome_annotation_df}")
@@ -66,7 +71,7 @@ class HomogenousDataset(Dataset):
         log.info(f"Total number of genes found in annotation files: {num_genes}")
         self.gene_id_integer_dict = {gene: idx for idx, gene in enumerate(self.gene_str_ids_lst)}
         self.gene_ids_ts = torch.tensor(list(self.gene_id_integer_dict.values()))
-        normalized_gene_positions_ts = torch.tensor([pos * num_genes for pos in list(self.gene_id_position_dict.values())]).unsqueeze(1)
+        normalized_gene_positions_ts = torch.tensor([pos * 1 for pos in list(self.gene_id_position_dict.values())])#.unsqueeze(1)
 
         # load similarity bit scores from MMSeqs2 output CSV file to pandas dataframe
         sim_score_dict = load_similarity_score(self.similarity_score_file)
@@ -76,7 +81,7 @@ class HomogenousDataset(Dataset):
             log.info('Successfully built edge index')
         
         with Console().status("Mapping edge weights to respective edge index positions..") as status:
-            self.edge_weight_ts = map_edge_weights(self.edge_index_ts, sim_score_dict, self.gene_str_ids_lst) #torch.randn((num_genes/2, edge_feature_dim))  # Edge 
+            self.edge_weight_ts = map_edge_weights(self.edge_index_ts, sim_score_dict, self.gene_str_ids_lst, use_cache=True) #torch.randn((num_genes/2, edge_feature_dim))  # Edge 
             log.info('Successfully mapped weights to the edge index')
 
         #self.neighbour_edge_weights_ts = generate_neighbour_edge_features(self.neighbour_lst, self.edge_index_ts, sim_score_dict, self.gene_str_ids_lst)
@@ -92,15 +97,17 @@ class HomogenousDataset(Dataset):
 
             # construct list of labels from ribap groups and format to match edge_index
             with Console().status("Mapping labels to gene pairs in edge index.") as status:
-                self.labels_ts = map_labels_to_edge_index(self.edge_index_ts, self.gene_str_ids_lst, self.ribap_groups_dict)
+                self.labels_ts = map_labels_to_edge_index(self.edge_index_ts, self.gene_str_ids_lst, self.ribap_groups_dict, use_cache=True)
                 log.info(f"{self.labels_ts.sum().item() / len(self.labels_ts) * 100} % of labels are in positive class.")
+                self.class_balance = (self.labels_ts == 0.).sum()/self.labels_ts.sum()
                 log.info('Successfully mapped labels to gene pairs in edge index')
         else:
             self.labels_ts = None
+            self.class_balance = None
 
         if args.batch_size == 1:
             log.info('Batch size set to 1, skipping seperation of connected components.')
-            graph_data = Data(normalized_gene_positions_ts, self.edge_index_ts, self.edge_weight_ts, self.labels_ts)
+            graph_data = Data(normalized_gene_positions_ts.unsqueeze(1), self.edge_index_ts, self.edge_weight_ts, self.labels_ts)
             #graph_data = Data(self.gene_ids_ts, self.edge_index_ts, self.edge_weight_ts, self.labels_ts)
             self.data_lst.append(graph_data)
             return
@@ -114,13 +121,14 @@ class HomogenousDataset(Dataset):
         log.debug(f"Number of connected components: {n_components}, in total number of nodes: {num_genes}")
 
         connected_components_nodes = [[] for x in range(n_components)]
-        
+ 
         for idx, label in enumerate(labels):
             connected_components_nodes[label].append(idx)
     
         with Progress(transient = True) as progress:
             subgraph_bar = progress.add_task("Generating subgraphs from connected components..", total=len(connected_components_nodes))
 
+            random.shuffle(connected_components_nodes)
 
             for idx, component_nodes in enumerate(connected_components_nodes):
                 x = torch.tensor(component_nodes).unsqueeze(1)
@@ -131,8 +139,8 @@ class HomogenousDataset(Dataset):
                 log.debug(f"subsetting similarity score dict for component nodes.. {component_nodes} {idx/len(connected_components_nodes) *100} % done.")
 
                 gene_str_ids_lst = [self.gene_str_ids_lst[i] for i in component_nodes]
-                component_normalized_gene_positions_ts = torch.tensor([normalized_gene_positions_ts[i] for i in component_nodes])
-
+                component_normalized_gene_positions_ts = torch.tensor([normalized_gene_positions_ts[i] for i in component_nodes if i < len(normalized_gene_positions_ts)])
+                #component_normalized_gene_positions_ts = torch.tensor([1 for pos in component_normalized_gene_positions_ts])
                 sub_sim_score_dict = dict((gene_str_id, sim_score_dict[gene_str_id]) for gene_str_id in gene_str_ids_lst if gene_str_id in sim_score_dict)
 
                 component_edge_index = build_edge_index(sub_sim_score_dict, self.gene_id_integer_dict, fully_connected = False)
@@ -164,18 +172,6 @@ class HomogenousDataset(Dataset):
 
             log.info('Successfully generated graph data for all sub-graphs in the input')
         
-        
-        #data = Data(normalized_gene_positions_ts, self.edge_index_ts, self.edge_weight_ts, self.labels_ts)
-        #data.neighbour_edge_weights_ts = self.neighbour_edge_weights_ts
-        #self.data_lst = [data]
-        
-
-        #self.x = normalized_gene_positions_ts
-        #self.x = self.adjacency_vectors_ts
-        #self.x = self.gene_ids_ts
-        #self.edge_attr = self.edge_weight_ts
-        #self.edge_index = self.edge_index_ts
-        #self.y = self.labels_ts
 
     
     def split_data(self, split = (0.7, 0.15, 0.15), batch_size = 32):
@@ -194,9 +190,13 @@ class HomogenousDataset(Dataset):
         # calculate train, test, val split and batches for train data
         num_train_data = int(len(self.data_lst) * split[0])
         num_test_data = int(len(self.data_lst) * split[1])
-        log.info(f"Splitting datasets into sets of length {num_train_data}, {num_test_data}, {len(self.data_lst)-(num_test_data+num_train_data)}")
+
+        random.shuffle(self.data_lst)
+
+        log.info(f"Splitting datasets into sets of {num_train_data}, {num_test_data}, {len(self.data_lst)-(num_test_data+num_train_data)} graphs.")
         self.train = self.data_lst[:num_train_data]
         self.train = [concat_graph_data(self.train[i:i + batch_size]) for i in range(0, len(self.train), batch_size)]
+        self.train = [graph for graph in self.train if graph.y.numel() > 0]
         self.test = concat_graph_data(self.data_lst[num_train_data:num_train_data + num_test_data])
         self.val = concat_graph_data(self.data_lst[num_test_data:])
 

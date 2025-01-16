@@ -3,20 +3,6 @@ import pandas as pd
 from rich.progress import track, Progress, Console
 from src.setup import log, args
 
-def build_adjacency_vectors(num_neighbours, gene_id_lst):
-
-    vector_lst = []
-
-    for gene_id in gene_id_lst:
-        vector = torch.tensor([0] * len(gene_id_lst), dtype = torch.float32)
-        for i in range(-num_neighbours, num_neighbours+1):
-            if (gene_id + i) > 0:
-                vector[i] = 1
-            else:
-                continue
-        vector_lst.append(vector)
-    
-    return torch.stack(vector_lst)
 
 def build_adjacency_vectors(num_neighbours, gene_id_lst):
 
@@ -101,7 +87,7 @@ def map_edge_weights(edge_index, bit_score_dict, gene_ids_lst):
 
     if os.path.isfile('data/edge_features.pkl') and args.cache:
         with open('data/edge_features.pkl', 'rb') as f:
-            log.info(f"Found pickled edge features, loading file..")
+            #log.info(f"Found pickled edge features, loading file..")
             edge_weight_lst = pickle.load(f)
     else:
 
@@ -195,14 +181,14 @@ def build_edge_index(sim_score_dict, gene_id_integer_dict, fully_connected = Fal
 
 
 
-def map_labels_to_edge_index(edge_index, gene_ids_lst, ribap_groups_dict):
+def map_labels_to_edge_index(edge_index, gene_ids_lst, ribap_groups_dict, use_cache = False):
     """Map labels for test dataset from RIBAP result table to respective edge
     position in the edge index.
 
     Args:
         edge_index
     """
-    if os.path.isfile('data/labels.pkl') and args.cache:
+    if os.path.isfile('data/labels.pkl') and args.cache and use_cache:
         with open('data/labels.pkl', 'rb') as f:
             log.info(f"Found pickled labels, loading file..")
             label_lst = pickle.load(f)
@@ -223,7 +209,7 @@ def map_labels_to_edge_index(edge_index, gene_ids_lst, ribap_groups_dict):
             elif destination_gene_str_id in ribap_groups_dict and ribap_groups_dict[destination_gene_str_id] == source_gene_str_id:
                 label_lst[edge] = 1
 
-        if not os.path.isfile('data/labels.pkl') and args.cache:
+        if not os.path.isfile('data/labels.pkl') and args.cache and use_cache:
             log.info(f"Dumping labels list to pickle file..")
             with open('data/labels.pkl', 'wb') as f:
                 pickle.dump(label_lst, f)
@@ -329,7 +315,7 @@ def construct_neighbour_lst(num_genes: int, num_neighbours: int = 1):
     return neighour_lst
 
 
-def map_edge_weights(edge_index, bit_score_dict, gene_ids_lst):
+def map_edge_weights(edge_index, bit_score_dict, gene_ids_lst, use_cache = False):
 
     """Returns a tensor that for each node pair in the edge index defines the
     edges weight, that being the similarity bit score of the genes in the two
@@ -347,7 +333,7 @@ def map_edge_weights(edge_index, bit_score_dict, gene_ids_lst):
                                  similarity score of the nodes connected (edges weight)
     """
 
-    if os.path.isfile('data/edge_features.pkl') and args.cache:
+    if os.path.isfile('data/edge_features.pkl') and args.cache and use_cache:
         with open('data/edge_features.pkl', 'rb') as f:
             log.info(f"Found pickled edge features, loading file..")
             edge_weight_lst = pickle.load(f)
@@ -387,7 +373,7 @@ def map_edge_weights(edge_index, bit_score_dict, gene_ids_lst):
             
     
     # pickle test data edge features for testing (mapping takes a while otherwise)
-    if not os.path.isfile('data/edge_features.pkl') and args.cache:
+    if not os.path.isfile('data/edge_features.pkl') and args.cache and use_cache:
         log.info(f"Dumping edge feature list to pickle file..")
         with open('data/edge_features.pkl', 'wb') as f:
             pickle.dump(edge_weight_lst, f)
@@ -414,12 +400,20 @@ def load_gff(annotation_file_name, start_gene = 'hemB'):
                                            'start': 'Int64', 'end': 'Int64', 'score': str,
                                            'strand': str, 'frame': str, 'attribute': str})
         
-    start_gene_idx = annotation_df.index.get_loc(annotation_df.index[annotation_df['attribute'].str.contains(r"{start_gene}", na=False)][0])
 
+    start_gene_idx_lst = annotation_df.index[annotation_df['attribute'].str.contains(fr"{start_gene}", na=False)].tolist()
+
+    if start_gene_idx_lst:
+        start_gene_idx = start_gene_idx_lst[0]
+    else:
+        log.error(f"Could not find start gene '{start_gene}' in annotation file, uncentered input genomes might cause falsy gene positions and lead to unstable models.")
+
+    # this works for circular genomes, if we have linear ones we might need to find another solution for an anchor gene
     df1 = annotation_df.iloc[start_gene_idx:, :]
     df2 = annotation_df.iloc[:start_gene_idx, :]
 
-    annotation_df = df1.append(df2)
+    annotation_df = pd.concat([df1, df2])
+    annotation_df.reset_index(drop=True, inplace=True)
 
     annotation_df = annotation_df.dropna()
     annotation_df['gene_id'] = annotation_df.attribute.str.replace(';.*', '', regex = True)

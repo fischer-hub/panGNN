@@ -7,7 +7,7 @@ from sklearn.metrics import confusion_matrix
 import torch.nn.functional as F
 
 
-def predict_homolog_genes(model, train_dataset = None, test_dataset = None, binary_th = 0.5):
+def predict_homolog_genes(model, train_dataset = None, test_dataset = None, binary_th = 0.72):
     """Infer the GNN with given trained model and predict homolog genes from
     input similarity graph.
 
@@ -38,6 +38,7 @@ def predict_homolog_genes(model, train_dataset = None, test_dataset = None, bina
                 probablilities_train = torch.sigmoid(edge_scores_train)
                 binary_prediction_train = (probablilities_train >= binary_th).int()
 
+
             probablilities = torch.sigmoid(edge_scores)
             binary_prediction = (probablilities >= binary_th).int()
             print(probablilities)
@@ -60,6 +61,7 @@ def predict_homolog_genes(model, train_dataset = None, test_dataset = None, bina
             log.info(f"Correctly predicted: {(binary_prediction == test_dataset.y).sum().item() } out of {len(test_dataset.y)} edges.")
             log.info(f"AUC on test dataset: {auc}")
             log.info(f"Accuracy on test dataset: {accuracy_test}")
+            log.info(f"Accuracy on test data from conf mat: {(tp + tn) / (tp + tn + fp + fn)}")
             if train_dataset:
                 log.info(f"Accuracy on train dataset: {accuracy_train}")
             log.info(f"Accuracy when guessing: {guess}")

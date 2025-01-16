@@ -29,7 +29,7 @@ def concat_graph_data(graph_lst):
             y = torch.concat((y, graph.y))
         else:
             y = None
-    
+
     edge_index = edge_index.long()
     
     return Data(x, edge_index, edge_attr, y)
