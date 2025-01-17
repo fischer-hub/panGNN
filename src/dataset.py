@@ -8,6 +8,7 @@ from scipy.sparse import csr_array
 from scipy.sparse.csgraph import connected_components
 from torch_geometric.utils.convert import to_scipy_sparse_matrix
 
+
 class HomogenousDataset(Dataset):
     """Class holding the input graph datastructures.
 
@@ -35,6 +36,26 @@ class HomogenousDataset(Dataset):
         self.test = []
         self.val = []
 
+    def sub_sample_graph_edges(self, fraction = 0.8):
+        """Subsample graph by sampling from the edge, weight, and label tensors, effectively removing 1-fraction edges from the resulting graph.
+
+        Args:
+            fraction (float, optional): Fraction of edges and labels to sample for the resulting graph. Defaults to 0.8.
+
+        Returns:
+            PyG Data object: The randomly subsampled graph
+        """
+
+        indices = random.sample(range(0, len(self.labels_ts)), int(len(self.labels_ts) * fraction))
+
+        edge_index_origin = torch.index_select(self.edge_index_ts[0], 0, torch.tensor(indices))
+        edge_index_target = torch.index_select(self.edge_index_ts[1], 0, torch.tensor(indices))
+        edge_index = torch.stack((edge_index_origin, edge_index_target))
+        edge_weights = torch.index_select(self.edge_weight_ts, 0, torch.tensor(indices))
+        labels = torch.index_select(self.labels_ts, 0, torch.tensor(indices))
+
+        return Data(self.node_features_ts, edge_index, edge_weights, labels)
+    
     def generate_graph_data(self):
         """Generate datastructures that represent the input graph from the input data."""
 
@@ -72,6 +93,7 @@ class HomogenousDataset(Dataset):
         self.gene_id_integer_dict = {gene: idx for idx, gene in enumerate(self.gene_str_ids_lst)}
         self.gene_ids_ts = torch.tensor(list(self.gene_id_integer_dict.values()))
         normalized_gene_positions_ts = torch.tensor([pos * 1 for pos in list(self.gene_id_position_dict.values())])#.unsqueeze(1)
+        self.node_features_ts = normalized_gene_positions_ts.unsqueeze(1)
 
         # load similarity bit scores from MMSeqs2 output CSV file to pandas dataframe
         sim_score_dict = load_similarity_score(self.similarity_score_file)
@@ -104,6 +126,11 @@ class HomogenousDataset(Dataset):
         else:
             self.labels_ts = None
             self.class_balance = None
+
+        self.test = self.sub_sample_graph_edges()
+        self.train = [self.sub_sample_graph_edges()]
+
+        return
 
         if args.batch_size == 1:
             log.info('Batch size set to 1, skipping seperation of connected components.')
@@ -181,6 +208,9 @@ class HomogenousDataset(Dataset):
             split (tuple, optional): . fraction of the graphs to go to train, test and validation sets respectively. Defaults to (0.7, 0.15, 0.15).
             batch_size (int, optional): number of graphs to trasin on in a single batch. Defaults to 32.
         """
+        if not self.data_lst:
+            log.error("Data object list of this dataset is empty. What have you done..")
+
         if args.batch_size == 1:
             log.info('Batch size set to 1, train and test datasets are the same.')
             self.train = self.data_lst
@@ -251,3 +281,5 @@ class HomogenousDataset(Dataset):
         self.edge_index = torch.stack((torch.concat((self.edge_index[0], self.edge_index[0])), torch.concat((self.edge_index[1], self.edge_index[1]))))
         self.edge_weight_ts = torch.concat((self.edge_weight_ts, self.neighbour_edge_weights_ts))
         self.edge_attr = self.edge_weight_ts
+
+

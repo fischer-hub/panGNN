@@ -13,7 +13,7 @@ class MyGCN(torch.nn.Module):
 
         # embedding layer for node features
         #self.embedding = torch.nn.Embedding(len(dataset[0].x)+2, 64)
-        self.embedding = torch.nn.Linear(1, 64)
+        self.embedding = torch.nn.Linear(1, 16)
 
         # input dim is dim of feature vector (embedding) * neighbours (*2 since we have one neighbour in each direction) encoded per node
         # -> embedding vector + (embedding vector * num neighbours * 2)
@@ -21,11 +21,11 @@ class MyGCN(torch.nn.Module):
         log.debug(f"Expecting dims {combined_embedding_dim}; {hidden_dim} for first convolution layer.")
 
         # define convolution layers
-        self.conv_in = GCNConv(64, 512, add_self_loops = True)
+        self.conv_in = GCNConv(16, 64, add_self_loops = True)
         #self.conv2 = DenseGCNConv(128, 128)
         #self.conv2 = GCNConv(128, 128, add_self_loops = True)
-        self.conv_hidden = GCNConv(512, 512, add_self_loops = True)
-        self.conv_out = GCNConv(512, 64, add_self_loops = True)
+        self.conv_hidden = GCNConv(64, 64, add_self_loops = True)
+        self.conv_out = GCNConv(64, 16, add_self_loops = True)
 
         self.leaky_relu = torch.nn.LeakyReLU()
 
@@ -38,11 +38,11 @@ class MyGCN(torch.nn.Module):
         # or is this called on the convoluted node embeddings
         log.debug(f"Got nodes tensor of shape: {nodes.shape}")
         log.debug(f"Got nodes tensor of shape: {nodes}")
-        combined_embeddings = self.embedding(nodes)
-        log.debug(f"Got nodes tensor after embedding layer of shape: {combined_embeddings.shape}")
-        log.debug(f"Got nodes tensor after embedding layer of shape: {combined_embeddings}")
-        #combined_embeddings = nodes
-        #combined_embeddings = combine_neighbour_embeddings(node_embeddings, data.neighbour_lst, self.device)
+        node_embeddings = self.embedding(nodes)
+        log.debug(f"Got nodes tensor after embedding layer of shape: {node_embeddings.shape}")
+        log.debug(f"Got nodes tensor after embedding layer of shape: {node_embeddings}")
+        #node_embeddings = nodes
+        #node_embeddings = combine_neighbour_embeddings(node_embeddings, data.neighbour_lst, self.device)
 
         log.debug(f"Got edge weights tensor of shape: {edge_weights.shape}")
         log.debug(f"Got edge index of shape: {edge_index.shape}, {edge_index.dtype}")
@@ -52,7 +52,7 @@ class MyGCN(torch.nn.Module):
         # edge attributes can be multiple features embedded, not only a scalar but GCNConv 
         # only takes edge weights (scalars)
         log.debug('Passing data to convolution layer 1..')
-        nodes = self.conv_in(combined_embeddings, edge_index, edge_weights)
+        nodes = self.conv_in(node_embeddings, edge_index, edge_weights)
         log.debug('Passing data to activation function..')
         nodes = F.relu(nodes)
         #nodes = self.activation_fct(nodes)
@@ -61,8 +61,6 @@ class MyGCN(torch.nn.Module):
         nodes = F.relu(nodes)
         #nodes = F.dropout(nodes, training=self.training, p = 0.0001) # what does this do??
         #nodes = self.conv3(nodes, edge_index, data.neighbour_edge_weights_ts)
-        nodes = self.conv_hidden(nodes, edge_index, edge_weights)
-        nodes = F.relu(nodes)
         nodes = self.conv_out(nodes, edge_index, edge_weights)
         log.debug(f"Outputting nodes to decode function of shape: {nodes.shape}\n{nodes}")
 

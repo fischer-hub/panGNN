@@ -35,7 +35,7 @@ edge_feature_dim = 128
 dataset = HomogenousDataset(args.annotation, args.similarity, args.ribap_groups, args.neighbours) if args.train else HomogenousDataset(args.annotation, args.similarity, args.neighbours)
 
 dataset.generate_graph_data()
-dataset.split_data((0.8,0.20,0), batch_size = args.batch_size)
+#dataset.split_data((0.8,0.20,0), batch_size = args.batch_size)
 
 log.debug(f"Number of nodes in subgraphs: {[len(graph.x) for graph in dataset.train]}")
 
@@ -86,7 +86,7 @@ log.info(f"Constructed test dataset from node, egde and index tensors: {dataset.
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu") if args.gpu else 'cpu'
 model = MyGCN(dataset = dataset.train, hidden_dim = hidden_dim, num_neighbours = args.neighbours, node_feature_dim = gene_id_embedding_dim, device = device)
-optimizer = torch.optim.Adam(model.parameters(), lr=0.0005)#lr=0.00005)
+optimizer = torch.optim.Adam(model.parameters(), lr=0.001)#lr=0.00005)
 
 # TODO: is this a good loss function for our scenario?
 # criterion = torch.nn.BCELoss() # if your model outputs probabilities, outputs logits
@@ -102,7 +102,7 @@ if not args.train or os.path.exists(args.model_args):
     if os.path.exists(args.model_args):
         log.info(f"Found model file '{args.model_args}' with trained parameter, restoring model state for inference..")
         model.load_state_dict(torch.load(args.model_args))
-        prediction_bin, prediction_scores = predict_homolog_genes(model, dataset.train, dataset.test,binary_th=0.71)
+        prediction_bin, prediction_scores = predict_homolog_genes(model, dataset.train, dataset.test,binary_th=0.5)
 
     else:
         log.error(f"Could not infer model because model parameters file '{args.model_args}' was not found, exiting.")
@@ -110,27 +110,31 @@ if not args.train or os.path.exists(args.model_args):
 
 elif args.train:
     # Training loop
+    num_batches = 50
     log.info(f"Training on device: {device}")
     #dataset.train.to(device)
     #model.to(device)
-    log.info(f"Entering training loop with batch size: {args.batch_size} and {len(dataset.train)} batches.")
+    log.info(f"Entering training loop with batch size: {args.batch_size} and {num_batches} batches.")
 
     with Progress(transient = True) as progress:
 
         training_bar = progress.add_task("Epochs completed:", total=args.epochs)
-        batch_bar    = progress.add_task("Training current batch:", total=len(dataset.train))
+        batch_bar    = progress.add_task("Training current batch:", total=num_batches)
 
         for epoch in range(args.epochs):
             total = 0
 
             # shuffle list of input graphs so the model sees the data in different order every time 
-            random.shuffle(dataset.train)
+            #random.shuffle(dataset.train)
             accuracy = []
             epoch_correct = 0
             epoch_total = 0
             val_loss = 0
 
-            for batch_num, batch in enumerate(dataset.train):
+            #for batch_num, batch in enumerate(dataset.train):
+            for batch_num in range(num_batches):
+
+                batch = dataset.sub_sample_graph_edges(fraction = 0.9)
 
                 model.train()
                 # clear old gradients so only current batch gradients are used
@@ -149,7 +153,7 @@ elif args.train:
 
                 progress.update(batch_bar, advance = 1)
                 
-                binary_prediction = (torch.sigmoid(output) >= 0.72).int()
+                binary_prediction = (torch.sigmoid(output) >= 0.5).int()
                 accuracy.append(((binary_prediction == batch.y).sum().item()) / len(batch.y))
 
                 epoch_correct += (binary_prediction == batch.y).sum().item()  # Count correct predictions
@@ -160,7 +164,7 @@ elif args.train:
                 model.eval()
                 output = model(dataset.test)
                 val_loss = criterion(output, dataset.test.y)
-                binary_prediction_val = (torch.sigmoid(output) >= 0.72).int()
+                binary_prediction_val = (torch.sigmoid(output) >= 0.5).int()
                 val_acc = (binary_prediction_val == dataset.test.y).sum().item() / len(dataset.test.y)
         
             # get some metrics, maybe do this in the model class?
