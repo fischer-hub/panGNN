@@ -21,11 +21,12 @@ parser.add_argument('-m', '--model_args', help = 'path to save or load model fro
 parser.add_argument('-n', '--neighbours', help = 'number of genes from target gene to consider as neighbours', default = 1, type = int)
 parser.add_argument('-a', '--annotation', help = 'path to the two annotation files in gff format of the two input genomes, seperated by tab', default = ["data/dummy_dataset/dummy1.gff", "data/dummy_dataset/dummy2.gff"], type = str, nargs = '*')
 parser.add_argument('-s', '--similarity', help = 'path to the similarity score file (e.g tab seperated output of MMSeqs2)', default = os.path.join('data', 'dummy_dataset', 'dummy_mmseqs2.csv'), type = str)
+parser.add_argument('--binary_threshold', help = 'binary threshold to classify output probabilities to the label class', default = 0.5, type = float)
 
 # train mode args
 parser.add_argument('--train',              help = 'set pangnn into training mode', action='store_true')
 parser.add_argument('-g', '--gpu',          help = 'train model on gpu if available', action = 'store_true')
-parser.add_argument('-b', '--batch_size',   help = 'set dataset batch size for model training', default = 32, type = int)
+parser.add_argument('-b', '--num_batches',  help = 'set number of batches to train during each epoch', default = 32, type = int)
 parser.add_argument('-e', '--epochs',       help = 'set number of epochs for model training', default = 10, type = int)
 parser.add_argument('-r', '--ribap_groups', help = 'path to file holding the ribap groups calculated for the input genomes', default = os.path.join('data', 'dummy_dataset', 'dummy_ribap.csv'), type = str)
 
@@ -36,6 +37,8 @@ args = parser.parse_args()
 FORMAT = "%(message)s"
 logging.basicConfig(level=args.log_level if not args.debug else 'DEBUG', format=FORMAT, datefmt="[%X]", handlers=[RichHandler()])
 log = logging.getLogger("rich")
+
+logging.getLogger('sklearn').setLevel(logging.WARNING)
 
 # basic sanity checks
 if not args.traceback: install(show_locals=True)

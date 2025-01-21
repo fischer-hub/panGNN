@@ -7,6 +7,8 @@ from rich.progress import track, Console, Progress
 from scipy.sparse import csr_array
 from scipy.sparse.csgraph import connected_components
 from torch_geometric.utils.convert import to_scipy_sparse_matrix
+from torch_geometric.transforms import RemoveDuplicatedEdges
+
 
 
 class HomogenousDataset(Dataset):
@@ -48,6 +50,11 @@ class HomogenousDataset(Dataset):
 
         indices = random.sample(range(0, len(self.labels_ts)), int(len(self.labels_ts) * fraction))
 
+        #gene_str_ids_lst = [self.gene_str_ids_lst[i] for i in component_nodes]
+        #component_normalized_gene_positions_ts = torch.tensor([normalized_gene_positions_ts[i] for i in component_nodes])
+
+        # remap nodes too?
+
         edge_index_origin = torch.index_select(self.edge_index_ts[0], 0, torch.tensor(indices))
         edge_index_target = torch.index_select(self.edge_index_ts[1], 0, torch.tensor(indices))
         edge_index = torch.stack((edge_index_origin, edge_index_target))
@@ -56,7 +63,8 @@ class HomogenousDataset(Dataset):
 
         return Data(self.node_features_ts, edge_index, edge_weights, labels)
     
-    def generate_graph_data(self):
+
+    def generate_graph_data(self, called_from_child_class = False):
         """Generate datastructures that represent the input graph from the input data."""
 
         genome_annotation_df_lst = []
@@ -86,13 +94,13 @@ class HomogenousDataset(Dataset):
 
             genome_name_lst.append(os.path.basename(gff_file).split('.')[0].replace('_RENAMED', ''))
 
-        self.neighbour_lst = construct_neighbour_lst(num_genes, self.num_neighbours)
+        #self.neighbour_lst = construct_neighbour_lst(num_genes, self.num_neighbours)
 
         # total number of genes found in all annotation files
         log.info(f"Total number of genes found in annotation files: {num_genes}")
         self.gene_id_integer_dict = {gene: idx for idx, gene in enumerate(self.gene_str_ids_lst)}
         self.gene_ids_ts = torch.tensor(list(self.gene_id_integer_dict.values()))
-        normalized_gene_positions_ts = torch.tensor([pos * 1 for pos in list(self.gene_id_position_dict.values())])#.unsqueeze(1)
+        normalized_gene_positions_ts = torch.tensor([1 for pos in list(self.gene_id_position_dict.values())]).float()#.unsqueeze(1)
         self.node_features_ts = normalized_gene_positions_ts.unsqueeze(1)
 
         # load similarity bit scores from MMSeqs2 output CSV file to pandas dataframe
@@ -127,8 +135,9 @@ class HomogenousDataset(Dataset):
             self.labels_ts = None
             self.class_balance = None
 
-        self.test = self.sub_sample_graph_edges()
-        self.train = [self.sub_sample_graph_edges()]
+        if not called_from_child_class:
+            self.test = self.sub_sample_graph_edges()
+            self.train = [self.sub_sample_graph_edges()]
 
         return
 
@@ -166,7 +175,7 @@ class HomogenousDataset(Dataset):
                 log.debug(f"subsetting similarity score dict for component nodes.. {component_nodes} {idx/len(connected_components_nodes) *100} % done.")
 
                 gene_str_ids_lst = [self.gene_str_ids_lst[i] for i in component_nodes]
-                component_normalized_gene_positions_ts = torch.tensor([normalized_gene_positions_ts[i] for i in component_nodes if i < len(normalized_gene_positions_ts)])
+                component_normalized_gene_positions_ts = torch.tensor([normalized_gene_positions_ts[i] for i in component_nodes])
                 #component_normalized_gene_positions_ts = torch.tensor([1 for pos in component_normalized_gene_positions_ts])
                 sub_sim_score_dict = dict((gene_str_id, sim_score_dict[gene_str_id]) for gene_str_id in gene_str_ids_lst if gene_str_id in sim_score_dict)
 
@@ -282,4 +291,141 @@ class HomogenousDataset(Dataset):
         self.edge_weight_ts = torch.concat((self.edge_weight_ts, self.neighbour_edge_weights_ts))
         self.edge_attr = self.edge_weight_ts
 
+
+
+class UnionGraphDataset(Dataset):
+    """Class holding the input graph datastructures.
+
+    First call instructor of the class to load data from the input files.
+
+    If you want to scale the edge weights by their neimghbourhood similarity scores this is the right time to call scale_edge__weights().
+
+    Now generate the respective Data() objects for each subgraph in the input data with generate_data().
+
+    If you want to concat the neigbourhood similarity score edge weights and the normal sim score edge weights, call concate_edge_weights() now.
+
+    Split the data points into train, test and validation sets using split_data().
+    """
+    def __init__(self, gff_files = [], similarity_score_file = '', ribap_groups_file = None, num_neighbours = 1, split = (0.7, 0.3)):
+        super().__init__(root = None, transform = None, pre_transform = None, pre_filter = None)
+
+        genome_annotation_df_lst = []
+        genome_name_lst = []
+        self.gene_str_ids_lst_train = []
+        self.gene_str_ids_lst_val = []
+        num_genes = 0
+        
+        # load annotations from gff files and format to pandas dataframe
+        for gff_file in track(gff_files, description='Loading annotation files..', transient=True):
+            genome_annotation_df = load_gff(gff_file)
+
+            if 'hemB' not in genome_annotation_df.iloc[0].values[-1]:
+                log.error('Annotation data does not start with start gene, uncentered gene data will lead to falsy gene positions.')
+                log.error(f"Annotation data starts with '{genome_annotation_df.iloc[0].values}'")
+
+            genome_annotation_df_lst.append(genome_annotation_df)
+            log.info(f"Loaded annotation file of genome number {len(genome_annotation_df_lst)}: {gff_file}")
+            log.debug(f"Genome 1 annotation dataframe:\n {genome_annotation_df}")
+            num_genes += len(genome_annotation_df.index)
+            
+            self.gene_str_ids_lst_train += list(genome_annotation_df.index)[:int(len(genome_annotation_df.index) * split[0])]
+            self.gene_str_ids_lst_val   += list(genome_annotation_df.index)[int(len(genome_annotation_df.index) * split[0]):]
+            #self.gene_str_ids_lst_test  += list(genome_annotation_df.index)[]
+            
+            # for each string gene ID save its normalized position in the gff file into the dictionary
+            #self.gene_id_position_dict.update({gene: (idx / len(list(genome_annotation_df.index))) for idx, gene in enumerate(list(genome_annotation_df.index))})
+
+            genome_name_lst.append(os.path.basename(gff_file).split('.')[0].replace('_RENAMED', ''))
+
+        log.info(f"Total number of genes found in annotation files: {num_genes}")
+        #self.neighbour_lst = construct_neighbour_lst(num_genes, self.num_neighbours)
+        
+        self.sim_score_dict = load_similarity_score(similarity_score_file)
+
+        if ribap_groups_file:
+            # load holy ribap table to generate labels for test data set
+            self.ribap_groups_dict = load_ribap_groups(ribap_groups_file, genome_name_lst)
+        else:
+            self.ribap_groups_dict = None
+            self.labels_ts = None
+            self.class_balance = None
+
+        self.train = self.generate_graphs(self.gene_str_ids_lst_train)
+        self.test = self.generate_graphs(self.gene_str_ids_lst_val)
+
+
+    def generate_graphs(self, gene_str_ids_lst):
+        # total number of genes found in all annotation files
+        gene_id_integer_dict = {gene: idx for idx, gene in enumerate(gene_str_ids_lst)}
+        gene_ids_ts = torch.tensor(list(gene_id_integer_dict.values()))
+        normalized_gene_positions_ts = torch.tensor([1 for pos in gene_ids_ts]).float()#.unsqueeze(1)
+        node_features_ts = normalized_gene_positions_ts.unsqueeze(1)
+
+        # load similarity bit scores from MMSeqs2 output CSV file to pandas dataframe
+
+        with Console().status("Building edge index..") as status:
+            edge_index_ts = build_edge_index(self.sim_score_dict, gene_id_integer_dict, fully_connected = False)
+            log.info('Successfully built edge index')
+        
+        with Console().status("Mapping edge weights to respective edge index positions..") as status:
+            edge_weight_ts = map_edge_weights(edge_index_ts, self.sim_score_dict, gene_str_ids_lst, use_cache=False) #torch.randn((num_genes/2, edge_feature_dim))  # Edge 
+            log.info('Successfully mapped weights to the edge index')
+
+        # construct list of labels from ribap groups and format to match edge_index
+        with Console().status("Mapping labels to gene pairs in edge index.") as status:
+            labels_ts = map_labels_to_edge_index(edge_index_ts, gene_str_ids_lst, self.ribap_groups_dict, use_cache=False) if self.ribap_groups_dict else None
+            log.info(f"{labels_ts.sum().item() / len(labels_ts) * 100} % of labels are in positive class.")
+            self.class_balance = (labels_ts == 0.).sum()/labels_ts.sum()
+            log.info('Successfully mapped labels to gene pairs in edge index')
+        
+
+        origin_idx, target_idx = [], []
+        # add edges to n nearest neighbour nodes
+        for gene_id in gene_id_integer_dict.values():
+            for neighbour_id in range(gene_id - args.neighbours, gene_id + args.neighbours):
+                if neighbour_id in gene_id_integer_dict.values():
+                    origin_idx.append(gene_id)
+                    target_idx.append(neighbour_id)
+
+        union_edge_index_ts = torch.stack((torch.cat((edge_index_ts[0], torch.tensor(origin_idx))), torch.cat((edge_index_ts[1], torch.tensor(target_idx)))))
+
+        transform = RemoveDuplicatedEdges()
+        union_edge_index_ts = transform(Data(x = normalized_gene_positions_ts, edge_index = union_edge_index_ts, edge_attr = None, y = None)).edge_index
+
+        graph_data = Data(normalized_gene_positions_ts.unsqueeze(1), edge_index_ts, edge_weight_ts, labels_ts)
+        graph_data.union_edge_index = union_edge_index_ts
+
+        return graph_data
+    
+
+    def sub_sample_graph_edges(self, graph, fraction = 0.8):
+        """Subsample graph by sampling from the edge, weight, and label tensors, effectively removing 1-fraction edges from the resulting graph.
+
+        Args:
+            fraction (float, optional): Fraction of edges and labels to sample for the resulting graph. Defaults to 0.8.
+
+        Returns:
+            PyG Data object: The randomly subsampled graph
+        """
+        num_neighbour_edges = len(graph.union_edge_index[0]) - len(graph.y)
+        sim_indices = random.sample(range(0, len(graph.y)), int(len(graph.y) * fraction))
+        # maybe we should sample from the additional edges in the union, such that the edges in the sim part are the same in every batch?
+        union_indices = sim_indices + random.sample(range(len(graph.y), len(graph.y) + num_neighbour_edges), int(num_neighbour_edges * fraction))
+
+        # remap nodes too?
+        sim_edge_index_origin = torch.index_select(graph.edge_index[0], 0, torch.tensor(sim_indices))
+        sim_edge_index_target = torch.index_select(graph.edge_index[1], 0, torch.tensor(sim_indices))
+        union_edge_index_origin = torch.index_select(graph.union_edge_index[0], 0, torch.tensor(union_indices))
+        union_edge_index_target = torch.index_select(graph.union_edge_index[1], 0, torch.tensor(union_indices))
+        sim_edge_index = torch.stack((sim_edge_index_origin, sim_edge_index_target))
+        union_edge_index = torch.stack((union_edge_index_origin, union_edge_index_target))
+        sim_edge_weights = torch.index_select(graph.edge_attr, 0, torch.tensor(sim_indices))
+        #union_edge_weights = torch.index_select(self.union_edge_weight_ts, 0, torch.tensor(union_indices))
+        sim_labels = torch.index_select(graph.y, 0, torch.tensor(sim_indices))
+        #union_labels = torch.index_select(self.labels_ts, 0, torch.tensor(union_indices))
+        
+        graph = Data(graph.x, sim_edge_index, sim_edge_weights.float(), sim_labels)
+        graph.union_edge_index = union_edge_index
+
+        return graph
 

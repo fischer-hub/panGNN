@@ -142,7 +142,7 @@ def map_edge_weights(edge_index, bit_score_dict, gene_ids_lst):
     return edge_weight_ts
     
 
-def build_edge_index(sim_score_dict, gene_id_integer_dict, fully_connected = False, self_loops = False, ):
+def build_edge_index(sim_score_dict, gene_id_integer_dict, fully_connected = False, self_loops = False):
     """Build an edge index for partially or fully connected input graph from similarity scores and gene IDs.
 
     Args:
@@ -172,11 +172,14 @@ def build_edge_index(sim_score_dict, gene_id_integer_dict, fully_connected = Fal
                 # when using part of the input genomes from ribap we might have gene pairs in the sim_score_dict 
                 # that are not actually loaded in the gene dict, this probably slows down the edge index creation tho
                 # so we might need to remove this check once we have a model / use the full dataset as input..
-                if origin_id in gene_id_integer_dict.keys() and target_id in gene_id_integer_dict.keys():
+                if origin_id in gene_id_integer_dict.keys() and target_id in gene_id_integer_dict.keys():                     
                     origin_idx.append(gene_id_integer_dict[origin_id])
                     target_idx.append(gene_id_integer_dict[target_id])
 
+        # remove duplicate edges, e.g. in case when two neighbours also have a sim score calculated between them
         edge_index_ts = torch.stack((torch.tensor(origin_idx), torch.tensor(target_idx)), dim=0)
+
+
     return edge_index_ts
 
 
@@ -418,6 +421,9 @@ def load_gff(annotation_file_name, start_gene = 'hemB'):
     annotation_df = annotation_df.dropna()
     annotation_df['gene_id'] = annotation_df.attribute.str.replace(';.*', '', regex = True)
     annotation_df['gene_id'] = annotation_df.gene_id.str.replace('ID=', '', regex = True)
+    
+    # filter out non gene IDs, people really put anything into their GFF files huh
+    annotation_df = annotation_df[annotation_df['gene_id'].str.contains(r"[A-Z]+_[0-9]+")]
     annotation_df.set_index('gene_id', inplace = True)
 
     return annotation_df

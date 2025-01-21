@@ -21,11 +21,11 @@ class MyGCN(torch.nn.Module):
         log.debug(f"Expecting dims {combined_embedding_dim}; {hidden_dim} for first convolution layer.")
 
         # define convolution layers
-        self.conv_in = GCNConv(16, 64, add_self_loops = True)
+        self.conv_in = GCNConv(16, 64, add_self_loops = False)
         #self.conv2 = DenseGCNConv(128, 128)
         #self.conv2 = GCNConv(128, 128, add_self_loops = True)
-        self.conv_hidden = GCNConv(64, 64, add_self_loops = True)
-        self.conv_out = GCNConv(64, 16, add_self_loops = True)
+        self.conv_hidden = GCNConv(64, 64, add_self_loops = False)
+        self.conv_out = GCNConv(64, 16, add_self_loops = False)
 
         self.leaky_relu = torch.nn.LeakyReLU()
 
@@ -59,6 +59,8 @@ class MyGCN(torch.nn.Module):
         #nodes = torch.sigmoid(nodes)
         nodes = self.conv_hidden(nodes, edge_index, edge_weights)
         nodes = F.relu(nodes)
+        nodes = self.conv_hidden(nodes, edge_index, edge_weights) 
+        nodes = F.relu(nodes)
         #nodes = F.dropout(nodes, training=self.training, p = 0.0001) # what does this do??
         #nodes = self.conv3(nodes, edge_index, data.neighbour_edge_weights_ts)
         nodes = self.conv_out(nodes, edge_index, edge_weights)
@@ -70,6 +72,51 @@ class MyGCN(torch.nn.Module):
         log.debug(f"Outputting link prediction tensor of shape: {link_predictions.shape}\ntype:{link_predictions.dtype}\n{link_predictions}")
 
         return  link_predictions #F.log_softmax(nodes, dim=1)
+    
+    def decode(self, z, edge_index):
+        # calculate dot product between pairs of node embeddings to predict links
+        return (z[edge_index[0]] * z[edge_index[1]]).sum(dim=1)
+    
+
+class AlternateGCN(torch.nn.Module):
+    def __init__(self, device):
+        super().__init__()
+        self.device = device
+
+        # embedding layer for node features
+        #self.embedding = torch.nn.Embedding(len(dataset[0].x)+2, 64)
+        self.embedding = torch.nn.Linear(1, 64)
+
+        # define convolution layers
+        self.conv_in = GCNConv(64, 128, add_self_loops = False)
+        self.conv_hidden = GCNConv(128, 128, add_self_loops = False)
+        self.conv_out = GCNConv(128, 64, add_self_loops = False)
+
+        self.leaky_relu = torch.nn.LeakyReLU()
+
+
+    def forward(self, graph):
+    
+        log.debug('Passing nodes to embedding layer..')
+        log.debug(graph.x.shape)
+        node_embeddings = self.embedding(graph.x)
+        log.debug('Passing similarity graph data to convolution layer 1..')
+        nodes = self.conv_in(node_embeddings, graph.edge_index, graph.edge_attr)
+        nodes = self.leaky_relu(nodes)
+        nodes = self.conv_hidden(nodes, graph.union_edge_index)
+        nodes = self.leaky_relu(nodes)
+        log.debug('Passing union graph data to convolution layer 2..')
+        nodes = self.conv_hidden(nodes, graph.edge_index, graph.edge_attr)
+        nodes = self.leaky_relu(nodes)
+        nodes = self.conv_out(nodes, graph.union_edge_index)
+        nodes = self.leaky_relu(nodes)
+        log.debug(f"Outputting nodes to decode function of shape: {nodes.shape}\n{nodes}")
+
+        link_predictions = self.decode(nodes, graph.edge_index)
+        #print(link_predictions)
+        log.debug(f"Outputting link prediction tensor of shape: {link_predictions.shape}\ntype:{link_predictions.dtype}\n{link_predictions}")
+
+        return  link_predictions
     
     def decode(self, z, edge_index):
         # calculate dot product between pairs of node embeddings to predict links

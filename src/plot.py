@@ -1,8 +1,38 @@
 import matplotlib.pyplot as plt
 import networkx as nx
 from torch_geometric.utils import to_networkx
-import os
+import os, umap
 from sklearn.metrics import roc_curve, auc
+import numpy as np
+from sklearn.decomposition import PCA
+
+def plot_umap_pca(dataset, labels, path = os.path.join('plots', 'umap.png')):
+
+    umap_model = umap.UMAP(n_components=3, random_state=42)
+    dist = []
+    for origin_node, target_node in zip(dataset.test.edge_index[0], dataset.test.edge_index[1]):
+        dist.append(abs(dataset.test.x[origin_node] - dataset.test.x[target_node]) * 10000)
+
+    #log.info(len(dataset.test.edge_attr), len(dist))
+    edge_features = np.column_stack((dataset.test.edge_attr, dist))  # Shape: [num_edges, 2]
+    edge_embedding_2d = umap_model.fit_transform(edge_features)
+    #pca = PCA(n_components=2)  # Reduce to 2 dimensions
+    #edge_embedding_2d = umap.fit_transform(edge_features)
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(111, projection='3d')
+    scatter = ax.scatter(edge_embedding_2d[:, 0], edge_embedding_2d[:, 1], edge_embedding_2d[:, 2], 
+                        c=dataset.test.y, cmap='Spectral', s=5)
+    ax.set_title("3D UMAP Projection of Edge Features")
+    ax.set_xlabel("UMAP Dimension 1")
+    ax.set_ylabel("UMAP Dimension 2")
+    ax.set_zlabel("UMAP Dimension 3")
+
+    fig.colorbar(scatter, label="Edge Labels")
+    
+    if not os.path.exists(os.path.dirname(path)):
+        os.mkdir(os.path.dirname(path))
+
+    plt.savefig(path)
 
 
 def plot_simscore_class(dataset, path = os.path.join('plots', 'score_class.png')):

@@ -1,6 +1,7 @@
 from src.setup import log
 import os
 
+
 def write_groups_file(dataset, binary_prediction):
 
     edge_index = dataset.edge_index

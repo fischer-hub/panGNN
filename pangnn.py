@@ -7,9 +7,10 @@ from torch_geometric.loader import DataLoader
 from torch_geometric.transforms import RandomLinkSplit
 from src.predict import predict_homolog_genes
 from rich.progress import Progress
-from src.dataset import HomogenousDataset
-from src.gnn import MyGCN
+from src.dataset import HomogenousDataset, UnionGraphDataset
+from src.gnn import MyGCN, AlternateGCN
 from src.simulate import generate_data
+from sklearn.metrics import confusion_matrix
 from src.postprocessing import write_groups_file
 
 ###################
@@ -32,49 +33,15 @@ edge_feature_dim = 128
 
 #simuoated_dataset = generate_data(20000, 5, 5, 0.5, 0.5, 0.02)
 
-dataset = HomogenousDataset(args.annotation, args.similarity, args.ribap_groups, args.neighbours) if args.train else HomogenousDataset(args.annotation, args.similarity, args.neighbours)
+#dataset = HomogenousDataset(args.annotation, args.similarity, args.ribap_groups, args.neighbours) if args.train else HomogenousDataset(args.annotation, args.similarity, args.neighbours)
+dataset = UnionGraphDataset(args.annotation, args.similarity, args.ribap_groups, args.neighbours) if args.train else HomogenousDataset(args.annotation, args.similarity, args.neighbours)
+#dataset.generate_graph_data()
 
-dataset.generate_graph_data()
 #dataset.split_data((0.8,0.20,0), batch_size = args.batch_size)
 
-log.debug(f"Number of nodes in subgraphs: {[len(graph.x) for graph in dataset.train]}")
-
-""" import umap
-import matplotlib.pyplot as plt
-import pandas as pd
-import numpy as np
-from sklearn.decomposition import PCA
-umap_model = umap.UMAP(n_components=3, random_state=42)
-dist = []
-for origin_node, target_node in zip(dataset.test.edge_index[0], dataset.test.edge_index[1]):
-    dist.append(abs(dataset.test.x[origin_node] - dataset.test.x[target_node]) * 10000)
-
-#log.info(len(dataset.test.edge_attr), len(dist))
-edge_features = np.column_stack((dataset.test.edge_attr, dist))  # Shape: [num_edges, 2]
-edge_embedding_2d = umap_model.fit_transform(edge_features)
-#pca = PCA(n_components=2)  # Reduce to 2 dimensions
-#edge_embedding_2d = umap.fit_transform(edge_features)
-fig = plt.figure(figsize=(10, 8))
-ax = fig.add_subplot(111, projection='3d')
-scatter = ax.scatter(edge_embedding_2d[:, 0], edge_embedding_2d[:, 1], edge_embedding_2d[:, 2], 
-                     c=dataset.test.y, cmap='Spectral', s=5)
-ax.set_title("3D UMAP Projection of Edge Features")
-ax.set_xlabel("UMAP Dimension 1")
-ax.set_ylabel("UMAP Dimension 2")
-ax.set_zlabel("UMAP Dimension 3")
-
-fig.colorbar(scatter, label="Edge Labels")
-plt.show()
-quit() """
-
-log.info(f"Constructed train dataset from node, egde and index tensors: {dataset.train[0]}")
+log.info(f"Constructed train dataset from node, egde and index tensors: {dataset.train}")
 
 #plot_logit_distribution(dataset.train.edge_weight_ts, path= os.path.join('plots', 'sim_score_distribution_unscaled.png'))
-#dataset.scale_weights()
-#dataset.train.concate_edge_weights()
-#dataset.split_data()
-
-#plot_logit_distribution(dataset.train.edge_weight_ts, path= os.path.join('plots', 'sim_score_distribution_scaled.png'))
 
 #if args.plot_graph: plot_graph(dataset.train, os.path.join('plots', 'input_graph.png'))
 
@@ -85,8 +52,9 @@ log.info(f"Constructed test dataset from node, egde and index tensors: {dataset.
 #log.info(f"Constructed {dataset.train[1].edge_index}")
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu") if args.gpu else 'cpu'
-model = MyGCN(dataset = dataset.train, hidden_dim = hidden_dim, num_neighbours = args.neighbours, node_feature_dim = gene_id_embedding_dim, device = device)
-optimizer = torch.optim.Adam(model.parameters(), lr=0.001)#lr=0.00005)
+#model = MyGCN(dataset = dataset.train, hidden_dim = hidden_dim, num_neighbours = args.neighbours, node_feature_dim = gene_id_embedding_dim, device = device)
+model = AlternateGCN(device = device)
+optimizer = torch.optim.Adam(model.parameters(), lr=0.01)#lr=0.00005)
 
 # TODO: is this a good loss function for our scenario?
 # criterion = torch.nn.BCELoss() # if your model outputs probabilities, outputs logits
@@ -97,12 +65,13 @@ train_losses = []
 val_losses = []
 train_accuracies = []
 val_accuracies = []
+binary_th = args.binary_threshold # 0.53
 
 if not args.train or os.path.exists(args.model_args):
     if os.path.exists(args.model_args):
         log.info(f"Found model file '{args.model_args}' with trained parameter, restoring model state for inference..")
         model.load_state_dict(torch.load(args.model_args))
-        prediction_bin, prediction_scores = predict_homolog_genes(model, dataset.train, dataset.test,binary_th=0.5)
+        prediction_bin, prediction_scores = predict_homolog_genes(model, dataset.train, dataset.test, binary_th = binary_th)
 
     else:
         log.error(f"Could not infer model because model parameters file '{args.model_args}' was not found, exiting.")
@@ -110,16 +79,15 @@ if not args.train or os.path.exists(args.model_args):
 
 elif args.train:
     # Training loop
-    num_batches = 50
     log.info(f"Training on device: {device}")
     #dataset.train.to(device)
     #model.to(device)
-    log.info(f"Entering training loop with batch size: {args.batch_size} and {num_batches} batches.")
+    log.info(f"Entering training loop with: {args.num_batches} batches, class wight {dataset.class_balance}.")
 
     with Progress(transient = True) as progress:
 
         training_bar = progress.add_task("Epochs completed:", total=args.epochs)
-        batch_bar    = progress.add_task("Training current batch:", total=num_batches)
+        batch_bar    = progress.add_task("Training current batch:", total=args.num_batches)
 
         for epoch in range(args.epochs):
             total = 0
@@ -132,9 +100,10 @@ elif args.train:
             val_loss = 0
 
             #for batch_num, batch in enumerate(dataset.train):
-            for batch_num in range(num_batches):
+            for batch_num in range(args.num_batches):
 
-                batch = dataset.sub_sample_graph_edges(fraction = 0.9)
+                batch = dataset.sub_sample_graph_edges(dataset.train, fraction = 0.8)
+                labels = batch[0].y if isinstance(batch, tuple) else batch.y
 
                 model.train()
                 # clear old gradients so only current batch gradients are used
@@ -145,7 +114,7 @@ elif args.train:
                 output = model(batch)
                 log.debug('Calling loss function on current batch..')
                 log.debug(batch)
-                loss = criterion(output, batch.y)
+                loss = criterion(output, labels)
                 log.debug('Calling backward step on current batch..')
                 loss.backward()
                 log.debug('Calling optimizer step on current batch..')
@@ -153,22 +122,40 @@ elif args.train:
 
                 progress.update(batch_bar, advance = 1)
                 
-                binary_prediction = (torch.sigmoid(output) >= 0.5).int()
-                accuracy.append(((binary_prediction == batch.y).sum().item()) / len(batch.y))
+                binary_prediction = (torch.sigmoid(output) >= binary_th).int()
+                accuracy.append(((binary_prediction == labels).sum().item()) / len(labels))
 
-                epoch_correct += (binary_prediction == batch.y).sum().item()  # Count correct predictions
-                epoch_total += len(batch.y)  # Total number of samples in the batch
-                batch_accuracy = (binary_prediction == batch.y).sum().item() / len(batch.y)  # Calculate accuracy
+                epoch_correct += (binary_prediction == labels).sum().item()  # Count correct predictions
+                epoch_total += len(labels)  # Total number of samples in the batch
+                batch_accuracy = (binary_prediction == labels).sum().item() / len(labels)  # Calculate accuracy
+
+                """                 for name, param in model.named_parameters():
+                                    if param.grad is not None:
+                                        print(f'{name}: {param.grad.mean()}') """
 
             with torch.no_grad():  # Disable gradient calculation for validation
                 model.eval()
                 output = model(dataset.test)
-                val_loss = criterion(output, dataset.test.y)
-                binary_prediction_val = (torch.sigmoid(output) >= 0.5).int()
-                val_acc = (binary_prediction_val == dataset.test.y).sum().item() / len(dataset.test.y)
+
+                test_labels = dataset.test[0].y if isinstance(dataset.test, tuple) else dataset.test.y
+
+                val_loss = criterion(output, test_labels)
+                binary_prediction_val = (torch.sigmoid(output) >= binary_th).int()
+                val_acc = (binary_prediction_val == test_labels).sum().item() / len(test_labels)
+                
+                conf_matrix = confusion_matrix(test_labels, binary_prediction_val)
+                tn, fp, fn, tp = conf_matrix.ravel()
+                f1_val = (2*(((tp/(tp+fp))*(tp/(tp+fn)))/((tp/(tp+fp))+(tp/(tp+fn)))))
+
+                conf_matrix = confusion_matrix(labels, binary_prediction)
+                tn, fp, fn, tp = conf_matrix.ravel()
+                f1_train = (2*(((tp/(tp+fp))*(tp/(tp+fn)))/((tp/(tp+fp))+(tp/(tp+fn)))))
+                #f1_val = 0 
+                #f1_train = 0
+
         
             # get some metrics, maybe do this in the model class?
-            log.info(f'Epoch {epoch+1}, Loss: {loss.item():.4f}, Acc: {epoch_correct / epoch_total:.4f}, Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}')
+            log.info(f'Epoch {epoch+1}, Loss: {loss.item():.4f}, Acc: {epoch_correct / epoch_total:.4f}, F1 {f1_train:.4f}, Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f},  Val F1: {f1_val:.4f}')
 
             train_losses.append(loss.item())
             val_losses.append(val_loss.item())
@@ -186,7 +173,7 @@ elif args.train:
     torch.save(model.state_dict(), args.model_args)
 
     # get metrics on test dataset
-    prediction_bin, prediction_scores = predict_homolog_genes(model, dataset.train, dataset.test)
+    prediction_bin, prediction_scores = predict_homolog_genes(model, dataset.train, dataset.test, binary_th=binary_th)
     log.debug(prediction_bin)
     
 #write_groups_file(dataset.test, prediction_bin)
