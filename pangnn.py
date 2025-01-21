@@ -65,6 +65,7 @@ train_losses = []
 val_losses = []
 train_accuracies = []
 val_accuracies = []
+f1_train_lst = []
 binary_th = args.binary_threshold # 0.53
 
 if not args.train or os.path.exists(args.model_args):
@@ -104,6 +105,7 @@ elif args.train:
 
                 batch = dataset.sub_sample_graph_edges(dataset.train, fraction = 0.8)
                 labels = batch[0].y if isinstance(batch, tuple) else batch.y
+                criterion = torch.nn.BCEWithLogitsLoss(pos_weight =(labels == 0.).sum()/labels.sum())
 
                 model.train()
                 # clear old gradients so only current batch gradients are used
@@ -161,14 +163,16 @@ elif args.train:
             val_losses.append(val_loss.item())
             train_accuracies.append(epoch_correct / epoch_total)
             val_accuracies.append(val_acc)
+
+            f1_train_lst.append(f1_train)
             
             progress.update(training_bar, advance = 1)
             progress.reset(batch_bar)
 
-
+    print(f1_train_lst)
     log.info(f"Finished model training.\nPlotting metrics..")
     log.debug(f"\nLoss: {train_losses}\nAccuracy: {train_accuracies}")
-    plot_loss_accuracy(args.epochs, train_losses, train_accuracies, val_losses, val_accuracies)
+    plot_loss_accuracy(args.epochs, train_losses, train_accuracies, val_losses, val_accuracies, f1_train_lst)
     log.info(f"Saving model to file '{args.model_args}'")
     torch.save(model.state_dict(), args.model_args)
 

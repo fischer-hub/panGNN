@@ -111,7 +111,7 @@ def plot_roc(labels, probabilities, path = os.path.join('plots', 'roc.png')):
     return roc_auc
 
 
-def plot_loss_accuracy(num_epochs, train_losses, train_accuracies, val_losses, val_accuracies, path = os.path.join('plots', 'loss_acc.png')):
+def plot_loss_accuracy(num_epochs, train_losses, train_accuracies, val_losses, val_accuracies, f1_train_lst, path = os.path.join('plots', 'loss_acc.png')):
     # Plot Loss
     plt.figure(figsize=(12, 5))
 
@@ -127,9 +127,10 @@ def plot_loss_accuracy(num_epochs, train_losses, train_accuracies, val_losses, v
     plt.subplot(1, 2, 2)
     plt.plot(range(1, num_epochs + 1), train_accuracies, marker='o', color='g', label='Training Accuracy')
     plt.plot(range(1, num_epochs + 1), val_accuracies, marker='o', color='y', label='Validation Accuracy')
+    plt.plot(range(1, num_epochs + 1), f1_train_lst, marker='o', color='r', label='Training F1 Score')
     plt.xlabel('Epoch')
     plt.ylabel('Accuracy (%)')
-    plt.title('Training Accuracy over Epochs')
+    plt.title('Accuracy and F1 Score over Epochs')
     plt.legend()
 
     plt.tight_layout()

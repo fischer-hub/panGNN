@@ -381,7 +381,7 @@ class UnionGraphDataset(Dataset):
 
         origin_idx, target_idx = [], []
         # add edges to n nearest neighbour nodes
-        for gene_id in gene_id_integer_dict.values():
+        for gene_id in track(gene_id_integer_dict.values(), description = 'Adding edges to neighbouring nodes..', transient = True):
             for neighbour_id in range(gene_id - args.neighbours, gene_id + args.neighbours):
                 if neighbour_id in gene_id_integer_dict.values():
                     origin_idx.append(gene_id)
