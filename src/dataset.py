@@ -108,11 +108,11 @@ class HomogenousDataset(Dataset):
 
         with Console().status("Building edge index..") as status:
             self.edge_index_ts = build_edge_index(sim_score_dict, self.gene_id_integer_dict, fully_connected = False)
-            log.info('Successfully built edge index')
+        log.info('Successfully built edge index')
         
         with Console().status("Mapping edge weights to respective edge index positions..") as status:
             self.edge_weight_ts = map_edge_weights(self.edge_index_ts, sim_score_dict, self.gene_str_ids_lst, use_cache=True) #torch.randn((num_genes/2, edge_feature_dim))  # Edge 
-            log.info('Successfully mapped weights to the edge index')
+        log.info('Successfully mapped weights to the edge index')
 
         #self.neighbour_edge_weights_ts = generate_neighbour_edge_features(self.neighbour_lst, self.edge_index_ts, sim_score_dict, self.gene_str_ids_lst)
         self.neighbour_edge_weights_ts = None
@@ -128,9 +128,9 @@ class HomogenousDataset(Dataset):
             # construct list of labels from ribap groups and format to match edge_index
             with Console().status("Mapping labels to gene pairs in edge index.") as status:
                 self.labels_ts = map_labels_to_edge_index(self.edge_index_ts, self.gene_str_ids_lst, self.ribap_groups_dict, use_cache=True)
-                log.info(f"{self.labels_ts.sum().item() / len(self.labels_ts) * 100} % of labels are in positive class.")
-                self.class_balance = (self.labels_ts == 0.).sum()/self.labels_ts.sum()
-                log.info('Successfully mapped labels to gene pairs in edge index')
+            log.info(f"{self.labels_ts.sum().item() / len(self.labels_ts) * 100} % of labels are in positive class.")
+            self.class_balance = (self.labels_ts == 0.).sum()/self.labels_ts.sum()
+            log.info('Successfully mapped labels to gene pairs in edge index')
         else:
             self.labels_ts = None
             self.class_balance = None
@@ -365,18 +365,18 @@ class UnionGraphDataset(Dataset):
 
         with Console().status("Building edge index..") as status:
             edge_index_ts = build_edge_index(self.sim_score_dict, gene_id_integer_dict, fully_connected = False)
-            log.info('Successfully built edge index')
+        log.info('Successfully built edge index')
         
         with Console().status("Mapping edge weights to respective edge index positions..") as status:
             edge_weight_ts = map_edge_weights(edge_index_ts, self.sim_score_dict, gene_str_ids_lst, use_cache=False) #torch.randn((num_genes/2, edge_feature_dim))  # Edge 
-            log.info('Successfully mapped weights to the edge index')
+        log.info('Successfully mapped weights to the edge index')
 
         # construct list of labels from ribap groups and format to match edge_index
         with Console().status("Mapping labels to gene pairs in edge index.") as status:
             labels_ts = map_labels_to_edge_index(edge_index_ts, gene_str_ids_lst, self.ribap_groups_dict, use_cache=False) if self.ribap_groups_dict else None
-            log.info(f"{labels_ts.sum().item() / len(labels_ts) * 100} % of labels are in positive class.")
-            self.class_balance = (labels_ts == 0.).sum()/labels_ts.sum()
-            log.info('Successfully mapped labels to gene pairs in edge index')
+        log.info(f"{labels_ts.sum().item() / len(labels_ts) * 100} % of labels are in positive class.")
+        self.class_balance = (labels_ts == 0.).sum()/labels_ts.sum()
+        log.info('Successfully mapped labels to gene pairs in edge index')
         
 
         origin_idx, target_idx = [], []
