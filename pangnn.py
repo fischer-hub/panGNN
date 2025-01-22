@@ -54,7 +54,7 @@ log.info(f"Constructed test dataset from node, egde and index tensors: {dataset.
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu") if args.gpu else 'cpu'
 #model = MyGCN(dataset = dataset.train, hidden_dim = hidden_dim, num_neighbours = args.neighbours, node_feature_dim = gene_id_embedding_dim, device = device)
 model = AlternateGCN(device = device)
-optimizer = torch.optim.Adam(model.parameters(), lr=0.01)#lr=0.00005)
+optimizer = torch.optim.Adam(model.parameters(), lr=0.005)#lr=0.00005)
 
 # TODO: is this a good loss function for our scenario?
 # criterion = torch.nn.BCELoss() # if your model outputs probabilities, outputs logits
@@ -66,6 +66,8 @@ val_losses = []
 train_accuracies = []
 val_accuracies = []
 f1_train_lst = []
+precision_lst = []
+recall_lst = []
 binary_th = args.binary_threshold # 0.53
 
 if not args.train or os.path.exists(args.model_args):
@@ -152,6 +154,9 @@ elif args.train:
                 conf_matrix = confusion_matrix(labels, binary_prediction)
                 tn, fp, fn, tp = conf_matrix.ravel()
                 f1_train = (2*(((tp/(tp+fp))*(tp/(tp+fn)))/((tp/(tp+fp))+(tp/(tp+fn)))))
+
+                precision_lst.append(tp/(tp+fp))
+                recall_lst.append(tp/(tp+fn))
                 #f1_val = 0 
                 #f1_train = 0
 
@@ -169,7 +174,6 @@ elif args.train:
             progress.update(training_bar, advance = 1)
             progress.reset(batch_bar)
 
-    print(f1_train_lst)
     log.info(f"Finished model training.\nPlotting metrics..")
     log.debug(f"\nLoss: {train_losses}\nAccuracy: {train_accuracies}")
     plot_loss_accuracy(args.epochs, train_losses, train_accuracies, val_losses, val_accuracies, f1_train_lst)

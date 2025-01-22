@@ -10,3 +10,4 @@ dependencies:
   - rich
   - matplotlib
   - networkx
+  - umap-learn

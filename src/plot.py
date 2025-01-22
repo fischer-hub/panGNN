@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import networkx as nx
 from torch_geometric.utils import to_networkx
 import os, umap
-from sklearn.metrics import roc_curve, auc
+from sklearn.metrics import roc_curve, auc, PrecisionRecallDisplay
 import numpy as np
 from sklearn.decomposition import PCA
 
@@ -111,7 +111,23 @@ def plot_roc(labels, probabilities, path = os.path.join('plots', 'roc.png')):
     return roc_auc
 
 
+def plot_pr_curve(labels, probabilities, path = os.path.join('plots', 'pr_curve.png')):
+
+    plt.figure(figsize=(12, 5))
+    display = PrecisionRecallDisplay.from_predictions(labels, probabilities, name="PR", plot_chance_level=True)
+    _ = display.ax_.set_title("2-class Precision-Recall curve")
+    
+    if not os.path.exists(os.path.dirname(path)):
+        os.mkdir(os.path.dirname(path))
+
+    plt.savefig(path)
+
+
 def plot_loss_accuracy(num_epochs, train_losses, train_accuracies, val_losses, val_accuracies, f1_train_lst, path = os.path.join('plots', 'loss_acc.png')):
+    
+    f1_train_lst = np.array(f1_train_lst)
+    f1_train_lst[np.isnan(f1_train_lst)] = 0
+    
     # Plot Loss
     plt.figure(figsize=(12, 5))
 

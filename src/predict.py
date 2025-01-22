@@ -1,9 +1,9 @@
 import torch
 from rich.console import Console
 from src.setup import log
-from src.plot import plot_roc, plot_logit_distribution
+from src.plot import plot_roc, plot_logit_distribution, plot_pr_curve
 from src.helper import concat_graph_data
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import confusion_matrix, PrecisionRecallDisplay
 import torch.nn.functional as F
 
 
@@ -55,6 +55,8 @@ def predict_homolog_genes(model, train_dataset = None, test_dataset = None, bina
 
 
             random_pred = torch.randint(0,2,(len(binary_prediction),))
+
+            plot_pr_curve(test_dataset.y, probablilities)
 
             accuracy_test = ((binary_prediction == test_dataset.y).sum().item()) / len(test_dataset.y)
             if train_dataset: 
