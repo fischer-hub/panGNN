@@ -3,6 +3,7 @@ import torch.nn.functional as F
 from torch_geometric.nn import GCNConv, ChebConv
 from src.preprocessing import combine_neighbour_embeddings
 from src.setup import log
+from torch import nn
 
 
 # GCN class based on the example discussed in the pytorch geometric docs
@@ -78,6 +79,8 @@ class MyGCN(torch.nn.Module):
         return (z[edge_index[0]] * z[edge_index[1]]).sum(dim=1)
     
 
+
+
 class AlternateGCN(torch.nn.Module):
     def __init__(self, device):
         super().__init__()
@@ -93,6 +96,14 @@ class AlternateGCN(torch.nn.Module):
         self.conv_out = GCNConv(128, 64, add_self_loops = False)
 
         self.leaky_relu = torch.nn.LeakyReLU()
+
+        self.mlp = nn.Sequential(
+            nn.Linear(64 * 2, 64),  # Input size 6 (concatenated embeddings)
+            nn.ReLU(),
+            nn.Linear(64, 16),
+            nn.ReLU(),
+            nn.Linear(16, 1)   # Output scalar
+        )
 
 
     def forward(self, graph):
@@ -112,7 +123,9 @@ class AlternateGCN(torch.nn.Module):
         nodes = self.leaky_relu(nodes)
         log.debug(f"Outputting nodes to decode function of shape: {nodes.shape}\n{nodes}")
 
-        link_predictions = self.decode(nodes, graph.edge_index)
+        #link_predictions = self.decode(nodes, graph.edge_index)
+        concat_node_embeddings = torch.cat((nodes[graph.edge_index[0]], nodes[graph.edge_index[1]]), dim = 1)
+        link_predictions = self.mlp(concat_node_embeddings).squeeze(-1)
         #print(link_predictions)
         log.debug(f"Outputting link prediction tensor of shape: {link_predictions.shape}\ntype:{link_predictions.dtype}\n{link_predictions}")
 
