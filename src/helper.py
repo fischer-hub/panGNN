@@ -1,5 +1,5 @@
-import torch
-from src.setup import log
+import torch, random
+from src.setup import log, args
 from rich.progress import track
 from torch_geometric.data import Data
 
@@ -114,6 +114,101 @@ def generate_minimal_dataset():
     labels_ts = torch.tensor([0, 1, 1, 1, 1, 1, 1, 0] + [0, 1, 1, 1, 1, 1, 1, 0]).float()
 
     graph_data = Data(nodes, edge_index_ts, edge_weight_ts, labels_ts)
+    graph_data.union_edge_index = union_edge_index_ts
+    graph_data.clss_balance = None
+
+    return graph_data
+
+
+def simulate_dataset(num_genes, num_genomes, class_balance = 0.2):
+
+
+    # generate num of nodes as tensor entries
+    nodes = torch.tensor([1] * num_genes).float().unsqueeze(1)
+
+    # every genome has num_genes / num_genomes amount of genes
+    genome_size = int(num_genes / num_genomes)
+
+    # number of positive edges is defined by the class balance argument
+    num_edges = num_genes * 24
+    num_pos_edges = int(num_edges * class_balance)
+    num_negative_edges = num_edges - num_pos_edges
+
+    # for every group of orthologs we need num_genomes-1^2 edges (each gene has a similarity edge to the respective gene in the other genomes)
+    # so we get num_pos_edges / num_genomes^2 (just approximate it) number of homolog groups
+    num_homolog_groups = int(num_pos_edges / (num_genomes ** 2)) 
+
+    # similarity edges can be between any two nodes (also from the same genome), so draw randomly from the range of genes in input
+    # we sample 24 * num_genes edges since this is the ratio I observed in the real klebsiella data
+    negative_edge_index = torch.stack((
+        torch.tensor(random.choices(range(num_genes), k = num_negative_edges)),
+        torch.tensor(random.choices(range(num_genes), k = num_negative_edges))
+    ))
+
+    negative_edge_weights = torch.tensor(random.choices(range(50, 300),k = num_negative_edges))
+    negative_labels = torch.tensor([0] * num_negative_edges)
+
+    # create ortholog groups edge index
+    origin_nodes = []
+    target_nodes = []
+
+    # we can get the gene of same position starting the first genome by multiplying with the genome size (i hope)
+    # such that node 1 in the first genome is at the same position as node 1 + genome_size * num_genome in the second
+
+    for group in range(num_homolog_groups):
+        start_index = random.sample(range(genome_size), 1)[0]
+
+        for start_genome in range(num_genomes):
+            for end_genome in range(num_genomes):
+                
+                # exclude self loops
+                if not start_genome == end_genome:
+                    origin_nodes.append(start_index + start_genome * genome_size)
+                    target_nodes.append(start_index + end_genome * genome_size)
+
+
+    pos_edge_index = torch.stack((
+        torch.tensor(origin_nodes),
+        torch.tensor(target_nodes)
+    ))
+
+    
+    # generate neighbour gene edges
+    origin_idx, target_idx = [], []
+    gene_count = 0
+    # add edges to n nearest neighbour nodes
+    for genome in range(num_genes):
+        for gene_num in range(genome_size):
+            for neighbour_id in range(gene_count - args.neighbours, gene_count + args.neighbours):
+                if gene_num > 0 and gene_num < genome_size:
+                    origin_idx.append(gene_count)
+                    target_idx.append(neighbour_id)
+
+
+    neighbour_edge_index = torch.stack((
+        torch.tensor(origin_idx),
+        torch.tensor(target_idx)
+    ))
+
+    pos_edge_weights = torch.tensor(random.choices(range(300, 800), k = num_pos_edges))
+    pos_labels = torch.tensor([1] * num_pos_edges)
+
+    sim_edge_index = torch.stack((
+        torch.cat((negative_edge_index[0], pos_edge_index[0])),
+        torch.cat((negative_edge_index[1], pos_edge_index[1]))
+    ))
+    
+    edge_weight_ts = torch.cat((negative_edge_weights, pos_edge_weights))
+    labels_ts = torch.cat((negative_labels, pos_labels))
+
+
+    union_edge_index_ts = torch.stack((
+        torch.cat((sim_edge_index[0], neighbour_edge_index[0])),
+        torch.cat((sim_edge_index[1], neighbour_edge_index[1])),
+    ))
+
+
+    graph_data = Data(nodes, sim_edge_index, edge_weight_ts, labels_ts)
     graph_data.union_edge_index = union_edge_index_ts
     graph_data.class_balance = None
 

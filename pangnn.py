@@ -12,7 +12,7 @@ from src.gnn import MyGCN, AlternateGCN
 from src.simulate import generate_data
 from sklearn.metrics import confusion_matrix
 from src.postprocessing import write_groups_file
-from src.helper import generate_minimal_dataset
+from src.helper import generate_minimal_dataset, simulate_dataset
 
 ###################
 ### ENTRY POINT ###
@@ -34,8 +34,13 @@ edge_feature_dim = 128
 
 #simuoated_dataset = generate_data(20000, 5, 5, 0.5, 0.5, 0.02)
 
+dataset = simulate_dataset(100, 8, 0.2)
+dataset.train = simulate_dataset(4000, 8, 0.2)
+dataset.test = simulate_dataset(1000, 8, 0.2)
+print(dataset)
+
 #dataset = HomogenousDataset(args.annotation, args.similarity, args.ribap_groups, args.neighbours) if args.train else HomogenousDataset(args.annotation, args.similarity, args.neighbours)
-dataset = UnionGraphDataset(args.annotation, args.similarity, args.ribap_groups, args.neighbours) if args.train else HomogenousDataset(args.annotation, args.similarity, args.neighbours)
+#dataset = UnionGraphDataset(args.annotation, args.similarity, args.ribap_groups, args.neighbours) if args.train else HomogenousDataset(args.annotation, args.similarity, args.neighbours)
 #dataset.generate_graph_data()
 
 
@@ -114,8 +119,8 @@ elif args.train:
             #for batch_num, batch in enumerate(dataset.train):
             for batch_num in range(args.num_batches):
 
-                batch = dataset.sub_sample_graph_edges(dataset.train, fraction = 0.9)
-                #batch = dataset.train
+                #batch = dataset.sub_sample_graph_edges(dataset.train, fraction = 0.9)
+                batch = dataset.train
                 labels = batch[0].y if isinstance(batch, tuple) else batch.y
                 criterion = torch.nn.BCEWithLogitsLoss(pos_weight =(labels == 0.).sum()/labels.sum())
 
