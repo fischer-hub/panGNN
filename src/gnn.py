@@ -105,6 +105,8 @@ class AlternateGCN(torch.nn.Module):
             nn.Linear(16, 1)   # Output scalar
         )
 
+        self.epoch = 0
+
 
     def forward(self, graph):
     
@@ -112,13 +114,17 @@ class AlternateGCN(torch.nn.Module):
         log.debug(graph.x.shape)
         node_embeddings = self.embedding(graph.x)
         log.debug('Passing similarity graph data to convolution layer 1..')
+        # convolute over similarity edges
         nodes = self.conv_in(node_embeddings, graph.edge_index, graph.edge_attr)
         nodes = self.leaky_relu(nodes)
+        # convolute over union graph edges
         nodes = self.conv_hidden(nodes, graph.union_edge_index)
         nodes = self.leaky_relu(nodes)
         log.debug('Passing union graph data to convolution layer 2..')
+        # convolute over similarity edges
         nodes = self.conv_hidden(nodes, graph.edge_index, graph.edge_attr)
         nodes = self.leaky_relu(nodes)
+        # convolute over union graph edges
         nodes = self.conv_out(nodes, graph.union_edge_index)
         nodes = self.leaky_relu(nodes)
         log.debug(f"Outputting nodes to decode function of shape: {nodes.shape}\n{nodes}")
@@ -127,7 +133,25 @@ class AlternateGCN(torch.nn.Module):
         concat_node_embeddings = torch.cat((nodes[graph.edge_index[0]], nodes[graph.edge_index[1]]), dim = 1)
         link_predictions = self.mlp(concat_node_embeddings).squeeze(-1)
         #print(link_predictions)
-        log.debug(f"Outputting link prediction tensor of shape: {link_predictions.shape}\ntype:{link_predictions.dtype}\n{link_predictions}")
+
+        if not True:
+            import numpy as np
+            import umap
+            import matplotlib.pyplot as plt
+            umap_reducer = umap.UMAP(n_components=2, random_state=42)
+            embeddings_2d = umap_reducer.fit_transform(nodes)
+
+            # Plot UMAP
+            plt.figure(figsize=(10, 8))
+            plt.scatter(embeddings_2d[:, 0], embeddings_2d[:, 1], s=10, cmap='Spectral')
+            plt.title("UMAP of Node Embeddings", fontsize=14)
+            plt.xlabel("UMAP Dimension 1")
+            plt.ylabel("UMAP Dimension 2")
+            plt.colorbar(label="Node IDs")
+            plt.savefig(f'umap_frames/{self.epoch}.png')
+            self.epoch += 1
+            plt.close()        
+            log.debug(f"Outputting link prediction tensor of shape: {link_predictions.shape}\ntype:{link_predictions.dtype}\n{link_predictions}")
 
         return  link_predictions
     

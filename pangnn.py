@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from src.plot import plot_loss_accuracy, plot_graph, plot_simscore_class, plot_logit_distribution
+from src.plot import plot_loss_accuracy, plot_graph, plot_simscore_class, plot_logit_distribution, plot_union_graph
 from src.setup import log, args
 import torch, os, random
 from torch_geometric.data import Data
@@ -12,6 +12,7 @@ from src.gnn import MyGCN, AlternateGCN
 from src.simulate import generate_data
 from sklearn.metrics import confusion_matrix
 from src.postprocessing import write_groups_file
+from src.helper import generate_minimal_dataset
 
 ###################
 ### ENTRY POINT ###
@@ -37,6 +38,14 @@ edge_feature_dim = 128
 dataset = UnionGraphDataset(args.annotation, args.similarity, args.ribap_groups, args.neighbours) if args.train else HomogenousDataset(args.annotation, args.similarity, args.neighbours)
 #dataset.generate_graph_data()
 
+
+#dataset = generate_minimal_dataset()
+#dataset.train = generate_minimal_dataset()
+#dataset.test = generate_minimal_dataset()
+
+#plot_union_graph(dataset, os.path.join('plots', 'union_graph.png'))
+
+
 #dataset.split_data((0.8,0.20,0), batch_size = args.batch_size)
 
 log.info(f"Constructed train dataset from node, egde and index tensors: {dataset.train}")
@@ -54,12 +63,12 @@ log.info(f"Constructed test dataset from node, egde and index tensors: {dataset.
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu") if args.gpu else 'cpu'
 #model = MyGCN(dataset = dataset.train, hidden_dim = hidden_dim, num_neighbours = args.neighbours, node_feature_dim = gene_id_embedding_dim, device = device)
 model = AlternateGCN(device = device)
-optimizer = torch.optim.Adam(model.parameters(), lr=0.005)#lr=0.00005)
+optimizer = torch.optim.Adam(model.parameters(), lr=0.001)#lr=0.00005)
 
 # TODO: is this a good loss function for our scenario?
 # criterion = torch.nn.BCELoss() # if your model outputs probabilities, outputs logits
 # nn.CrossEntropyLoss() # multi-class classification where each sample belongs to only one class out of multiple classes., outputs logits
-criterion = torch.nn.BCEWithLogitsLoss(pos_weight = dataset.class_balance) # if your model outputs raw logits and you want the loss function to handle the sigmoid activation internally, outputs probabilities
+criterion = torch.nn.BCEWithLogitsLoss()#pos_weight = dataset.class_balance) # if your model outputs raw logits and you want the loss function to handle the sigmoid activation internally, outputs probabilities
 
 train_losses = []
 val_losses = []
@@ -85,7 +94,7 @@ elif args.train:
     log.info(f"Training on device: {device}")
     #dataset.train.to(device)
     #model.to(device)
-    log.info(f"Entering training loop with: {args.num_batches} batches, class wight {dataset.class_balance}.")
+    log.info(f"Entering training loop with: {args.num_batches} batches, class weight ")#{dataset.class_balance}.")
 
     with Progress(transient = True) as progress:
 
@@ -105,7 +114,8 @@ elif args.train:
             #for batch_num, batch in enumerate(dataset.train):
             for batch_num in range(args.num_batches):
 
-                batch = dataset.sub_sample_graph_edges(dataset.train, fraction = 0.8)
+                batch = dataset.sub_sample_graph_edges(dataset.train, fraction = 0.9)
+                #batch = dataset.train
                 labels = batch[0].y if isinstance(batch, tuple) else batch.y
                 criterion = torch.nn.BCEWithLogitsLoss(pos_weight =(labels == 0.).sum()/labels.sum())
 

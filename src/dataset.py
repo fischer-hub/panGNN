@@ -358,7 +358,7 @@ class UnionGraphDataset(Dataset):
         # total number of genes found in all annotation files
         gene_id_integer_dict = {gene: idx for idx, gene in enumerate(gene_str_ids_lst)}
         gene_ids_ts = torch.tensor(list(gene_id_integer_dict.values()))
-        normalized_gene_positions_ts = torch.tensor([1 for pos in gene_ids_ts]).float()#.unsqueeze(1)
+        normalized_gene_positions_ts = torch.tensor([10 for pos in gene_ids_ts]).float()#.unsqueeze(1)
         node_features_ts = normalized_gene_positions_ts.unsqueeze(1)
 
         # load similarity bit scores from MMSeqs2 output CSV file to pandas dataframe
@@ -366,7 +366,6 @@ class UnionGraphDataset(Dataset):
         with Console().status("Building edge index..") as status:
             edge_index_ts = build_edge_index(self.sim_score_dict, gene_id_integer_dict, fully_connected = False)
         log.info('Successfully built edge index')
-        print(edge_index_ts[0])
         
         with Console().status("Mapping edge weights to respective edge index positions..") as status:
             edge_weight_ts = map_edge_weights(edge_index_ts, self.sim_score_dict, gene_str_ids_lst, use_cache=False) #torch.randn((num_genes/2, edge_feature_dim))  # Edge 
@@ -375,7 +374,6 @@ class UnionGraphDataset(Dataset):
         # construct list of labels from ribap groups and format to match edge_index
         with Console().status("Mapping labels to gene pairs in edge index.") as status:
             labels_ts = map_labels_to_edge_index(edge_index_ts, gene_str_ids_lst, self.ribap_groups_dict, use_cache=False) if self.ribap_groups_dict else None
-        print(self.ribap_groups_dict)
         log.info(f"{labels_ts.sum().item() / len(labels_ts) * 100} % of labels are in positive class.")
         self.class_balance = (labels_ts == 0.).sum()/labels_ts.sum()
         log.info('Successfully mapped labels to gene pairs in edge index')
@@ -387,6 +385,7 @@ class UnionGraphDataset(Dataset):
             for neighbour_id in range(gene_id - args.neighbours, gene_id + args.neighbours):
                 if neighbour_id in gene_id_integer_dict.values():
                     origin_idx.append(gene_id)
+                    # we anyway add the neighbour edges in both directions when iterating over both nodes
                     #origin_idx.append(neighbour_id)
                     #target_idx.append(gene_id)
                     target_idx.append(neighbour_id)
@@ -432,4 +431,6 @@ class UnionGraphDataset(Dataset):
         graph.union_edge_index = union_edge_index
 
         return graph
+    
+
 

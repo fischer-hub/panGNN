@@ -5,8 +5,9 @@ import os, umap
 from sklearn.metrics import roc_curve, auc, PrecisionRecallDisplay
 import numpy as np
 from sklearn.decomposition import PCA
+import torch
 
-def plot_umap_pca(dataset, labels, path = os.path.join('plots', 'umap.png')):
+def plot_umap_pca(dataset, path = os.path.join('plots', 'umap.png')):
 
     umap_model = umap.UMAP(n_components=3, random_state=42)
     dist = []
@@ -207,6 +208,51 @@ def plot_logit_distribution(logits, path = os.path.join('plots', 'logit_distribu
     plt.xlabel('Value Range')
     plt.ylabel('Frequency')
     plt.title('Distribution of Values')
+
+    if not os.path.exists(os.path.dirname(path)):
+        os.mkdir(os.path.dirname(path))
+        
+    plt.savefig(path)
+
+
+def plot_union_graph(dataset, path):
+    """Plot a graph as png based on input dataset consisting of node tensor,
+    edge index and egde attribute tensor.
+
+    Args:
+        dataset (Data object): data object containing node tensor,
+    edge index and egde attribute tensor.
+    """
+
+    dataset.edge_index = dataset.union_edge_index
+    dataset.edge_attr = torch.cat((dataset.edge_attr, torch.tensor([1] * (len(dataset.edge_index[0]) - len(dataset.edge_attr)))))
+    edge_labels = dataset.edge_attr
+    plt.figure(3,figsize=(12,12)) 
+
+
+    # convert dataset to NetworkX graph
+    G = to_networkx(dataset, edge_attrs=['edge_attr'], node_attrs=['x'])
+    # map integer gene ids back to original string ids
+    node_label_mapping = {i: i+1 for i in range(len(dataset.x))}
+    G = nx.relabel_nodes(G, node_label_mapping)
+
+    # whatever this does
+    #pos = nx.spring_layout(G)  # Layout for visualization
+
+
+    # Generate grid positions using grid_2d_graph logic
+    pos = {1 : (0, 2), 2 : (1, 2), 3 : (2, 2), 4 : (3, 2),
+           5: (0, 1), 6: (1, 1), 7: (2, 1), 8: (3, 1),
+           9: (0, 0), 10: (1, 0), 11: (2, 0), 12: (3, 0)}
+
+    # Draw nodes with labels
+    nx.draw_networkx_nodes(G, pos, node_size=500, node_color='lightblue')
+    nx.draw_networkx_labels(G, pos)
+
+    # Draw edges with weights
+    nx.draw_networkx_edges(G, pos, width=2)
+    edge_labels = {(u, v): f"{d['edge_attr']}" for u, v, d in G.edges(data=True)}
+    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels)
 
     if not os.path.exists(os.path.dirname(path)):
         os.mkdir(os.path.dirname(path))
