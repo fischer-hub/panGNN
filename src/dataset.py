@@ -1,6 +1,6 @@
 from src.preprocessing import load_gff, load_similarity_score, load_ribap_groups, build_edge_index, map_edge_weights, map_labels_to_edge_index, construct_neighbour_lst, generate_neighbour_edge_features, build_adjacency_vectors
 from src.setup import log, args
-from src.helper import separate_components, concat_graph_data
+from src.helper import separate_components, concat_graph_data, simulate_dataset, generate_minimal_dataset
 import torch, os, pickle, random
 from torch_geometric.data import Dataset, Data
 from rich.progress import track, Console, Progress
@@ -314,6 +314,11 @@ class UnionGraphDataset(Dataset):
         self.gene_str_ids_lst_train = []
         self.gene_str_ids_lst_val = []
         num_genes = 0
+        self.split = split
+        
+        if not gff_files:
+            log.info("No annotation files provided, use generate_minimal_dataset() or simulate_dataset() to generate graph data for this object.")
+            return
         
         # load annotations from gff files and format to pandas dataframe
         for gff_file in track(gff_files, description='Loading annotation files..', transient=True):
@@ -353,6 +358,8 @@ class UnionGraphDataset(Dataset):
         self.train = self.generate_graphs(self.gene_str_ids_lst_train)
         self.test = self.generate_graphs(self.gene_str_ids_lst_val)
 
+    def len(self):
+        return len(self.train.x) + len(self.test.x)
 
     def generate_graphs(self, gene_str_ids_lst):
         # total number of genes found in all annotation files
@@ -432,5 +439,13 @@ class UnionGraphDataset(Dataset):
 
         return graph
     
+    def simulate_dataset(self, num_genes, num_genomes, class_balance = 0.2):
+        num_train_genes = int(num_genes * self.split[0])
+        num_test_genes = int(num_genes * self.split[1])
+        self.train = simulate_dataset(num_train_genes, num_genomes, class_balance)
+        self.test = simulate_dataset(num_test_genes, num_genomes, class_balance)
 
-
+    def generate_minimal_dataset(self):
+        log.info("Subsampling is not recommended on the minimal dataset, since this can easily unbalance the data.")
+        self.train = generate_minimal_dataset()
+        self.test = generate_minimal_dataset()

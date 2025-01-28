@@ -34,16 +34,14 @@ edge_feature_dim = 128
 
 #simuoated_dataset = generate_data(20000, 5, 5, 0.5, 0.5, 0.02)
 
-dataset = simulate_dataset(100, 8, 0.2)
-dataset.train = simulate_dataset(4000, 8, 0.2)
-dataset.test = simulate_dataset(1000, 8, 0.2)
-print(dataset)
 
 #dataset = HomogenousDataset(args.annotation, args.similarity, args.ribap_groups, args.neighbours) if args.train else HomogenousDataset(args.annotation, args.similarity, args.neighbours)
 #dataset = UnionGraphDataset(args.annotation, args.similarity, args.ribap_groups, args.neighbours) if args.train else HomogenousDataset(args.annotation, args.similarity, args.neighbours)
 #dataset.generate_graph_data()
 
-
+dataset  = UnionGraphDataset()
+dataset.simulate_dataset(4000, 8, 0.2)
+print(dataset)
 #dataset = generate_minimal_dataset()
 #dataset.train = generate_minimal_dataset()
 #dataset.test = generate_minimal_dataset()

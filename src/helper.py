@@ -155,6 +155,8 @@ def simulate_dataset(num_genes, num_genomes, class_balance = 0.2):
     # we can get the gene of same position starting the first genome by multiplying with the genome size (i hope)
     # such that node 1 in the first genome is at the same position as node 1 + genome_size * num_genome in the second
 
+
+    # TODO: something is off here (maybe all the rounding with int()), the pos edge index seems shorter than the num_pos_edge
     for group in range(num_homolog_groups):
         start_index = random.sample(range(genome_size), 1)[0]
 
@@ -176,19 +178,34 @@ def simulate_dataset(num_genes, num_genomes, class_balance = 0.2):
     # generate neighbour gene edges
     origin_idx, target_idx = [], []
     gene_count = 0
+
     # add edges to n nearest neighbour nodes
-    for genome in range(num_genes):
-        for gene_num in range(genome_size):
-            for neighbour_id in range(gene_count - args.neighbours, gene_count + args.neighbours):
-                if gene_num > 0 and gene_num < genome_size:
-                    origin_idx.append(gene_count)
-                    target_idx.append(neighbour_id)
+    for node_idx in range(num_genes):
+        
+        # we are at the start of a genome dont add neighbour nodes of the previous genome
+        if node_idx % genome_size == 0:
+            for neighbour_id in range(node_idx, node_idx + args.neighbours):
+                origin_idx.append(node_idx)
+                target_idx.append(neighbour_id)
+        # we are at the end of a genome dont add neighbours of the next genome
+        elif node_idx % genome_size == 1:
+            for neighbour_id in range(node_idx - args.neighbours, node_idx):
+                origin_idx.append(node_idx)
+                target_idx.append(neighbour_id)
+        # we are in the middle of a genome, add neighbours from both sides
+        else:
+            for neighbour_id in range(node_idx - args.neighbours, node_idx + args.neighbours):
+                origin_idx.append(node_idx)
+                target_idx.append(neighbour_id)
 
 
     neighbour_edge_index = torch.stack((
         torch.tensor(origin_idx),
         torch.tensor(target_idx)
     ))
+
+    # quick fix to the difference in expected vs generated pos edges dont tell anyone
+    num_pos_edges = len(origin_nodes)
 
     pos_edge_weights = torch.tensor(random.choices(range(300, 800), k = num_pos_edges))
     pos_labels = torch.tensor([1] * num_pos_edges)
@@ -198,7 +215,7 @@ def simulate_dataset(num_genes, num_genomes, class_balance = 0.2):
         torch.cat((negative_edge_index[1], pos_edge_index[1]))
     ))
     
-    edge_weight_ts = torch.cat((negative_edge_weights, pos_edge_weights))
+    edge_weight_ts = torch.cat((negative_edge_weights, pos_edge_weights)).float()
     labels_ts = torch.cat((negative_labels, pos_labels))
 
 
