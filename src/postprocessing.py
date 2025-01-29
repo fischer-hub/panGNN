@@ -34,3 +34,7 @@ def write_groups_file(dataset, binary_prediction):
         
         for idx, set in enumerate(sets):
             group_output_file.write(f"group_{idx}, {', '.join([gene_ids_lst[gene_id] for gene_id in list(set)])}")
+
+
+#def write_stats_csv(stats, path = os.path.join('stats.csv')):
+

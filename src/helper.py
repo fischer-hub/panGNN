@@ -2,6 +2,7 @@ import torch, random
 from src.setup import log, args
 from rich.progress import track
 from torch_geometric.data import Data
+import numpy as np
 
 
 
@@ -120,8 +121,7 @@ def generate_minimal_dataset():
     return graph_data
 
 
-def simulate_dataset(num_genes, num_genomes, class_balance = 0.2):
-
+def simulate_dataset(num_genes, num_genomes, class_balance = 0.2, class_0_stdev = 260, class_0_mean = 212, class_1_stdev = 400, class_1_mean = 550):
 
     # generate num of nodes as tensor entries
     nodes = torch.tensor([1] * num_genes).float().unsqueeze(1)
@@ -130,6 +130,8 @@ def simulate_dataset(num_genes, num_genomes, class_balance = 0.2):
     genome_size = int(num_genes / num_genomes)
 
     # number of positive edges is defined by the class balance argument
+    # this doesnt sclae very good, the amount of edges doesnt scale linearly with the the node number
+    # num negative edges = num_possible_edges - num_pos_edges - num_edges with similarity score < MMSeqs2 threshold
     num_edges = num_genes * 24
     num_pos_edges = int(num_edges * class_balance)
     num_negative_edges = num_edges - num_pos_edges
@@ -145,7 +147,10 @@ def simulate_dataset(num_genes, num_genomes, class_balance = 0.2):
         torch.tensor(random.choices(range(num_genes), k = num_negative_edges))
     ))
 
-    negative_edge_weights = torch.tensor(random.choices(range(50, 300),k = num_negative_edges))
+    shape = (class_0_mean ** 2) / (class_0_stdev ** 2)
+    scale = (class_0_stdev ** 2) / class_0_mean 
+    negative_edge_weights = torch.tensor(np.random.gamma(shape = shape, scale = scale, size = num_negative_edges))
+    #negative_edge_weights = torch.tensor(random.choices(range(50, 300), k = num_negative_edges))
     negative_labels = torch.tensor([0] * num_negative_edges)
 
     # create ortholog groups edge index
@@ -177,26 +182,26 @@ def simulate_dataset(num_genes, num_genomes, class_balance = 0.2):
     
     # generate neighbour gene edges
     origin_idx, target_idx = [], []
-    gene_count = 0
 
-    # add edges to n nearest neighbour nodes
+    # add edges to n nearest neighbour nodes, dont touch the modulo logic it took ages
     for node_idx in range(num_genes):
-        
-        # we are at the start of a genome dont add neighbour nodes of the previous genome
-        if node_idx % genome_size == 0:
-            for neighbour_id in range(node_idx, node_idx + args.neighbours):
-                origin_idx.append(node_idx)
-                target_idx.append(neighbour_id)
-        # we are at the end of a genome dont add neighbours of the next genome
-        elif node_idx % genome_size == 1:
-            for neighbour_id in range(node_idx - args.neighbours, node_idx):
-                origin_idx.append(node_idx)
-                target_idx.append(neighbour_id)
-        # we are in the middle of a genome, add neighbours from both sides
-        else:
-            for neighbour_id in range(node_idx - args.neighbours, node_idx + args.neighbours):
-                origin_idx.append(node_idx)
-                target_idx.append(neighbour_id)
+        for neighbour_id in range(node_idx - args.neighbours, node_idx + args.neighbours + 1):
+            if neighbour_id != node_idx:
+                # we are k nodes away from genome start, dont add idx - k nodes
+                if node_idx % genome_size < args.neighbours:
+                    if abs(neighbour_id) % genome_size <= args.neighbours + 1 and neighbour_id >= 0:
+                        origin_idx.append(node_idx)
+                        target_idx.append(neighbour_id)
+                # we are k nodes away from genome end, dont add idx + k nodes
+                elif node_idx % genome_size >= (genome_size - args.neighbours):
+                    if neighbour_id % genome_size >= args.neighbours:
+                        origin_idx.append(node_idx)
+                        target_idx.append(neighbour_id)
+                # we are in the middle of the genome, add all neighbours
+                else:
+                    origin_idx.append(node_idx)
+                    target_idx.append(neighbour_id)
+                
 
 
     neighbour_edge_index = torch.stack((
@@ -207,7 +212,10 @@ def simulate_dataset(num_genes, num_genomes, class_balance = 0.2):
     # quick fix to the difference in expected vs generated pos edges dont tell anyone
     num_pos_edges = len(origin_nodes)
 
-    pos_edge_weights = torch.tensor(random.choices(range(300, 800), k = num_pos_edges))
+    shape = (class_1_mean ** 2) / (class_1_stdev ** 2)
+    scale = (class_1_stdev ** 2) / class_1_mean  
+    pos_edge_weights = torch.tensor(np.random.gamma(shape = shape, scale = scale, size = num_pos_edges))
+    #pos_edge_weights = torch.tensor(random.choices(range(300, 800), k = num_pos_edges))
     pos_labels = torch.tensor([1] * num_pos_edges)
 
     sim_edge_index = torch.stack((
@@ -216,7 +224,7 @@ def simulate_dataset(num_genes, num_genomes, class_balance = 0.2):
     ))
     
     edge_weight_ts = torch.cat((negative_edge_weights, pos_edge_weights)).float()
-    labels_ts = torch.cat((negative_labels, pos_labels))
+    labels_ts = torch.cat((negative_labels, pos_labels)).float()
 
 
     union_edge_index_ts = torch.stack((
@@ -227,6 +235,7 @@ def simulate_dataset(num_genes, num_genomes, class_balance = 0.2):
 
     graph_data = Data(nodes, sim_edge_index, edge_weight_ts, labels_ts)
     graph_data.union_edge_index = union_edge_index_ts
-    graph_data.class_balance = None
+    graph_data.class_balance = class_balance
 
     return graph_data
+

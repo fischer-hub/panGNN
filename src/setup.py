@@ -22,6 +22,7 @@ parser.add_argument('-n', '--neighbours', help = 'number of genes from target ge
 parser.add_argument('-a', '--annotation', help = 'path to the two annotation files in gff format of the two input genomes, seperated by tab', default = ["data/dummy_dataset/dummy1.gff", "data/dummy_dataset/dummy2.gff"], type = str, nargs = '*')
 parser.add_argument('-s', '--similarity', help = 'path to the similarity score file (e.g tab seperated output of MMSeqs2)', default = os.path.join('data', 'dummy_dataset', 'dummy_mmseqs2.csv'), type = str)
 parser.add_argument('--binary_threshold', help = 'binary threshold to classify output probabilities to the label class', default = 0.5, type = float)
+parser.add_argument('--dynamic_binary_threshold', help = 'dynamically calculate the binary threshold that separates the predictions best based on yuden index', action = 'store_true')
 
 # train mode args
 parser.add_argument('--train',              help = 'set pangnn into training mode', action='store_true')

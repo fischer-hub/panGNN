@@ -121,7 +121,7 @@ def map_edge_weights(edge_index, bit_score_dict, gene_ids_lst):
                         edge_weight_lst.append(edge_weight)
                         #print(f"Bit score: {edge_weight}")
                     except KeyError:
-                        # do we want 0 as no similarity score? does this 'kill' neurons and preevent from learning?
+                        # do we want 0 as no similarity score? does this 'kill' neurons and prevent from learning?
                         edge_weight_lst.append(0)
                         #print(f"Could not find gene pair in similarity score dataframe, assigning score 0.")
                 
@@ -441,7 +441,8 @@ def load_similarity_score(similarity_score_file):
                                             'tend', 'tlen', 'qcov', 'tcov', 
                                             'evalue', 'bits'])
         
-    sim_score_df.drop(columns=['pident','alnlen', 'mismatch', 'gapopen', 
+    sim_score_df.drop(columns=['pident','alnlen', 'mismatch', 'gapopen',
+    #sim_score_df.drop(columns=['bits','alnlen', 'mismatch', 'gapopen',
                                'qstart', 'qend', 'qlen', 'tstart', 
                                'tend', 'tlen', 'qcov', 'tcov', 'evalue'],
                                inplace = True)
@@ -449,6 +450,7 @@ def load_similarity_score(similarity_score_file):
     sim_score_dict = (
     sim_score_df.groupby('query')
                 .apply(lambda x: dict(zip(x['target'], x['bits'])))
+                #.apply(lambda x: dict(zip(x['target'], x['pident'])))
                 .to_dict())
     
     return sim_score_dict

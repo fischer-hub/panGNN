@@ -85,12 +85,8 @@ def plot_roc(labels, probabilities, path = os.path.join('plots', 'roc.png')):
     """
 
     fpr, tpr, thresholds = roc_curve(labels, probabilities)
-
     youden_index = tpr - fpr
-
-    # Find the optimal threshold
-    optimal_idx = youden_index.argmax()
-    optimal_threshold = thresholds[optimal_idx]
+    optimal_threshold = thresholds[youden_index.argmax()]
 
     roc_auc = auc(fpr, tpr)
 
@@ -112,6 +108,7 @@ def plot_roc(labels, probabilities, path = os.path.join('plots', 'roc.png')):
     return roc_auc
 
 
+
 def plot_pr_curve(labels, probabilities, path = os.path.join('plots', 'pr_curve.png')):
 
     plt.figure(figsize=(12, 5))
@@ -122,6 +119,7 @@ def plot_pr_curve(labels, probabilities, path = os.path.join('plots', 'pr_curve.
         os.mkdir(os.path.dirname(path))
 
     plt.savefig(path)
+
 
 
 def plot_loss_accuracy(num_epochs, train_losses, train_accuracies, val_losses, val_accuracies, f1_train_lst, path = os.path.join('plots', 'loss_acc.png')):
@@ -156,6 +154,7 @@ def plot_loss_accuracy(num_epochs, train_losses, train_accuracies, val_losses, v
         os.mkdir(os.path.dirname(path))
 
     plt.savefig(path)
+
 
 
 def plot_graph(dataset, path):
@@ -194,6 +193,7 @@ def plot_graph(dataset, path):
     plt.savefig(path)
 
 
+
 def plot_logit_distribution(logits, path = os.path.join('plots', 'logit_distribution.png')):
 
     plt.figure()
@@ -213,6 +213,32 @@ def plot_logit_distribution(logits, path = os.path.join('plots', 'logit_distribu
         os.mkdir(os.path.dirname(path))
         
     plt.savefig(path)
+
+
+def plot_simscore_distribution_by_class(dataset, path = os.path.join('plots', 'sim_score_distribution_by_class.png')):
+
+    plt.figure()
+    import statistics
+    class_0_sim_scores = [dataset.edge_attr[i].item() for i in range(len(dataset.edge_attr)) if dataset.y[i] == 0]
+    print(f"class 0 sim scores: stdev: {statistics.stdev(class_0_sim_scores)}, mean: {sum(class_0_sim_scores) / len(class_0_sim_scores)}")
+    
+
+    class_1_sim_scores = [dataset.edge_attr[i].item() for i in range(len(dataset.edge_attr)) if dataset.y[i] == 1]
+    print(f"class 1 sim scores: stdev: {statistics.stdev(class_1_sim_scores)}, mean: {sum(class_1_sim_scores) / len(class_1_sim_scores)}")
+
+    plt.hist(class_0_sim_scores, bins=15, label = 'class 0', alpha = 0.6)
+    plt.hist(class_1_sim_scores, bins=15, label = 'class 1', alpha = 0.6)
+    plt.legend(loc='upper right')
+
+    plt.xlabel('Score Value')
+    plt.ylabel('Frequency')
+    plt.title('Distribution of Similarity Scores by Class')
+
+    if not os.path.exists(os.path.dirname(path)):
+        os.mkdir(os.path.dirname(path))
+        
+    plt.savefig(path)
+
 
 
 def plot_union_graph(dataset, path):

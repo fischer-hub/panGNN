@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from src.plot import plot_loss_accuracy, plot_graph, plot_simscore_class, plot_logit_distribution, plot_union_graph
+from src.plot import plot_loss_accuracy, plot_graph, plot_simscore_class, plot_logit_distribution, plot_union_graph, plot_simscore_distribution_by_class
 from src.setup import log, args
 import torch, os, random
 from torch_geometric.data import Data
@@ -13,6 +13,7 @@ from src.simulate import generate_data
 from sklearn.metrics import confusion_matrix
 from src.postprocessing import write_groups_file
 from src.helper import generate_minimal_dataset, simulate_dataset
+from sklearn.metrics import roc_curve
 
 ###################
 ### ENTRY POINT ###
@@ -36,12 +37,13 @@ edge_feature_dim = 128
 
 
 #dataset = HomogenousDataset(args.annotation, args.similarity, args.ribap_groups, args.neighbours) if args.train else HomogenousDataset(args.annotation, args.similarity, args.neighbours)
-#dataset = UnionGraphDataset(args.annotation, args.similarity, args.ribap_groups, args.neighbours) if args.train else HomogenousDataset(args.annotation, args.similarity, args.neighbours)
+#dataset = UnionGraphDataset(args.annotation, args.similarity, args.ribap_groups, args.neighbours, split=(0.98, 0.02)) if args.train else HomogenousDataset(args.annotation, args.similarity, args.neighbours)
 #dataset.generate_graph_data()
-
 dataset  = UnionGraphDataset()
-dataset.simulate_dataset(4000, 8, 0.2)
-print(dataset)
+dataset.simulate_dataset(50000, 25, 0.15)
+print(dataset.train.edge_attr.max())
+plot_simscore_distribution_by_class(dataset.train, path= os.path.join('plots', 'sim_score_distribution_by_class_simulated.png'))
+
 #dataset = generate_minimal_dataset()
 #dataset.train = generate_minimal_dataset()
 #dataset.test = generate_minimal_dataset()
@@ -117,8 +119,8 @@ elif args.train:
             #for batch_num, batch in enumerate(dataset.train):
             for batch_num in range(args.num_batches):
 
-                #batch = dataset.sub_sample_graph_edges(dataset.train, fraction = 0.9)
-                batch = dataset.train
+                batch = dataset.sub_sample_graph_edges(dataset.train, fraction = 0.8)
+                #batch = dataset.train
                 labels = batch[0].y if isinstance(batch, tuple) else batch.y
                 criterion = torch.nn.BCEWithLogitsLoss(pos_weight =(labels == 0.).sum()/labels.sum())
 
@@ -138,6 +140,12 @@ elif args.train:
                 optimizer.step()
 
                 progress.update(batch_bar, advance = 1)
+
+                if args.dynamic_binary_threshold:
+                    fpr, tpr, thresholds = roc_curve(labels, output)
+                    youden_index = tpr - fpr
+                    optimal_threshold = thresholds[youden_index.argmax()]
+                    binary_th = optimal_threshold
                 
                 binary_prediction = (torch.sigmoid(output) >= binary_th).int()
                 accuracy.append(((binary_prediction == labels).sum().item()) / len(labels))
@@ -175,7 +183,7 @@ elif args.train:
 
         
             # get some metrics, maybe do this in the model class?
-            log.info(f'Epoch {epoch+1}, Loss: {loss.item():.4f}, Acc: {epoch_correct / epoch_total:.4f}, F1 {f1_train:.4f}, Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f},  Val F1: {f1_val:.4f}')
+            log.info(f"Epoch {epoch+1}, Loss: {loss.item():.4f}, Acc: {epoch_correct / epoch_total:.4f}, F1 {f1_train:.4f}, Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f},  Val F1: {f1_val:.4f}{f'Optimal Bin. Th. {binary_th:.4f}' if args.dynamic_binary_threshold else ''}")
 
             train_losses.append(loss.item())
             val_losses.append(val_loss.item())
