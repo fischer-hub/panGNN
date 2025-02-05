@@ -246,6 +246,29 @@ def simulate_dataset(num_genes, num_genomes, class_balance = 0.2, class_0_stdev 
     # quick fix to the difference in expected vs generated pos edges dont tell anyone
     num_pos_edges = len(origin_nodes)
 
+    num_paralogs = int(num_pos_edges * 0.1)
+    paralogs_set = 0
+    iterations = 0
+
+
+    while paralogs_set < num_paralogs:
+
+        iterations += 1
+
+        # if we cant find any more high scores, exit
+        if iterations > 1000:
+            break
+
+        # sample random edge in negative edge set
+        i = random.sample(range(len(negative_labels)))
+
+        # check if the sims core is high
+        if negative_edge_weights[i] > class_1_mean and negative_labels[i] == 0:
+            # if yes, set as paralog
+            negative_labels[i] = 1
+            paralogs_set += 1
+
+
     shape = (class_1_mean ** 2) / (class_1_stdev ** 2)
     scale = (class_1_stdev ** 2) / class_1_mean  
     pos_edge_weights = torch.tensor(np.random.gamma(shape = shape, scale = scale, size = num_pos_edges))
