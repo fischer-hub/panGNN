@@ -7,7 +7,7 @@ from sklearn.metrics import confusion_matrix, PrecisionRecallDisplay
 import torch.nn.functional as F
 
 
-def predict_homolog_genes(model, train_dataset = None, test_dataset = None, binary_th = 0.72):
+def predict_homolog_genes(model, train_dataset = None, test_dataset = None, binary_th = 0.72, device = 'cpu'):
     """Infer the GNN with given trained model and predict homolog genes from
     input similarity graph.
 
@@ -22,14 +22,18 @@ def predict_homolog_genes(model, train_dataset = None, test_dataset = None, bina
                        nodes represented in the edge index
         
     """
+    stats = {}
+    model.to(device)
     model.eval()
     with torch.no_grad():
         with Console().status("Infering model on test data..") as status:
+            test_dataset.to(device)
             edge_scores = model(test_dataset)
 
             if isinstance(test_dataset, tuple): test_dataset = test_dataset[0]
 
             if train_dataset:
+                train_dataset.to(device)
                 #concat_train = concat_graph_data(train_dataset)
                 edge_scores_train = model(train_dataset)
                 if isinstance(train_dataset, tuple): train_dataset = train_dataset[0]
@@ -44,36 +48,53 @@ def predict_homolog_genes(model, train_dataset = None, test_dataset = None, bina
 
             probablilities = torch.sigmoid(edge_scores)
             binary_prediction = (probablilities >= binary_th).int()
-            print(probablilities)
-            print(binary_prediction)
-            auc = plot_roc(test_dataset.y, probablilities)
+
+            auc, opt_th = plot_roc(test_dataset.y, probablilities)
+            stats['auc_test'] = auc
+            stats['optimatl_threshold'] = opt_th
+
             conf_matrix = confusion_matrix(test_dataset.y, binary_prediction)
             tn, fp, fn, tp = conf_matrix.ravel()
+
+            stats['tn'] = tn
+            stats['fp'] = fp
+            stats['fn'] = fn
+            stats['tp'] = tp
 
             plot_logit_distribution(edge_scores, 'plots/logit_dist.png')
             plot_logit_distribution(probablilities, 'plots/prob_hist.png')
 
-
             random_pred = torch.randint(0,2,(len(binary_prediction),))
 
-            plot_pr_curve(test_dataset.y, probablilities)
+            AP = plot_pr_curve(test_dataset.y, probablilities)
+            stats['average_precision'] = AP
 
             accuracy_test = ((binary_prediction == test_dataset.y).sum().item()) / len(test_dataset.y)
+            stats['acc_test'] = accuracy_test
+            stats['acc_train'] = None
+
             if train_dataset: 
                 accuracy_train = ((binary_prediction_train == train_dataset.y).sum().item()) / len(train_dataset.y)
+                stats['acc_train'] = accuracy_train
+
             guess = ((random_pred == test_dataset.y).sum().item()) / len(test_dataset.y)
             log.info("\n\n----------METRICS----------\n")
             log.info(f"Correctly predicted: {(binary_prediction == test_dataset.y).sum().item() } out of {len(test_dataset.y)} edges.")
             log.info(f"AUC on test dataset: {auc}")
+            log.info(f"Average precision on test dataset: {AP}")
             log.info(f"Accuracy on test dataset: {accuracy_test}")
             log.info(f"Accuracy on test data from conf mat: {(tp + tn) / (tp + tn + fp + fn)}")
             if train_dataset:
                 log.info(f"Accuracy on train dataset: {accuracy_train}")
             log.info(f"Accuracy when guessing: {guess}")
             log.info(f"Precision on test dataset: {tp/(tp+fp)}")
+            stats['precision'] = tp/(tp+fp)
             log.info(f"Recall (sens) on test dataset: {tp/(tp+fn)}")
+            stats['recall'] = tp/(tp+fn)
             log.info(f"Specifity on test dataset: {tn/(fp+tn)}")
+            stats['specifity'] = tn/(fp+tn)
             log.info(f"F1 on test dataset: {2*(((tp/(tp+fp))*(tp/(tp+fn)))/((tp/(tp+fp))+(tp/(tp+fn))))}")
+            stats['f1'] = 2*(((tp/(tp+fp))*(tp/(tp+fn)))/((tp/(tp+fp))+(tp/(tp+fn))))
             log.info(f"Got confusion matrix:\n\n\n{'':15}|{'pred negative':^15}|{'pred positive':^15}")
             log.info(f"---------------------------------------------")
             log.info(f"{'label negative':15}|{round(conf_matrix[0][0]/len(test_dataset.y)*100, 2):^15}|{round(conf_matrix[0][1]/len(test_dataset.y)*100, 2):^15}")
@@ -83,4 +104,4 @@ def predict_homolog_genes(model, train_dataset = None, test_dataset = None, bina
             log.error('No labels supplied, can not calculate metrics.')
         log.info('Exiting.')
     
-    return (binary_prediction, edge_scores)
+    return (binary_prediction, edge_scores, stats)

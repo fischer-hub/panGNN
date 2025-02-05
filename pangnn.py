@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from src.plot import plot_loss_accuracy, plot_graph, plot_simscore_class, plot_logit_distribution, plot_union_graph, plot_simscore_distribution_by_class
 from src.setup import log, args
-import torch, os, random
+import torch, os, random, datetime, time
 from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader
 from torch_geometric.transforms import RandomLinkSplit
@@ -11,9 +11,10 @@ from src.dataset import HomogenousDataset, UnionGraphDataset
 from src.gnn import MyGCN, AlternateGCN
 from src.simulate import generate_data
 from sklearn.metrics import confusion_matrix
-from src.postprocessing import write_groups_file
-from src.helper import generate_minimal_dataset, simulate_dataset
-from sklearn.metrics import roc_curve
+from src.postprocessing import write_groups_file, write_stats_csv
+from src.helper import generate_minimal_dataset, simulate_dataset, sub_sample_graph_edges
+from sklearn.metrics import roc_curve, auc
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 ###################
 ### ENTRY POINT ###
@@ -35,15 +36,20 @@ edge_feature_dim = 128
 
 #simuoated_dataset = generate_data(20000, 5, 5, 0.5, 0.5, 0.02)
 
-
 #dataset = HomogenousDataset(args.annotation, args.similarity, args.ribap_groups, args.neighbours) if args.train else HomogenousDataset(args.annotation, args.similarity, args.neighbours)
-#dataset = UnionGraphDataset(args.annotation, args.similarity, args.ribap_groups, args.neighbours, split=(0.98, 0.02)) if args.train else HomogenousDataset(args.annotation, args.similarity, args.neighbours)
-#dataset.generate_graph_data()
-dataset  = UnionGraphDataset()
-dataset.simulate_dataset(50000, 25, 0.15)
-print(dataset.train.edge_attr.max())
-plot_simscore_distribution_by_class(dataset.train, path= os.path.join('plots', 'sim_score_distribution_by_class_simulated.png'))
+if not args.simulate_dataset:
+    log.info('Simulating dataset.')
+    num_genomes = len(args.annotation)
+    dataset = UnionGraphDataset(args.annotation, args.similarity, args.ribap_groups, args.neighbours, split=(0.8, 0.2), categorical_nodes = True) if args.train else HomogenousDataset(args.annotation, args.similarity, args.neighbours)
+    #dataset.generate_graph_data()
+else:
+    num_genomes = 20
+    dataset  = UnionGraphDataset()
+    dataset.simulate_dataset(1100000, num_genomes, 0.15)
 
+
+#print(dataset.train.edge_attr.max())
+#plot_simscore_distribution_by_class(dataset.train, path= os.path.join('plots', 'sim_dist', '50_genomes_sim_score_distribution_by_class.png'))
 #dataset = generate_minimal_dataset()
 #dataset.train = generate_minimal_dataset()
 #dataset.test = generate_minimal_dataset()
@@ -54,7 +60,6 @@ plot_simscore_distribution_by_class(dataset.train, path= os.path.join('plots', '
 #dataset.split_data((0.8,0.20,0), batch_size = args.batch_size)
 
 log.info(f"Constructed train dataset from node, egde and index tensors: {dataset.train}")
-
 #plot_logit_distribution(dataset.train.edge_weight_ts, path= os.path.join('plots', 'sim_score_distribution_unscaled.png'))
 
 #if args.plot_graph: plot_graph(dataset.train, os.path.join('plots', 'input_graph.png'))
@@ -67,8 +72,9 @@ log.info(f"Constructed test dataset from node, egde and index tensors: {dataset.
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu") if args.gpu else 'cpu'
 #model = MyGCN(dataset = dataset.train, hidden_dim = hidden_dim, num_neighbours = args.neighbours, node_feature_dim = gene_id_embedding_dim, device = device)
-model = AlternateGCN(device = device)
-optimizer = torch.optim.Adam(model.parameters(), lr=0.001)#lr=0.00005)
+model = AlternateGCN(device = device, dataset = dataset.train, categorical_nodes = dataset.categorical_nodes)
+optimizer = torch.optim.Adam(model.parameters(), lr=0.001)#selflr=0.00005)
+scheduler = ReduceLROnPlateau(optimizer, mode='min', patience = 5)
 
 # TODO: is this a good loss function for our scenario?
 # criterion = torch.nn.BCELoss() # if your model outputs probabilities, outputs logits
@@ -82,13 +88,17 @@ val_accuracies = []
 f1_train_lst = []
 precision_lst = []
 recall_lst = []
-binary_th = args.binary_threshold # 0.53
+binary_th = args.binary_threshold
+
+start = time.time()
+
 
 if not args.train or os.path.exists(args.model_args):
     if os.path.exists(args.model_args):
         log.info(f"Found model file '{args.model_args}' with trained parameter, restoring model state for inference..")
         model.load_state_dict(torch.load(args.model_args))
-        prediction_bin, prediction_scores = predict_homolog_genes(model, dataset.train, dataset.test, binary_th = binary_th)
+        prediction_bin, prediction_scores, stats = predict_homolog_genes(model, dataset.train, dataset.test, binary_th = binary_th)
+        stats['mode'] = 'test'
 
     else:
         log.error(f"Could not infer model because model parameters file '{args.model_args}' was not found, exiting.")
@@ -97,8 +107,10 @@ if not args.train or os.path.exists(args.model_args):
 elif args.train:
     # Training loop
     log.info(f"Training on device: {device}")
-    #dataset.train.to(device)
-    #model.to(device)
+
+    #dataset.to(device)
+    model.to(device)
+
     log.info(f"Entering training loop with: {args.num_batches} batches, class weight ")#{dataset.class_balance}.")
 
     with Progress(transient = True) as progress:
@@ -118,13 +130,18 @@ elif args.train:
 
             #for batch_num, batch in enumerate(dataset.train):
             for batch_num in range(args.num_batches):
+                
+                model.train()
 
-                batch = dataset.sub_sample_graph_edges(dataset.train, fraction = 0.8)
+                batch = sub_sample_graph_edges(dataset.train, device, fraction = 0.8)
+                #dataset.graph_to(batch, device)
+
                 #batch = dataset.train
                 labels = batch[0].y if isinstance(batch, tuple) else batch.y
-                criterion = torch.nn.BCEWithLogitsLoss(pos_weight =(labels == 0.).sum()/labels.sum())
+                class_balance_factor = (labels == 0.).sum()/labels.sum()
+                criterion = torch.nn.BCEWithLogitsLoss(pos_weight = class_balance_factor)
+                print(class_balance_factor)
 
-                model.train()
                 # clear old gradients so only current batch gradients are used
                 optimizer.zero_grad()
 
@@ -160,16 +177,29 @@ elif args.train:
 
             with torch.no_grad():  # Disable gradient calculation for validation
                 model.eval()
+                dataset.test.to(device)
                 output = model(dataset.test)
 
                 test_labels = dataset.test[0].y if isinstance(dataset.test, tuple) else dataset.test.y
 
                 val_loss = criterion(output, test_labels)
-                binary_prediction_val = (torch.sigmoid(output) >= binary_th).int()
+                scheduler.step(val_loss)
+                probabilities = torch.sigmoid(output)
+                binary_prediction_val = (probabilities >= binary_th).int()
                 val_acc = (binary_prediction_val == test_labels).sum().item() / len(test_labels)
+                
+                test_labels = test_labels.cpu()
+                binary_prediction_val = binary_prediction_val.cpu()
+                binary_prediction = binary_prediction.cpu()
+                labels = labels.cpu()
                 
                 conf_matrix = confusion_matrix(test_labels, binary_prediction_val)
                 tn, fp, fn, tp = conf_matrix.ravel()
+
+                fpr, tpr, thresholds = roc_curve(test_labels, probabilities)
+                roc_auc = auc(fpr, tpr)
+                print('AUC', roc_auc)
+                
                 f1_val = (2*(((tp/(tp+fp))*(tp/(tp+fn)))/((tp/(tp+fp))+(tp/(tp+fn)))))
 
                 conf_matrix = confusion_matrix(labels, binary_prediction)
@@ -183,7 +213,7 @@ elif args.train:
 
         
             # get some metrics, maybe do this in the model class?
-            log.info(f"Epoch {epoch+1}, Loss: {loss.item():.4f}, Acc: {epoch_correct / epoch_total:.4f}, F1 {f1_train:.4f}, Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f},  Val F1: {f1_val:.4f}{f'Optimal Bin. Th. {binary_th:.4f}' if args.dynamic_binary_threshold else ''}")
+            log.info(f"Epoch {epoch+1}, Loss: {loss.item():.4f}, Acc: {epoch_correct / epoch_total:.4f}, F1 {f1_train:.4f}, Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}, LR: {optimizer.param_groups[0]['lr']:.10f},  Val F1: {f1_val:.4f}{f'Optimal Bin. Th. {binary_th:.4f}' if args.dynamic_binary_threshold else ''}")
 
             train_losses.append(loss.item())
             val_losses.append(val_loss.item())
@@ -202,7 +232,23 @@ elif args.train:
     torch.save(model.state_dict(), args.model_args)
 
     # get metrics on test dataset
-    prediction_bin, prediction_scores = predict_homolog_genes(model, dataset.train, dataset.test, binary_th=binary_th)
+    prediction_bin, prediction_scores, stats = predict_homolog_genes(model, dataset.train, dataset.test, binary_th=binary_th)
     log.debug(prediction_bin)
+    log.info(f"Time elapsed: {time.time() - start:.4f} seconds")
+
+    stats['binary_threshold'] = binary_th
+    stats['date'] = str(datetime.date.today())
+    stats['neighbours'] = args.neighbours
+    stats['num_nodes_train'] = len(dataset.train.x)
+    stats['num_nodes_sim_edges_train'] = len(dataset.train.edge_index)
+    stats['num_nodes_test'] = len(dataset.test.x)
+    stats['num_nodes_sim_edges_test'] = len(dataset.test.edge_index)
+    stats['mode'] = 'train'
+    stats['epochs'] = args.epochs
+    stats['batches'] = args.num_batches
+    stats['device'] = device
+    stats['runtime'] = (time.time() - start)
+    stats['num_genomes'] = num_genomes
+    write_stats_csv(stats)
     
 #write_groups_file(dataset.test, prediction_bin)

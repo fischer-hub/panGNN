@@ -36,5 +36,33 @@ def write_groups_file(dataset, binary_prediction):
             group_output_file.write(f"group_{idx}, {', '.join([gene_ids_lst[gene_id] for gene_id in list(set)])}")
 
 
-#def write_stats_csv(stats, path = os.path.join('stats.csv')):
+def write_stats_csv(stats, path = os.path.join('stats.csv')):
+
+    line = ''
+
+    for value in stats.values():
+
+        if value is None or not value:
+            value = 'NA'
+
+        line += f'{value}, '
+    
+    line = line[:-1]
+
+    with open(path, 'a') as file:
+        file.write(f'\n{line}')
+
+    """
+    header = ''
+
+    for key in stats.keys():
+
+        if key is None or not key:
+            key = 'NA'
+
+        header += f'{key}, '
+    
+    header = header[:-1]
+    print(header) """
+
 

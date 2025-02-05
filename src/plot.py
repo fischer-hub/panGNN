@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import networkx as nx
 from torch_geometric.utils import to_networkx
 import os, umap
-from sklearn.metrics import roc_curve, auc, PrecisionRecallDisplay
+from sklearn.metrics import roc_curve, auc, PrecisionRecallDisplay, average_precision_score
 import numpy as np
 from sklearn.decomposition import PCA
 import torch
@@ -105,12 +105,14 @@ def plot_roc(labels, probabilities, path = os.path.join('plots', 'roc.png')):
 
     plt.savefig(path)
 
-    return roc_auc
+    return (roc_auc, optimal_threshold)
 
 
 
 def plot_pr_curve(labels, probabilities, path = os.path.join('plots', 'pr_curve.png')):
 
+
+    AP = average_precision_score(labels, probabilities)
     plt.figure(figsize=(12, 5))
     display = PrecisionRecallDisplay.from_predictions(labels, probabilities, name="PR", plot_chance_level=True)
     _ = display.ax_.set_title("2-class Precision-Recall curve")
@@ -119,6 +121,8 @@ def plot_pr_curve(labels, probabilities, path = os.path.join('plots', 'pr_curve.
         os.mkdir(os.path.dirname(path))
 
     plt.savefig(path)
+
+    return AP
 
 
 

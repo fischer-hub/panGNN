@@ -1,9 +1,43 @@
 import torch, random
 from src.setup import log, args
 from rich.progress import track
-from torch_geometric.data import Data
 import numpy as np
+from torch_geometric.data import Data
 
+
+
+def sub_sample_graph_edges(graph, device, fraction = 0.8):
+    """Subsample graph by sampling from the edge, weight, and label tensors, effectively removing 1-fraction edges from the resulting graph.
+
+    Args:
+        fraction (float, optional): Fraction of edges and labels to sample for the resulting graph. Defaults to 0.8.
+
+    Returns:
+        PyG Data object: The randomly subsampled graph
+    """
+    graph.cpu()
+    num_neighbour_edges = len(graph.union_edge_index[0]) - len(graph.y)
+    sim_indices = random.sample(range(0, len(graph.y)), int(len(graph.y) * fraction))
+    # maybe we should sample from the additional edges in the union, such that the edges in the sim part are the same in every batch?
+    union_indices = sim_indices + random.sample(range(len(graph.y), len(graph.y) + num_neighbour_edges), int(num_neighbour_edges * fraction))
+
+    # remap nodes too?
+    sim_edge_index_origin = torch.index_select(graph.edge_index[0], 0, torch.tensor(sim_indices))
+    sim_edge_index_target = torch.index_select(graph.edge_index[1], 0, torch.tensor(sim_indices))
+    union_edge_index_origin = torch.index_select(graph.union_edge_index[0], 0, torch.tensor(union_indices))
+    union_edge_index_target = torch.index_select(graph.union_edge_index[1], 0, torch.tensor(union_indices))
+    sim_edge_index = torch.stack((sim_edge_index_origin, sim_edge_index_target))
+    union_edge_index = torch.stack((union_edge_index_origin, union_edge_index_target))
+    sim_edge_weights = torch.index_select(graph.edge_attr, 0, torch.tensor(sim_indices))
+    #union_edge_weights = torch.index_select(graph.union_edge_weight_ts, 0, torch.tensor(union_indices))
+    sim_labels = torch.index_select(graph.y, 0, torch.tensor(sim_indices))
+    #union_labels = torch.index_select(graph.labels_ts, 0, torch.tensor(union_indices))
+    
+    graph = Data(graph.x, sim_edge_index, sim_edge_weights.float(), sim_labels)
+    graph.union_edge_index = union_edge_index
+    graph.to(device)
+    
+    return graph
 
 
 def concat_graph_data(graph_lst):
@@ -131,8 +165,8 @@ def simulate_dataset(num_genes, num_genomes, class_balance = 0.2, class_0_stdev 
 
     # number of positive edges is defined by the class balance argument
     # this doesnt sclae very good, the amount of edges doesnt scale linearly with the the node number
-    # num negative edges = num_possible_edges - num_pos_edges - num_edges with similarity score < MMSeqs2 threshold
-    num_edges = num_genes * 24
+    # num negative edges = num_possible_edges - num_pos_edges - (num_edges with similarity with score < MMSeqs2 threshold)
+    num_edges = num_genes * 30
     num_pos_edges = int(num_edges * class_balance)
     num_negative_edges = num_edges - num_pos_edges
 
@@ -236,6 +270,12 @@ def simulate_dataset(num_genes, num_genomes, class_balance = 0.2, class_0_stdev 
     graph_data = Data(nodes, sim_edge_index, edge_weight_ts, labels_ts)
     graph_data.union_edge_index = union_edge_index_ts
     graph_data.class_balance = class_balance
+
+    log.info(f"{graph_data.y.sum().item() / len(graph_data.y) * 100} % of labels are in positive class.")
+
+
+    #graph_data.sub_sample_graph_edges = sub_sample_graph_edges.__get__(graph_data, Data)
+    #graph_data.__str__ = lambda: 'test'
 
     return graph_data
 

@@ -2,7 +2,7 @@ import random, torch, os
 from src.setup import log
 import numpy as np
 from src.plot import plot_logit_distribution, plot_simscore_class
-from src.dataset import Data, HomogenousDataset
+from src.dataset import HomogenousDataset
 from src.preprocessing import construct_neighbour_lst, generate_neighbour_edge_features
 
 

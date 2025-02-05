@@ -24,12 +24,20 @@ def format_args_string(args):
     Returns:
         args_str   (str): formatted string containing all key-value pairs from the argparse namespace object
     """
+    anno_lst = ''
 
     args_str = f"{bcolors.YELLOW}{bcolors.BOLD}Parsed Arguments:\n"
+    
     for key, value in vars(args).items():
-        args_str += f"\t{bcolors.OKGREEN}{key+':':15} {bcolors.OKCYAN}{value}\n"
 
-    return args_str
+        if 'annotation' in key:
+            anno_lst = f"\t{bcolors.OKGREEN}{key+':':15}\n{bcolors.OKCYAN}{value}\n"
+        else:
+            args_str += f"\t{bcolors.OKGREEN}{key+':':15} {bcolors.OKCYAN}{value}\n"
+
+
+    anno_lst = anno_lst.replace("',", "',\n\t")
+    return args_str + anno_lst
 
 
 

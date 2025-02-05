@@ -1,6 +1,6 @@
 from src.preprocessing import load_gff, load_similarity_score, load_ribap_groups, build_edge_index, map_edge_weights, map_labels_to_edge_index, construct_neighbour_lst, generate_neighbour_edge_features, build_adjacency_vectors
 from src.setup import log, args
-from src.helper import separate_components, concat_graph_data, simulate_dataset, generate_minimal_dataset
+from src.helper import concat_graph_data, simulate_dataset, generate_minimal_dataset, sub_sample_graph_edges
 import torch, os, pickle, random
 from torch_geometric.data import Dataset, Data
 from rich.progress import track, Console, Progress
@@ -8,7 +8,6 @@ from scipy.sparse import csr_array
 from scipy.sparse.csgraph import connected_components
 from torch_geometric.utils.convert import to_scipy_sparse_matrix
 from torch_geometric.transforms import RemoveDuplicatedEdges
-
 
 
 class HomogenousDataset(Dataset):
@@ -141,73 +140,6 @@ class HomogenousDataset(Dataset):
 
         return
 
-        if args.batch_size == 1:
-            log.info('Batch size set to 1, skipping seperation of connected components.')
-            graph_data = Data(normalized_gene_positions_ts.unsqueeze(1), self.edge_index_ts, self.edge_weight_ts, self.labels_ts)
-            #graph_data = Data(self.gene_ids_ts, self.edge_index_ts, self.edge_weight_ts, self.labels_ts)
-            self.data_lst.append(graph_data)
-            return
-        
-        #connected_components = separate_components(self.edge_index_ts)
-
-        adj_matrix = to_scipy_sparse_matrix(self.edge_index_ts)
-        graph = csr_array(adj_matrix)
-        n_components, labels = connected_components(csgraph=graph, directed=False, return_labels=True)
-
-        log.debug(f"Number of connected components: {n_components}, in total number of nodes: {num_genes}")
-
-        connected_components_nodes = [[] for x in range(n_components)]
- 
-        for idx, label in enumerate(labels):
-            connected_components_nodes[label].append(idx)
-    
-        with Progress(transient = True) as progress:
-            subgraph_bar = progress.add_task("Generating subgraphs from connected components..", total=len(connected_components_nodes))
-
-            random.shuffle(connected_components_nodes)
-
-            for idx, component_nodes in enumerate(connected_components_nodes):
-                x = torch.tensor(component_nodes).unsqueeze(1)
-                # x is a tensor of categorical node IDs where a nodes index is in edge_index if it is connected to an edge,
-                # so we have to either remap the indices in edge_index to the new x, or use the whole tensor for each data 
-                # object so the indices work out 
-
-                log.debug(f"subsetting similarity score dict for component nodes.. {component_nodes} {idx/len(connected_components_nodes) *100} % done.")
-
-                gene_str_ids_lst = [self.gene_str_ids_lst[i] for i in component_nodes]
-                component_normalized_gene_positions_ts = torch.tensor([normalized_gene_positions_ts[i] for i in component_nodes])
-                #component_normalized_gene_positions_ts = torch.tensor([1 for pos in component_normalized_gene_positions_ts])
-                sub_sim_score_dict = dict((gene_str_id, sim_score_dict[gene_str_id]) for gene_str_id in gene_str_ids_lst if gene_str_id in sim_score_dict)
-
-                component_edge_index = build_edge_index(sub_sim_score_dict, self.gene_id_integer_dict, fully_connected = False)
-                component_edge_weight_ts = map_edge_weights(component_edge_index, sub_sim_score_dict, self.gene_str_ids_lst)
-
-                if self.ribap_groups_file:
-                    component_labels_ts = map_labels_to_edge_index(component_edge_index, self.gene_str_ids_lst, self.ribap_groups_dict)
-                else:
-                    component_labels_ts = None
-
-                # we use as node list for each graph the whole list since the edge index referes to indices in the node list, otherwise we have to remap all edge indices to their
-                # match the updated sub list of nodes of the graph, which I would like to avoid (I hope this doesnt affect the model since it should anyway only make predictions for nodes that are connected by an edge?)
-                # EDIT: as you can see i added tghe mapping to the sub graph nodes..
-                node_sub_graph_mapping = None
-                if len(component_edge_index[0]) > 0:
-
-                    node_sub_graph_mapping = {old_idx: new_idx for new_idx, old_idx in enumerate(component_nodes)}
-
-                    for idx in range(len(component_edge_index[0])):
-                        edge = [component_edge_index[0][idx], component_edge_index[1][idx]]
-                        component_edge_index[0][idx] = node_sub_graph_mapping[edge[0].item()]
-                        component_edge_index[1][idx] = node_sub_graph_mapping[edge[1].item()]
-                
-                #graph_data = Data(self.gene_ids_ts.unsqueeze(1), component_edge_index, component_edge_weight_ts, component_labels_ts)
-                graph_data = Data(component_normalized_gene_positions_ts.unsqueeze(1), component_edge_index, component_edge_weight_ts, component_labels_ts)
-                graph.neighbour_edge_weights_ts = None # neighbour_edge_weights_ts
-                self.data_lst.append(graph_data)
-                progress.update(subgraph_bar, advance=1)
-
-            log.info('Successfully generated graph data for all sub-graphs in the input')
-        
 
     
     def split_data(self, split = (0.7, 0.15, 0.15), batch_size = 32):
@@ -306,15 +238,21 @@ class UnionGraphDataset(Dataset):
 
     Split the data points into train, test and validation sets using split_data().
     """
-    def __init__(self, gff_files = [], similarity_score_file = '', ribap_groups_file = None, num_neighbours = 1, split = (0.7, 0.3)):
+    def __init__(self, gff_files = [], similarity_score_file = '', ribap_groups_file = None, num_neighbours = 1, split = (0.7, 0.3), categorical_nodes = False):
         super().__init__(root = None, transform = None, pre_transform = None, pre_filter = None)
 
         genome_annotation_df_lst = []
         genome_name_lst = []
         self.gene_str_ids_lst_train = []
         self.gene_str_ids_lst_val = []
+        self.gene_str_int_lst_train = []
+        self.gene_str_int_lst_val = []
+
+        self.categorical_nodes = categorical_nodes
         num_genes = 0
         self.split = split
+        self.val = torch.tensor([])
+
         
         if not gff_files:
             log.info("No annotation files provided, use generate_minimal_dataset() or simulate_dataset() to generate graph data for this object.")
@@ -335,6 +273,11 @@ class UnionGraphDataset(Dataset):
             
             self.gene_str_ids_lst_train += list(genome_annotation_df.index)[:int(len(genome_annotation_df.index) * split[0])]
             self.gene_str_ids_lst_val   += list(genome_annotation_df.index)[int(len(genome_annotation_df.index) * split[0]):]
+
+            self.gene_str_int_lst_train += range(len(self.gene_str_ids_lst_train))
+            self.gene_str_int_lst_val   += range(len(self.gene_str_ids_lst_val))
+
+
             #self.gene_str_ids_lst_test  += list(genome_annotation_df.index)[]
             
             # for each string gene ID save its normalized position in the gff file into the dictionary
@@ -355,18 +298,19 @@ class UnionGraphDataset(Dataset):
             self.labels_ts = None
             self.class_balance = None
 
-        self.train = self.generate_graphs(self.gene_str_ids_lst_train)
-        self.test = self.generate_graphs(self.gene_str_ids_lst_val)
+        self.train = self.generate_graphs(self.gene_str_ids_lst_train, self.gene_str_int_lst_train)
+        self.test = self.generate_graphs(self.gene_str_ids_lst_val, self.gene_str_int_lst_val)
 
     def len(self):
         return len(self.train.x) + len(self.test.x)
 
-    def generate_graphs(self, gene_str_ids_lst):
+    def generate_graphs(self, gene_str_ids_lst, gene_str_int_lst):
         # total number of genes found in all annotation files
         gene_id_integer_dict = {gene: idx for idx, gene in enumerate(gene_str_ids_lst)}
         gene_ids_ts = torch.tensor(list(gene_id_integer_dict.values()))
-        normalized_gene_positions_ts = torch.tensor([10 for pos in gene_ids_ts]).float()#.unsqueeze(1)
+        normalized_gene_positions_ts = torch.tensor([1 for pos in gene_ids_ts]).float()#.unsqueeze(1)
         node_features_ts = normalized_gene_positions_ts.unsqueeze(1)
+
 
         # load similarity bit scores from MMSeqs2 output CSV file to pandas dataframe
 
@@ -402,8 +346,15 @@ class UnionGraphDataset(Dataset):
         transform = RemoveDuplicatedEdges()
         union_edge_index_ts = transform(Data(x = normalized_gene_positions_ts, edge_index = union_edge_index_ts, edge_attr = None, y = None)).edge_index
 
-        graph_data = Data(normalized_gene_positions_ts.unsqueeze(1), edge_index_ts, edge_weight_ts, labels_ts)
+        if self.categorical_nodes:
+            x = torch.tensor(gene_str_int_lst)
+        else:
+            x = normalized_gene_positions_ts.unsqueeze(1)
+
+        graph_data = Data(x, edge_index_ts, edge_weight_ts, labels_ts)
         graph_data.union_edge_index = union_edge_index_ts
+        # this makes the Data object class crash on print??
+        #graph_data.subsample_graph_edges = sub_sample_graph_edges.__get__(graph_data, Data)
 
         return graph_data
     
@@ -440,12 +391,30 @@ class UnionGraphDataset(Dataset):
         return graph
     
     def simulate_dataset(self, num_genes, num_genomes, class_balance = 0.2):
-        num_train_genes = int(num_genes * self.split[0])
+        num_train_genes = int(num_genes)
         num_test_genes = int(num_genes * self.split[1])
         self.train = simulate_dataset(num_train_genes, num_genomes, class_balance)
         self.test = simulate_dataset(num_test_genes, num_genomes, class_balance)
+
 
     def generate_minimal_dataset(self):
         log.info("Subsampling is not recommended on the minimal dataset, since this can easily unbalance the data.")
         self.train = generate_minimal_dataset()
         self.test = generate_minimal_dataset()
+
+    def graph_to(self, graph, device):
+        graph.x = graph.x.to(device)
+        graph.edge_index = graph.edge_index.to(device)
+        graph.edge_attr = graph.edge_attr.to(device)
+        graph.y = graph.y.to(device)
+        graph.union_edge_index = graph.union_edge_index.to(device)
+
+        return graph
+
+    def to(self, device):
+        self.train = self.train.to(device)
+        self.test = self.test.to(device)
+        self.val = self.val.to(device)
+
+
+

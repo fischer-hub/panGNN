@@ -28,7 +28,7 @@ class MyGCN(torch.nn.Module):
         self.conv_hidden = GCNConv(64, 64, add_self_loops = False)
         self.conv_out = GCNConv(64, 16, add_self_loops = False)
 
-        self.leaky_relu = torch.nn.LeakyReLU()
+        self.activation_fct = torch.nn.LeakyReLU()
 
 
     def forward(self, data):
@@ -82,20 +82,26 @@ class MyGCN(torch.nn.Module):
 
 
 class AlternateGCN(torch.nn.Module):
-    def __init__(self, device):
+    def __init__(self, device, dataset, categorical_nodes):
         super().__init__()
         self.device = device
 
         # embedding layer for node features
-        #self.embedding = torch.nn.Embedding(len(dataset[0].x)+2, 64)
-        self.embedding = torch.nn.Linear(1, 64)
+        if categorical_nodes:
+            # handle gene nodes as categorical data embeddings
+            self.embedding = torch.nn.Embedding(len(dataset.x), 64)
+            log.debug(dataset.x)
+        else:
+            # handle gene nodes as numerical data embeddings
+            self.embedding = torch.nn.Linear(1, 64)
 
         # define convolution layers
         self.conv_in = GCNConv(64, 128, add_self_loops = False)
         self.conv_hidden = GCNConv(128, 128, add_self_loops = False)
         self.conv_out = GCNConv(128, 64, add_self_loops = False)
 
-        self.leaky_relu = torch.nn.LeakyReLU()
+        #self.activation_fct = torch.nn.LeakyReLU()
+        self.activation_fct = F.relu
 
         self.mlp = nn.Sequential(
             nn.Linear(64 * 2, 64),  # Input size 6 (concatenated embeddings)
@@ -116,17 +122,17 @@ class AlternateGCN(torch.nn.Module):
         log.debug('Passing similarity graph data to convolution layer 1..')
         # convolute over similarity edges
         nodes = self.conv_in(node_embeddings, graph.edge_index, graph.edge_attr)
-        nodes = self.leaky_relu(nodes)
+        #nodes = self.activation_fct(nodes)
         # convolute over union graph edges
         nodes = self.conv_hidden(nodes, graph.union_edge_index)
-        nodes = self.leaky_relu(nodes)
+        nodes = self.activation_fct(nodes)
         log.debug('Passing union graph data to convolution layer 2..')
         # convolute over similarity edges
         nodes = self.conv_hidden(nodes, graph.edge_index, graph.edge_attr)
-        nodes = self.leaky_relu(nodes)
+        #nodes = self.activation_fct(nodes)
         # convolute over union graph edges
         nodes = self.conv_out(nodes, graph.union_edge_index)
-        nodes = self.leaky_relu(nodes)
+        nodes = self.activation_fct(nodes)
         log.debug(f"Outputting nodes to decode function of shape: {nodes.shape}\n{nodes}")
 
         #link_predictions = self.decode(nodes, graph.edge_index)
