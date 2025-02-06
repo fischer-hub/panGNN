@@ -246,12 +246,13 @@ def simulate_dataset(num_genes, num_genomes, class_balance = 0.2, class_0_stdev 
     # quick fix to the difference in expected vs generated pos edges dont tell anyone
     num_pos_edges = len(origin_nodes)
 
+    # paralogs are not of class 1 anyway what did I do here ??
+    """
     num_paralogs = int(num_pos_edges * 0.1)
     paralogs_set = 0
     iterations = 0
 
-
-    while paralogs_set < num_paralogs:
+     while paralogs_set < num_paralogs:
 
         iterations += 1
 
@@ -266,7 +267,7 @@ def simulate_dataset(num_genes, num_genomes, class_balance = 0.2, class_0_stdev 
         if negative_edge_weights[i] > class_1_mean and negative_labels[i] == 0:
             # if yes, set as paralog
             negative_labels[i] = 1
-            paralogs_set += 1
+            paralogs_set += 1 """
 
 
     shape = (class_1_mean ** 2) / (class_1_stdev ** 2)
