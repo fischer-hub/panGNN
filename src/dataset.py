@@ -255,7 +255,8 @@ class UnionGraphDataset(Dataset):
 
         
         if not gff_files:
-            log.info("No annotation files provided, use generate_minimal_dataset() or simulate_dataset() to generate graph data for this object.")
+            if not args.simulate_dataset:
+                log.info("No annotation files provided, use generate_minimal_dataset() or simulate_dataset() to generate graph data for this object.")
             return
         
         # load annotations from gff files and format to pandas dataframe

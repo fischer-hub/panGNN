@@ -157,11 +157,14 @@ def generate_minimal_dataset():
 
 def simulate_dataset(num_genes, num_genomes, class_balance = 0.2, class_0_stdev = 260, class_0_mean = 212, class_1_stdev = 400, class_1_mean = 550):
 
-    # generate num of nodes as tensor entries
-    nodes = torch.tensor([1] * num_genes).float().unsqueeze(1)
-
     # every genome has num_genes / num_genomes amount of genes
     genome_size = int(num_genes / num_genomes)
+
+    # generate num of nodes as tensor entries
+    #nodes = torch.tensor([range(genome_size)] * num_genomes).float().unsqueeze(1)
+    id_lst = [list(range(genome_size)) for _ in range(num_genomes)]
+    id_lst = [item for sublist in id_lst for item in sublist]
+    nodes = torch.tensor(id_lst).float().unsqueeze(1)
 
     # number of positive edges is defined by the class balance argument
     # this doesnt sclae very good, the amount of edges doesnt scale linearly with the the node number

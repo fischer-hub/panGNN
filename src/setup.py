@@ -24,6 +24,7 @@ parser.add_argument('-s', '--similarity', help = 'path to the similarity score f
 parser.add_argument('--binary_threshold', help = 'binary threshold to classify output probabilities to the label class', default = 0.5, type = float)
 parser.add_argument('--dynamic_binary_threshold', help = 'dynamically calculate the binary threshold that separates the predictions best based on yuden index', action = 'store_true')
 parser.add_argument('--simulate_dataset', help = 'simulate input data instead of constructing dataset from input files', action = 'store_true')
+parser.add_argument('--categorical_node', help = 'embed node features as categorical feature embeddings using embedding layer, where category referes to the position of each gene in its genome', action = 'store_true')
 
 # train mode args
 parser.add_argument('--train',              help = 'set pangnn into training mode', action='store_true')

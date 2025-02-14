@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from src.plot import plot_loss_accuracy, plot_graph, plot_simscore_class, plot_logit_distribution, plot_union_graph, plot_simscore_distribution_by_class
+from src.plot import plot_loss_accuracy, plot_graph, plot_simscore_class, plot_logit_distribution, plot_union_graph, plot_simscore_distribution_by_class, plot_umap_pca
 from src.setup import log, args
 import torch, os, random, datetime, time
 from torch_geometric.data import Data
@@ -40,12 +40,14 @@ edge_feature_dim = 128
 if not args.simulate_dataset:
     log.info('Simulating dataset.')
     num_genomes = len(args.annotation)
-    dataset = UnionGraphDataset(args.annotation, args.similarity, args.ribap_groups, args.neighbours, split=(0.8, 0.2), categorical_nodes = True) if args.train else HomogenousDataset(args.annotation, args.similarity, args.neighbours)
+    dataset = UnionGraphDataset(args.annotation, args.similarity, args.ribap_groups, args.neighbours, split=(0.8, 0.2), categorical_nodes = args.categorical_node) if args.train else HomogenousDataset(args.annotation, args.similarity, args.neighbours)
     #dataset.generate_graph_data()
 else:
-    num_genomes = 20
+    num_genomes = 3
     dataset  = UnionGraphDataset()
-    dataset.simulate_dataset(1100000, num_genomes, 0.15)
+    dataset.simulate_dataset(2000, num_genomes, 0.15)
+
+
 
 
 #print(dataset.train.edge_attr.max())
@@ -53,7 +55,6 @@ else:
 #dataset = generate_minimal_dataset()
 #dataset.train = generate_minimal_dataset()
 #dataset.test = generate_minimal_dataset()
-
 #plot_union_graph(dataset, os.path.join('plots', 'union_graph.png'))
 
 

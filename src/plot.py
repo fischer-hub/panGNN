@@ -12,7 +12,19 @@ def plot_umap_pca(dataset, path = os.path.join('plots', 'umap.png')):
     umap_model = umap.UMAP(n_components=3, random_state=42)
     dist = []
     for origin_node, target_node in zip(dataset.test.edge_index[0], dataset.test.edge_index[1]):
-        dist.append(abs(dataset.test.x[origin_node] - dataset.test.x[target_node]) * 10000)
+        dist.append(abs(dataset.test.x[origin_node] - dataset.test.x[target_node]))
+
+    """
+    plt.figure()
+    plt.scatter(list(dataset.test.edge_attr), dist, alpha=0.7, c=dataset.test.y, cmap='coolwarm', edgecolor='k')
+
+    # Add labels and title
+    plt.xlabel("similarity score")
+    plt.ylabel("absolute difference in gene position")
+    plt.title("similarty score by gene position difference")
+    plt.legend()
+
+    plt.show()   """  
 
     #log.info(len(dataset.test.edge_attr), len(dist))
     edge_features = np.column_stack((dataset.test.edge_attr, dist))  # Shape: [num_edges, 2]

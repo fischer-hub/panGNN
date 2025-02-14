@@ -125,19 +125,26 @@ class AlternateGCN(torch.nn.Module):
         #nodes = self.activation_fct(nodes)
         # convolute over union graph edges
         nodes = self.conv_hidden(nodes, graph.union_edge_index)
-        nodes = self.activation_fct(nodes)
         log.debug('Passing union graph data to convolution layer 2..')
         # convolute over similarity edges
         nodes = self.conv_hidden(nodes, graph.edge_index, graph.edge_attr)
-        #nodes = self.activation_fct(nodes)
-        # convolute over union graph edges
+        nodes = self.conv_hidden(nodes, graph.union_edge_index)
+
+        nodes = self.conv_hidden(nodes, graph.edge_index, graph.edge_attr)
+        nodes = self.conv_hidden(nodes, graph.union_edge_index)
+        
+        nodes = self.conv_hidden(nodes, graph.edge_index, graph.edge_attr)
+        nodes = self.conv_hidden(nodes, graph.union_edge_index)
+
+        nodes = self.conv_hidden(nodes, graph.edge_index, graph.edge_attr)
         nodes = self.conv_out(nodes, graph.union_edge_index)
         nodes = self.activation_fct(nodes)
+
         log.debug(f"Outputting nodes to decode function of shape: {nodes.shape}\n{nodes}")
 
-        #link_predictions = self.decode(nodes, graph.edge_index)
-        concat_node_embeddings = torch.cat((nodes[graph.edge_index[0]], nodes[graph.edge_index[1]]), dim = 1)
-        link_predictions = self.mlp(concat_node_embeddings).squeeze(-1)
+        link_predictions = self.decode(nodes, graph.edge_index)
+        #concat_node_embeddings = torch.cat((nodes[graph.edge_index[0]], nodes[graph.edge_index[1]]), dim = 1)
+        #link_predictions = self.mlp(concat_node_embeddings).squeeze(-1)
         #print(link_predictions)
 
         if not True:
