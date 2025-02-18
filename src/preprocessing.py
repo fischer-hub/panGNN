@@ -2,7 +2,7 @@ import pickle, os, torch, time
 import pandas as pd
 from rich.progress import track, Progress, Console
 from src.setup import log, args
-
+import numpy as np
 
 def build_adjacency_vectors(num_neighbours, gene_id_lst):
 
@@ -450,7 +450,54 @@ def load_similarity_score(similarity_score_file):
     sim_score_dict = (
     sim_score_df.groupby('query')
                 .apply(lambda x: dict(zip(x['target'], x['bits'])))
+                # uncomment to replace sim scores with percent identity between genes
                 #.apply(lambda x: dict(zip(x['target'], x['pident'])))
                 .to_dict())
     
     return sim_score_dict
+
+
+
+def normalize_sim_scores(sim_score_dict, t = 1):
+
+    normalized_dict = {}
+
+    for origin_gene in sim_score_dict:
+
+        sub_dict_lst = []
+        genome_ids_seen = []
+        sub_dict = {}
+        denominator = 0
+
+        current_genome_ids = set([id.split('_') for id in origin_gene.keys()])
+
+        # seleect one genome to observe candidates from
+        for current_genome_id in current_genome_ids:
+
+            # save genome id so we dont check it twice later
+            genome_ids_seen.append(current_genome_id)
+
+            # write candidates to dict and calculate their probability denominator
+            for target_gene, sim_score in zip(origin_gene.keys(), origin_gene.values()):
+
+                if current_genome_id in target_gene:
+                    sub_dict.update({target_gene: sim_score})
+                    denominator += np.exp(-t * sim_score)
+            
+            for gene_id, sim_score in zip(sub_dict.keys(), sub_dict.values()):
+                sub_dict[gene_id] = np.exp(-t * sim_score) / denominator
+            
+            sub_dict_lst.append(sub_dict)
+        
+        for sub_dict in sub_dict_lst:
+            normalized_dict.update(sub_dict)
+
+
+
+
+            
+
+
+
+    print(sim_score_dict)
+    quit()

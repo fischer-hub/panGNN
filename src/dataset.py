@@ -1,4 +1,4 @@
-from src.preprocessing import load_gff, load_similarity_score, load_ribap_groups, build_edge_index, map_edge_weights, map_labels_to_edge_index, construct_neighbour_lst, generate_neighbour_edge_features, build_adjacency_vectors
+from src.preprocessing import load_gff, load_similarity_score, load_ribap_groups, build_edge_index, map_edge_weights, map_labels_to_edge_index, construct_neighbour_lst, generate_neighbour_edge_features, build_adjacency_vectors, normalize_sim_scores
 from src.setup import log, args
 from src.helper import concat_graph_data, simulate_dataset, generate_minimal_dataset, sub_sample_graph_edges
 import torch, os, pickle, random
@@ -290,6 +290,7 @@ class UnionGraphDataset(Dataset):
         #self.neighbour_lst = construct_neighbour_lst(num_genes, self.num_neighbours)
         
         self.sim_score_dict = load_similarity_score(similarity_score_file)
+        self.sim_score_dict = normalize_sim_scores(self.sim_score_dict)
 
         if ribap_groups_file:
             # load holy ribap table to generate labels for test data set
@@ -318,7 +319,7 @@ class UnionGraphDataset(Dataset):
         with Console().status("Building edge index..") as status:
             edge_index_ts = build_edge_index(self.sim_score_dict, gene_id_integer_dict, fully_connected = False)
         log.info('Successfully built edge index')
-        
+
         with Console().status("Mapping edge weights to respective edge index positions..") as status:
             edge_weight_ts = map_edge_weights(edge_index_ts, self.sim_score_dict, gene_str_ids_lst, use_cache=False) #torch.randn((num_genes/2, edge_feature_dim))  # Edge 
         log.info('Successfully mapped weights to the edge index')
