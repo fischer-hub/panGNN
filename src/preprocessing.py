@@ -458,46 +458,60 @@ def load_similarity_score(similarity_score_file):
 
 
 
-def normalize_sim_scores(sim_score_dict, t = 1):
+def normalize_sim_scores(sim_score_dict, t = 1, epsilon=1e-8):
 
     normalized_dict = {}
 
-    for origin_gene in sim_score_dict:
+    for origin_gene in sim_score_dict.keys():
 
         sub_dict_lst = []
         genome_ids_seen = []
         sub_dict = {}
         denominator = 0
+        candidate_dict = sim_score_dict[origin_gene]
 
-        current_genome_ids = set([id.split('_') for id in origin_gene.keys()])
+        current_genome_ids = set([id.split('_')[0] for id in candidate_dict.keys()])
 
         # seleect one genome to observe candidates from
         for current_genome_id in current_genome_ids:
+
+            # if we already seen this genome id, skip interation
+            if current_genome_id in genome_ids_seen:
+                continue
 
             # save genome id so we dont check it twice later
             genome_ids_seen.append(current_genome_id)
 
             # write candidates to dict and calculate their probability denominator
-            for target_gene, sim_score in zip(origin_gene.keys(), origin_gene.values()):
+            for target_gene, sim_score in zip(candidate_dict.keys(), candidate_dict.values()):
 
-                if current_genome_id in target_gene:
-                    sub_dict.update({target_gene: sim_score})
-                    denominator += np.exp(-t * sim_score)
-            
+                # if gene is from genome with current genome id and not from the origin genome add to dict
+                if current_genome_id in target_gene:# and current_genome_id not in origin_gene:
+                    try:
+
+                        sub_dict.update({target_gene: sim_score})
+                        denominator += np.exp(-t * sim_score)
+                    except Exception as e:
+                        print(f"{sim_score}, {denominator}, {e}")
+
+            # divide every exponentiated score by the sum of the e. scores of the other candidates (plus epsilon to avoid division by zero)                
             for gene_id, sim_score in zip(sub_dict.keys(), sub_dict.values()):
-                sub_dict[gene_id] = np.exp(-t * sim_score) / denominator
+                sub_dict[gene_id] = np.exp(-t * sim_score) / (denominator)
+
+
             
             sub_dict_lst.append(sub_dict)
+            denominator = 0
         
-        for sub_dict in sub_dict_lst:
-            normalized_dict.update(sub_dict)
+        sub_dict = {}
+        for mydict in sub_dict_lst:
+            sub_dict.update(mydict)
+        
+        normalized_dict[origin_gene] = sub_dict
 
-
-
-
-            
-
-
-
-    print(sim_score_dict)
+    # sanity check, is are all genes still in the dict, are all scores in range [0,1]?
+    for gene_id in sim_score_dict.keys():
+        assert len(sim_score_dict[gene_id]) == len(normalized_dict[gene_id]), f"Missing normalized score for gene pair ({gene_id}[{len(normalized_dict[gene_id])}], {sim_score_dict[gene_id]}[{len(normalized_dict[gene_id])}])"
+        assert max(normalized_dict[gene_id].values()) <= 1 and min(normalized_dict[gene_id].values()) >= 0, f"Probability score for candidate out of range [0,1] for gene {gene_id}: {normalized_dict[gene_id].values()}"
+    print(normalized_dict)
     quit()
