@@ -458,9 +458,10 @@ def load_similarity_score(similarity_score_file):
 
 
 
-def normalize_sim_scores(sim_score_dict, t = 1):
+def normalize_sim_scores(sim_score_dict, t = 0.5, epsilon = 1e-8):
     
     normalized_dict = {}
+    empty_dict_ids = []
 
     for origin_gene in sim_score_dict.keys():
 
@@ -475,8 +476,8 @@ def normalize_sim_scores(sim_score_dict, t = 1):
 
             for candidate_id, score in sim_score_dict[origin_gene].items():
                 
-                if candidate_genome_id in candidate_id:
-                    # this might cause an underflow in np.exp depending on how 
+                if candidate_genome_id in candidate_id and candidate_id not in origin_gene:
+                    # this might cause an underflow in np.exp depending on how
                     # high the score is and how big t is which results in nan in 
                     # the division if there are no other scores adding to the sum
                     # in which case the normalized score will be set to 1
@@ -485,9 +486,9 @@ def normalize_sim_scores(sim_score_dict, t = 1):
                     genome_pair_dict.update({candidate_id: exp_score})
             
             # all candidates with the current genome id are in the genome_pair_dict
-            
+            # add epsilon for numeric stability            
             for candidate_id, exp_score in genome_pair_dict.items():
-                normalized_sim_score = exp_score / denominator
+                normalized_sim_score = (exp_score / denominator) + epsilon
                 genome_pair_dict[candidate_id] = normalized_sim_score if not np.isnan(normalized_sim_score) else 1
             
             # all scores from the current genome are normalized
@@ -497,11 +498,18 @@ def normalize_sim_scores(sim_score_dict, t = 1):
         for d in dict_lst:
             origin_gene_dict.update(d)
 
-        normalized_dict[origin_gene] = origin_gene_dict
+        # if dict is empty, skip this gene (e.g. it only holds sim scores to itself)
+        if origin_gene_dict:
+            normalized_dict[origin_gene] = origin_gene_dict
+        else: 
+            empty_dict_ids.append(origin_gene)
 
     # sanity check, is are all genes still in the dict, are all scores in range [0,1]?
     for gene_id in sim_score_dict.keys():
-        assert len(sim_score_dict[gene_id]) == len(normalized_dict[gene_id]), f"Missing normalized score for gene pair ({gene_id}[{len(normalized_dict[gene_id])}], {sim_score_dict[gene_id]}[{len(normalized_dict[gene_id])}])"
-        assert max(normalized_dict[gene_id].values()) <= 1 and min(normalized_dict[gene_id].values()) >= 0, f"Probability score for candidate out of range [0,1] for gene {gene_id}: {normalized_dict[gene_id].values()}"
-    print(normalized_dict)
-    quit()
+        if gene_id in normalized_dict:
+            # length of each candidate dict should be old length -1 since we removed self comparisons
+            assert len(sim_score_dict[gene_id]) == len(normalized_dict[gene_id]) + 1, f"Missing normalized score for gene pair ({gene_id}: {normalized_dict[gene_id].keys()}[{len(normalized_dict[gene_id])}], {sim_score_dict[gene_id].keys()}[{len(sim_score_dict[gene_id])}])"
+            assert max(normalized_dict[gene_id].values()) <= (1 + epsilon) and min(normalized_dict[gene_id].values()) >= epsilon, f"Probability score for candidate out of range [0,1] for gene {gene_id}: {normalized_dict[gene_id].values()}"
+
+    log.info(f"Normalized similarity scores between gene candidate with loss of {len(empty_dict_ids)} genes in total, e.g. due to only having self comparisons.")
+    return normalized_dict

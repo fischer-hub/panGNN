@@ -16,14 +16,8 @@ from src.helper import generate_minimal_dataset, simulate_dataset, sub_sample_gr
 from sklearn.metrics import roc_curve, auc
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
-###################
-### ENTRY POINT ###
-###################
-
-
 
 # low embedding dim will reduce risk of overfitting but may prevent model form learning nuanced patterns
-# we later concat the embeddings of each gene ID (node) with its neighbouring gene ID embedding -> 3 * embedding dim
 gene_id_embedding_dim = 64
 
 # more dims
@@ -32,22 +26,17 @@ hidden_dim = 64
 # this (the edge features) later holds the similarity bit score of MMSeqs2 clustering for each two gene nodes connected by an edge
 edge_feature_dim = 128
 
-#batch = torch.zeros(num_genes, dtype=torch.long)  # Batch vector for mini-batches if needed
-
-#simuoated_dataset = generate_data(20000, 5, 5, 0.5, 0.5, 0.02)
 
 #dataset = HomogenousDataset(args.annotation, args.similarity, args.ribap_groups, args.neighbours) if args.train else HomogenousDataset(args.annotation, args.similarity, args.neighbours)
 if not args.simulate_dataset:
     log.info('Simulating dataset.')
     num_genomes = len(args.annotation)
-    dataset = UnionGraphDataset(args.annotation, args.similarity, args.ribap_groups, args.neighbours, split=(0.8, 0.2), categorical_nodes = args.categorical_node) if args.train else HomogenousDataset(args.annotation, args.similarity, args.neighbours)
+    dataset = UnionGraphDataset(args.annotation, args.similarity, args.ribap_groups, args.neighbours, split=(0.6, 0.4), categorical_nodes = args.categorical_node) if args.train else HomogenousDataset(args.annotation, args.similarity, args.neighbours)
     #dataset.generate_graph_data()
 else:
     num_genomes = 3
     dataset  = UnionGraphDataset()
     dataset.simulate_dataset(2000, num_genomes, 0.15)
-
-
 
 
 #print(dataset.train.edge_attr.max())
@@ -141,7 +130,7 @@ elif args.train:
                 labels = batch[0].y if isinstance(batch, tuple) else batch.y
                 class_balance_factor = (labels == 0.).sum()/labels.sum()
                 criterion = torch.nn.BCEWithLogitsLoss(pos_weight = class_balance_factor)
-                print(class_balance_factor)
+                #print(class_balance_factor)
 
                 # clear old gradients so only current batch gradients are used
                 optimizer.zero_grad()
@@ -149,6 +138,7 @@ elif args.train:
                 # this calls the models forward function since model is callable
                 log.debug('Calling forward step on current batch..')
                 output = model(batch)
+                #print(f"logits after decoding:\n{output}")
                 log.debug('Calling loss function on current batch..')
                 log.debug(batch)
                 loss = criterion(output, labels)
@@ -193,7 +183,7 @@ elif args.train:
                 binary_prediction_val = binary_prediction_val.cpu()
                 binary_prediction = binary_prediction.cpu()
                 labels = labels.cpu()
-                
+                #print(f"logits: \n{output}")
                 conf_matrix = confusion_matrix(test_labels, binary_prediction_val)
                 tn, fp, fn, tp = conf_matrix.ravel()
 

@@ -117,9 +117,11 @@ class AlternateGCN(torch.nn.Module):
     def forward(self, graph):
     
         log.debug('Passing nodes to embedding layer..')
+        #assert not torch.isnan().any()
         log.debug(graph.x.shape)
         node_embeddings = self.embedding(graph.x)
         log.debug('Passing similarity graph data to convolution layer 1..')
+        torch.set_printoptions(threshold=1_000)
         # convolute over similarity edges
         nodes = self.conv_in(node_embeddings, graph.edge_index, graph.edge_attr)
         #nodes = self.activation_fct(nodes)
@@ -130,11 +132,11 @@ class AlternateGCN(torch.nn.Module):
         nodes = self.conv_hidden(nodes, graph.edge_index, graph.edge_attr)
         nodes = self.conv_hidden(nodes, graph.union_edge_index)
 
-        nodes = self.conv_hidden(nodes, graph.edge_index, graph.edge_attr)
+        """nodes = self.conv_hidden(nodes, graph.edge_index, graph.edge_attr)
         nodes = self.conv_hidden(nodes, graph.union_edge_index)
         
         nodes = self.conv_hidden(nodes, graph.edge_index, graph.edge_attr)
-        nodes = self.conv_hidden(nodes, graph.union_edge_index)
+        nodes = self.conv_hidden(nodes, graph.union_edge_index) """
 
         nodes = self.conv_hidden(nodes, graph.edge_index, graph.edge_attr)
         nodes = self.conv_out(nodes, graph.union_edge_index)
@@ -142,9 +144,9 @@ class AlternateGCN(torch.nn.Module):
 
         log.debug(f"Outputting nodes to decode function of shape: {nodes.shape}\n{nodes}")
 
-        link_predictions = self.decode(nodes, graph.edge_index)
-        #concat_node_embeddings = torch.cat((nodes[graph.edge_index[0]], nodes[graph.edge_index[1]]), dim = 1)
-        #link_predictions = self.mlp(concat_node_embeddings).squeeze(-1)
+        #link_predictions = self.decode(nodes, graph.edge_index)
+        concat_node_embeddings = torch.cat((nodes[graph.edge_index[0]], nodes[graph.edge_index[1]]), dim = 1)
+        link_predictions = self.mlp(concat_node_embeddings).squeeze(-1)
         #print(link_predictions)
 
         if not True:

@@ -290,7 +290,7 @@ class UnionGraphDataset(Dataset):
         #self.neighbour_lst = construct_neighbour_lst(num_genes, self.num_neighbours)
         
         self.sim_score_dict = load_similarity_score(similarity_score_file)
-        self.sim_score_dict = normalize_sim_scores(self.sim_score_dict)
+        self.sim_score_dict = normalize_sim_scores(self.sim_score_dict, 1, 0.5)
 
         if ribap_groups_file:
             # load holy ribap table to generate labels for test data set
