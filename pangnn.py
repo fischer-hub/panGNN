@@ -50,8 +50,8 @@ else:
 #dataset.split_data((0.8,0.20,0), batch_size = args.batch_size)
 
 log.info(f"Constructed train dataset from node, egde and index tensors: {dataset.train}")
-#plot_logit_distribution(dataset.train.edge_weight_ts, path= os.path.join('plots', 'sim_score_distribution_unscaled.png'))
-
+plot_logit_distribution(dataset.train.edge_attr, path= os.path.join('plots', 'normalized_sim_scores_prob.png'))
+quit()
 #if args.plot_graph: plot_graph(dataset.train, os.path.join('plots', 'input_graph.png'))
 
 #plot_simscore_class(dataset.train)
@@ -243,3 +243,10 @@ elif args.train:
     write_stats_csv(stats)
     
 #write_groups_file(dataset.test, prediction_bin)
+
+# map quality Q score transform
+# test different architectures / scores on sim data, then introduce hard cases in sim data and 
+# test again, 8-20 genomes
+# shuffle gene synteny (by block), hardest case - just shuffle all gibs sampling
+# compare metrics, auc, pr, f1 etc..
+# improvement?

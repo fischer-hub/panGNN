@@ -478,10 +478,10 @@ def normalize_sim_scores(sim_score_dict, t = 0.5, epsilon = 1e-8):
                 
                 if candidate_genome_id in candidate_id and candidate_id not in origin_gene:
                     # this might cause an underflow in np.exp depending on how
-                    # high the score is and how big t is which results in nan in 
+                    # high the score is and how big t is which results in nan in
                     # the division if there are no other scores adding to the sum
                     # in which case the normalized score will be set to 1
-                    exp_score = np.exp(-t * score)
+                    exp_score = np.exp(t * score)
                     denominator += exp_score
                     genome_pair_dict.update({candidate_id: exp_score})
             
@@ -489,7 +489,10 @@ def normalize_sim_scores(sim_score_dict, t = 0.5, epsilon = 1e-8):
             # add epsilon for numeric stability            
             for candidate_id, exp_score in genome_pair_dict.items():
                 normalized_sim_score = (exp_score / denominator) + epsilon
-                genome_pair_dict[candidate_id] = normalized_sim_score if not np.isnan(normalized_sim_score) else 1
+                if normalized_sim_score < 0:
+                    print(f"probability smaller 0, you fucked up! {normalized_sim_score}")
+                    quit()
+                genome_pair_dict[candidate_id] = -10 * np.log10(1-normalized_sim_score) if not np.isnan(normalized_sim_score) else -10 * np.log10(1-1)
             
             # all scores from the current genome are normalized
             dict_lst.append(genome_pair_dict)
