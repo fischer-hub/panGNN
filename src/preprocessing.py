@@ -207,9 +207,9 @@ def map_labels_to_edge_index(edge_index, gene_ids_lst, ribap_groups_dict, use_ca
             source_gene_str_id = gene_ids_lst[source_gene_int_id]
             destination_gene_str_id = gene_ids_lst[destination_gene_int_id]
             
-            if source_gene_str_id in ribap_groups_dict and ribap_groups_dict[source_gene_str_id] == destination_gene_str_id:
+            if source_gene_str_id in ribap_groups_dict and destination_gene_str_id in ribap_groups_dict[source_gene_str_id]:
                 label_lst[edge] = 1
-            elif destination_gene_str_id in ribap_groups_dict and ribap_groups_dict[destination_gene_str_id] == source_gene_str_id:
+            elif destination_gene_str_id in ribap_groups_dict and source_gene_str_id in ribap_groups_dict[destination_gene_str_id]:
                 label_lst[edge] = 1
 
         if not os.path.isfile('data/labels.pkl') and args.cache and use_cache:
@@ -245,7 +245,15 @@ def load_ribap_groups(ribap_group_file, genome_name_lst):
                     ribap_groups_dict_tmp[row[genome_name_lst[i]]] = row[genome_name_lst[j]]
                     ribap_groups_dict_tmp[row[genome_name_lst[j]]] = row[genome_name_lst[i]]
     
-        ribap_groups_dict.update(ribap_groups_dict_tmp)
+        # TODO: this could be solved with a good pandas operation (groupby, toDict or smth)
+        for origin_gene, target_gene in ribap_groups_dict_tmp.items():
+
+            if origin_gene in ribap_groups_dict:
+                ribap_groups_dict[origin_gene].append(target_gene)
+            else:
+
+                ribap_groups_dict[origin_gene] = [target_gene]
+
 
     return ribap_groups_dict
 
@@ -458,7 +466,7 @@ def load_similarity_score(similarity_score_file):
 
 
 
-def normalize_sim_scores(sim_score_dict, t = 0.5, epsilon = 1e-8):
+def normalize_sim_scores(sim_score_dict, t = 0.5, epsilon = 1e-8, pseudo_count = 1, q_score_norm = True):
     
     normalized_dict = {}
     empty_dict_ids = []
@@ -488,11 +496,23 @@ def normalize_sim_scores(sim_score_dict, t = 0.5, epsilon = 1e-8):
             # all candidates with the current genome id are in the genome_pair_dict
             # add epsilon for numeric stability            
             for candidate_id, exp_score in genome_pair_dict.items():
-                normalized_sim_score = (exp_score / denominator) + epsilon
-                if normalized_sim_score < 0:
-                    print(f"probability smaller 0, you fucked up! {normalized_sim_score}")
-                    quit()
-                genome_pair_dict[candidate_id] = -10 * np.log10(1-normalized_sim_score) if not np.isnan(normalized_sim_score) else -10 * np.log10(1-1)
+                if q_score_norm: 
+                    softmax_prob = (exp_score / denominator)
+                else:
+                    softmax_prob = (exp_score / denominator) + epsilon
+
+                if (1-softmax_prob) < 0 and q_score_norm:
+                    print('probability below 0')
+                    softmax_prob = epsilon
+                # Q score transform
+                if q_score_norm:
+                    normalized_sim_score = -10 * np.log10(1-softmax_prob) if not np.isnan(softmax_prob) and softmax_prob != 1 else -10 * np.log10(1-epsilon)
+                    assert not np.isnan(normalized_sim_score), f"Found nan after Q score transformation for probability: {1-softmax_prob}, affected Q score: {normalized_sim_score}"
+                    assert np.isfinite(normalized_sim_score), f"Found infinite Q score transformation for probability: {1-softmax_prob}, affected Q score: {normalized_sim_score}"
+                    genome_pair_dict[candidate_id] = normalized_sim_score + pseudo_count
+                else:
+                    genome_pair_dict[candidate_id] = softmax_prob if not np.isnan(softmax_prob) else epsilon
+
             
             # all scores from the current genome are normalized
             dict_lst.append(genome_pair_dict)
@@ -512,7 +532,12 @@ def normalize_sim_scores(sim_score_dict, t = 0.5, epsilon = 1e-8):
         if gene_id in normalized_dict:
             # length of each candidate dict should be old length -1 since we removed self comparisons
             assert len(sim_score_dict[gene_id]) == len(normalized_dict[gene_id]) + 1, f"Missing normalized score for gene pair ({gene_id}: {normalized_dict[gene_id].keys()}[{len(normalized_dict[gene_id])}], {sim_score_dict[gene_id].keys()}[{len(sim_score_dict[gene_id])}])"
-            assert max(normalized_dict[gene_id].values()) <= (1 + epsilon) and min(normalized_dict[gene_id].values()) >= epsilon, f"Probability score for candidate out of range [0,1] for gene {gene_id}: {normalized_dict[gene_id].values()}"
+            
+            if q_score_norm: 
+                assert min(normalized_dict[gene_id].values()) >= pseudo_count, f"Q transformed probability for candidate out of range [pseudo_count, inf) for gene {gene_id}: {normalized_dict[gene_id].values()}"
+            else:
+                assert min(normalized_dict[gene_id].values()) >= 0 and max(normalized_dict[gene_id].values()) <= 1 + epsilon, f"Probability score for candidate out of range [0,1] for gene {gene_id}: {normalized_dict[gene_id].values()}"
 
-    log.info(f"Normalized similarity scores between gene candidate with loss of {len(empty_dict_ids)} genes in total, e.g. due to only having self comparisons.")
+
+    log.info(f"Normalized similarity scores with t = {t} between gene candidate with loss of {len(empty_dict_ids)} genes in total, e.g. due to only having self comparisons.")
     return normalized_dict

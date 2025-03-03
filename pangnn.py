@@ -51,7 +51,7 @@ else:
 
 log.info(f"Constructed train dataset from node, egde and index tensors: {dataset.train}")
 plot_logit_distribution(dataset.train.edge_attr, path= os.path.join('plots', 'normalized_sim_scores_prob.png'))
-quit()
+
 #if args.plot_graph: plot_graph(dataset.train, os.path.join('plots', 'input_graph.png'))
 
 #plot_simscore_class(dataset.train)

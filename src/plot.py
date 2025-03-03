@@ -5,6 +5,7 @@ import os, umap
 from sklearn.metrics import roc_curve, auc, PrecisionRecallDisplay, average_precision_score
 import numpy as np
 from sklearn.decomposition import PCA
+import seaborn as sns
 import torch
 
 def plot_umap_pca(dataset, path = os.path.join('plots', 'umap.png')):
@@ -219,7 +220,7 @@ def plot_logit_distribution(logits, path = os.path.join('plots', 'logit_distribu
     except Exception:
         values = logits
 
-    plt.hist(values, bins=15, range = (min(values), max(values)))
+    plt.hist(values, bins=35, range = (min(values), max(values)))
 
     plt.xlabel('Value Range')
     plt.ylabel('Frequency')
@@ -300,3 +301,53 @@ def plot_union_graph(dataset, path):
         os.mkdir(os.path.dirname(path))
         
     plt.savefig(path)
+
+
+def plot_violin_distributions(violin_dict_lst, ribap_dict, prob, path = os.path.join('plots', 'normalized_score_violin.png')):
+
+    import pandas as pd
+    print('plotting violins')
+    data = pd.DataFrame(columns=['temp', 'score', 'homolog'])
+    data = data.astype(dtype={'temp': 'str', 'score': 'float64', 'homolog': 'int64'})
+    index = 0
+
+    for idx, tup in enumerate(violin_dict_lst):
+        print(f'Preparing data for violin plots for dict {idx} of {len(violin_dict_lst)}')
+        temp, current_dict = tup
+        
+        for origin_gene, candidates in current_dict.items():
+            for target_gene, score in candidates.items():
+                
+                if origin_gene not in ribap_dict.keys():
+                    continue
+                
+                label = '1' if target_gene in ribap_dict[origin_gene] else '0'
+                data.loc[index] =  [temp, score, label]
+                assert score >= 0
+                index += 1
+
+    plt.figure(figsize=(10, 7))
+    sns.set_theme(style="whitegrid")
+    sns.violinplot(data=data, x="temp", y="score", hue="homolog", split=True, inner="quart", cut = 0)
+    plt.xlabel('Softmax Normalization Temperature Value')
+    plt.ylabel(f"Normalized Similarity {'Probability' if prob else 'Q-Score'}")
+    plt.title('Normalized Similarity Score Distributrions over Changing Temperature')
+
+    if not os.path.exists(os.path.dirname(path)):
+        os.mkdir(os.path.dirname(path))
+        
+    plt.savefig(path, dpi = 300)
+
+ 
+def plot_homolog_positions(ribap_dict, path = os.path.join('plots', 'normalized_score_violin.png')):
+    pass
+    
+    """
+    for origin_gene, target_gene in ribap_dict.items():
+
+    
+    
+    if not os.path.exists(os.path.dirname(path)):
+        os.mkdir(os.path.dirname(path))
+        
+    plt.savefig(path, dpi = 300) """

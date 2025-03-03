@@ -8,6 +8,7 @@ from scipy.sparse import csr_array
 from scipy.sparse.csgraph import connected_components
 from torch_geometric.utils.convert import to_scipy_sparse_matrix
 from torch_geometric.transforms import RemoveDuplicatedEdges
+from src.plot import plot_violin_distributions, plot_homolog_positions
 
 
 class HomogenousDataset(Dataset):
@@ -247,6 +248,7 @@ class UnionGraphDataset(Dataset):
         self.gene_str_ids_lst_val = []
         self.gene_str_int_lst_train = []
         self.gene_str_int_lst_val = []
+        self.gene_id_position_dict = {}
 
         self.categorical_nodes = categorical_nodes
         num_genes = 0
@@ -282,7 +284,7 @@ class UnionGraphDataset(Dataset):
             #self.gene_str_ids_lst_test  += list(genome_annotation_df.index)[]
             
             # for each string gene ID save its normalized position in the gff file into the dictionary
-            #self.gene_id_position_dict.update({gene: (idx / len(list(genome_annotation_df.index))) for idx, gene in enumerate(list(genome_annotation_df.index))})
+            self.gene_id_position_dict.update({gene: idx for idx, gene in enumerate(list(genome_annotation_df.index))})
 
             genome_name_lst.append(os.path.basename(gff_file).split('.')[0].replace('_RENAMED', ''))
 
@@ -290,16 +292,30 @@ class UnionGraphDataset(Dataset):
         #self.neighbour_lst = construct_neighbour_lst(num_genes, self.num_neighbours)
         
         self.sim_score_dict = load_similarity_score(similarity_score_file)
-        self.sim_score_dict = normalize_sim_scores(self.sim_score_dict, t = 1)
+
+        prob_lst = []
+        qscore_lst = []
+
+        #for temp in [0.00001, 0.0001, 0.001, 0.01, 0.1, 0.2, 0.4, 0.6, 0.8, 1, 1.5, 2, 5, 10]:
+        #    prob_lst.append((temp, normalize_sim_scores(self.sim_score_dict, t = temp, pseudo_count = 1, q_score_norm= False)))
+        #    qscore_lst.append((temp, normalize_sim_scores(self.sim_score_dict, t = temp, pseudo_count = 1, q_score_norm=True)))
+
+
+
+        self.sim_score_dict = normalize_sim_scores(self.sim_score_dict, t = 0.8, pseudo_count = 1, q_score_norm=True)
 
         if ribap_groups_file:
             # load holy ribap table to generate labels for test data set
             self.ribap_groups_dict = load_ribap_groups(ribap_groups_file, genome_name_lst)
+            plot_homolog_positions(self.ribap_groups_dict, self.gene_id_position_dict)
         else:
             self.ribap_groups_dict = None
             self.labels_ts = None
             self.class_balance = None
 
+        #plot_violin_distributions(prob_lst, self.ribap_groups_dict, prob = True, path = os.path.join('plots', 'normalized_scores_violin_prob.png'))
+        #plot_violin_distributions(qscore_lst, self.ribap_groups_dict, prob = False, path = os.path.join('plots', 'normalized_scores_violin_qscore.png'))
+        #quit()
         self.train = self.generate_graphs(self.gene_str_ids_lst_train, self.gene_str_int_lst_train)
         self.test = self.generate_graphs(self.gene_str_ids_lst_val, self.gene_str_int_lst_val)
 

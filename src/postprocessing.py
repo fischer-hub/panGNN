@@ -52,7 +52,6 @@ def write_stats_csv(stats, path = os.path.join('stats.csv')):
     with open(path, 'a') as file:
         file.write(f'\n{line}')
 
-    """
     header = ''
 
     for key in stats.keys():
@@ -63,6 +62,6 @@ def write_stats_csv(stats, path = os.path.join('stats.csv')):
         header += f'{key}, '
     
     header = header[:-1]
-    print(header) """
+    print(header)
 
 
