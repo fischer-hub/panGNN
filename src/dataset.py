@@ -239,7 +239,7 @@ class UnionGraphDataset(Dataset):
 
     Split the data points into train, test and validation sets using split_data().
     """
-    def __init__(self, gff_files = [], similarity_score_file = '', ribap_groups_file = None, num_neighbours = 1, split = (0.7, 0.3), categorical_nodes = False):
+    def __init__(self, gff_files = [], similarity_score_file = '', ribap_groups_file = None, split = (0.7, 0.3), categorical_nodes = False):
         super().__init__(root = None, transform = None, pre_transform = None, pre_filter = None)
 
         genome_annotation_df_lst = []
@@ -420,6 +420,7 @@ class UnionGraphDataset(Dataset):
         self.train = generate_minimal_dataset()
         self.test = generate_minimal_dataset()
 
+
     def graph_to(self, graph, device):
         graph.x = graph.x.to(device)
         graph.edge_index = graph.edge_index.to(device)
@@ -429,10 +430,57 @@ class UnionGraphDataset(Dataset):
 
         return graph
 
+
     def to(self, device):
         self.train = self.train.to(device)
         self.test = self.test.to(device)
         self.val = self.val.to(device)
+
+
+    def save(self, path):
+
+        save_dict = {}
+        
+        if self.train:
+            save_dict['train'] = self.train.to_dict()
+        else:
+            log.info("Did not find any training data in the dataset to be save.")
+
+        if self.test:
+            save_dict['test'] = self.test.to_dict()
+        else:
+            log.info("Did not find any test data in the dataset to be save.")
+
+        if save_dict:
+            with open(path, 'wb') as handle:
+                pickle.dump(save_dict, handle, protocol = -1)
+        else:
+            log.error("The dataset you try to save does not contain any data.")
+            quit()
+
+
+    def load(self, path):
+
+        with open(path, 'rb'):
+            load_dict = pickle.load(path)
+
+        if 'train' in load_dict:
+            self.train = load_dict['train']
+        else:
+            log.info("Did not find any training data in the dataset that is being loaded.")
+            self.train = None
+                
+        if 'test' in load_dict:
+            self.test = load_dict['test']
+        else:
+            log.info("Did not find any test data in the dataset that is being loaded.")
+            self.test = None
+
+        if not self.test and not self.train:
+            log.error("Failed to load dataset from file, check that file contains at least one of training or test data.")
+            quit()
+
+        
 
 
 
