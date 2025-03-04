@@ -209,6 +209,8 @@ elif args.train:
                     print(optimal_threshold)
                 
                 f1_val = (2*(((tp/(tp+fp))*(tp/(tp+fn)))/((tp/(tp+fp))+(tp/(tp+fn)))))
+                writer.add_scalar("F1/val", f1_val, epoch)
+
 
                 conf_matrix = confusion_matrix(labels, binary_prediction)
                 tn, fp, fn, tp = conf_matrix.ravel()

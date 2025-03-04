@@ -339,15 +339,26 @@ def plot_violin_distributions(violin_dict_lst, ribap_dict, prob, path = os.path.
     plt.savefig(path, dpi = 300)
 
  
-def plot_homolog_positions(ribap_dict, path = os.path.join('plots', 'normalized_score_violin.png')):
-    pass
+def plot_homolog_positions(ribap_dict, gene_str_int_dict, path = os.path.join('plots', 'normalized_score_violin.png')):
     
-    """
-    for origin_gene, target_gene in ribap_dict.items():
+    average_dist_lst, x, y = [], [], []
+    for origin_gene, candidate_lst in ribap_dict.items():
 
+        #distance_lst = [abs(gene_str_int_dict[origin_gene] - gene_str_int_dict[candidate]) for candidate in candidate_lst]
+        #average_dist_lst.append(sum(distance_lst) / len(distance_lst))
+
+        x += [gene_str_int_dict[origin_gene]] * len(candidate_lst)
+        y += candidate_lst
+
+    plt.figure(figsize=(8, 6))
+    plt.scatter(x, y)
+    plt.plot(x, x, color='red', linestyle='-')
+    plt.xlabel('Genomic Position of Reference Gene')
+    plt.ylabel('Genomic Position of Target Gene')
+    plt.title('Change of Homolog Positions in different Genomes')
     
     
     if not os.path.exists(os.path.dirname(path)):
         os.mkdir(os.path.dirname(path))
         
-    plt.savefig(path, dpi = 300) """
+    plt.savefig(path, dpi = 300)

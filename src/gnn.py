@@ -4,6 +4,7 @@ from torch_geometric.nn import GCNConv, ChebConv
 from src.preprocessing import combine_neighbour_embeddings
 from src.setup import log
 from torch import nn
+from src.setup import args
 
 
 # GCN class based on the example discussed in the pytorch geometric docs
@@ -56,7 +57,7 @@ class MyGCN(torch.nn.Module):
         nodes = self.conv_in(node_embeddings, edge_index, edge_weights)
         log.debug('Passing data to activation function..')
         nodes = F.relu(nodes)
-        #nodes = self.activation_fct(nodes)
+        #nodes = self.activatineighbourson_fct(nodes)
         #nodes = torch.sigmoid(nodes)
         nodes = self.conv_hidden(nodes, edge_index, edge_weights)
         nodes = F.relu(nodes)
@@ -124,19 +125,19 @@ class AlternateGCN(torch.nn.Module):
         torch.set_printoptions(threshold=1_000)
         # convolute over similarity edges
         nodes = self.conv_in(node_embeddings, graph.edge_index, graph.edge_attr)
-        #nodes = self.activation_fct(nodes)
         # convolute over union graph edges
         nodes = self.conv_hidden(nodes, graph.union_edge_index)
-        log.debug('Passing union graph data to convolution layer 2..')
-        # convolute over similarity edges
-        nodes = self.conv_hidden(nodes, graph.edge_index, graph.edge_attr)
-        nodes = self.conv_hidden(nodes, graph.union_edge_index)
+        nodes = self.activation_fct(nodes)
 
-        """nodes = self.conv_hidden(nodes, graph.edge_index, graph.edge_attr)
-        nodes = self.conv_hidden(nodes, graph.union_edge_index)
-        
-        nodes = self.conv_hidden(nodes, graph.edge_index, graph.edge_attr)
-        nodes = self.conv_hidden(nodes, graph.union_edge_index) """
+        for layer in range(max(args.neighbours-1, 1)):
+
+            log.debug(f'Passing union graph data to convolution layer {layer + 1}..')
+            # convolute over similarity edges
+            nodes = self.conv_hidden(nodes, graph.edge_index, graph.edge_attr)
+            # convolute over union graph edges
+            nodes = self.conv_hidden(nodes, graph.union_edge_index)
+            nodes = self.activation_fct(nodes)
+
 
         nodes = self.conv_hidden(nodes, graph.edge_index, graph.edge_attr)
         nodes = self.conv_out(nodes, graph.union_edge_index)
