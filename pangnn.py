@@ -13,9 +13,12 @@ from src.simulate import generate_data
 from sklearn.metrics import confusion_matrix
 from src.postprocessing import write_groups_file, write_stats_csv
 from src.helper import generate_minimal_dataset, simulate_dataset, sub_sample_graph_edges
-from sklearn.metrics import roc_curve, auc
+from sklearn.metrics import roc_curve, auc, average_precision_score
 from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.utils.tensorboard import SummaryWriter
 
+
+writer = SummaryWriter()
 
 # low embedding dim will reduce risk of overfitting but may prevent model form learning nuanced patterns
 gene_id_embedding_dim = 64
@@ -161,7 +164,8 @@ elif args.train:
                 epoch_correct += (binary_prediction == labels).sum().item()  # Count correct predictions
                 epoch_total += len(labels)  # Total number of samples in the batch
                 batch_accuracy = (binary_prediction == labels).sum().item() / len(labels)  # Calculate accuracy
-
+                writer.add_scalar("Loss/train", loss, epoch)
+                writer.add_scalar("Acc/train", ((binary_prediction == labels).sum().item()) / len(labels), epoch)
                 """                 for name, param in model.named_parameters():
                                     if param.grad is not None:
                                         print(f'{name}: {param.grad.mean()}') """
@@ -174,10 +178,12 @@ elif args.train:
                 test_labels = dataset.test[0].y if isinstance(dataset.test, tuple) else dataset.test.y
 
                 val_loss = criterion(output, test_labels)
+                writer.add_scalar("Loss/val", val_loss, epoch)
                 scheduler.step(val_loss)
                 probabilities = torch.sigmoid(output)
                 binary_prediction_val = (probabilities >= binary_th).int()
                 val_acc = (binary_prediction_val == test_labels).sum().item() / len(test_labels)
+                writer.add_scalar("Acc/val", val_acc, epoch)
                 
                 test_labels = test_labels.cpu()
                 binary_prediction_val = binary_prediction_val.cpu()
@@ -189,7 +195,10 @@ elif args.train:
 
                 fpr, tpr, thresholds = roc_curve(test_labels, probabilities)
                 roc_auc = auc(fpr, tpr)
+                average_precision = average_precision_score(test_labels, probabilities)
                 print('AUC', roc_auc)
+                writer.add_scalar("ROC_AUC/val", roc_auc, epoch)
+                writer.add_scalar("AP/val", average_precision, epoch)
                 
                 f1_val = (2*(((tp/(tp+fp))*(tp/(tp+fn)))/((tp/(tp+fp))+(tp/(tp+fn)))))
 
@@ -243,7 +252,7 @@ elif args.train:
     write_stats_csv(stats)
     
 #write_groups_file(dataset.test, prediction_bin)
-
+writer.flush()
 # map quality Q score transform
 # test different architectures / scores on sim data, then introduce hard cases in sim data and 
 # test again, 8-20 genomes
