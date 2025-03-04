@@ -25,6 +25,9 @@ parser.add_argument('--binary_threshold', help = 'binary threshold to classify o
 parser.add_argument('--dynamic_binary_threshold', help = 'dynamically calculate the binary threshold that separates the predictions best based on yuden index', action = 'store_true')
 parser.add_argument('--simulate_dataset', help = 'simulate input data instead of constructing dataset from input files', action = 'store_true')
 parser.add_argument('--categorical_node', help = 'embed node features as categorical feature embeddings using embedding layer, where category referes to the position of each gene in its genome', action = 'store_true')
+parser.add_argument('--q_score_transform',  help = 'transform normalized edge probabilities between homolog candidates to Q-score like values before training [default: True]', action = 'store_false')
+parser.add_argument('--normalization_temp', help = 'temperature value for similarity score normalization', default = 0.8)
+parser.add_argument('--tb_comment',         help = 'comment to append to current run for evaluation with tensorboard', default = '')
 
 # train mode args
 parser.add_argument('--train',              help = 'set pangnn into training mode', action='store_true')

@@ -18,7 +18,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.tensorboard import SummaryWriter
 
 
-writer = SummaryWriter()
+writer = SummaryWriter(comment = args.tb_comment)
 
 # low embedding dim will reduce risk of overfitting but may prevent model form learning nuanced patterns
 gene_id_embedding_dim = 64
@@ -197,8 +197,16 @@ elif args.train:
                 roc_auc = auc(fpr, tpr)
                 average_precision = average_precision_score(test_labels, probabilities)
                 print('AUC', roc_auc)
+                print('AP', average_precision)
                 writer.add_scalar("ROC_AUC/val", roc_auc, epoch)
                 writer.add_scalar("AP/val", average_precision, epoch)
+
+                if args.dynamic_binary_threshold:
+                    youden_index = tpr - fpr
+                    optimal_threshold = thresholds[youden_index.argmax()]
+                    writer.add_scalar("Optimal_Binary_Threshold/val", optimal_threshold, epoch)
+
+                    print(optimal_threshold)
                 
                 f1_val = (2*(((tp/(tp+fp))*(tp/(tp+fn)))/((tp/(tp+fp))+(tp/(tp+fn)))))
 

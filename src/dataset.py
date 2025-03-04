@@ -302,7 +302,7 @@ class UnionGraphDataset(Dataset):
 
 
 
-        self.sim_score_dict = normalize_sim_scores(self.sim_score_dict, t = 0.8, pseudo_count = 1, q_score_norm=True)
+        self.sim_score_dict = normalize_sim_scores(self.sim_score_dict, t = args.normalization_temp, pseudo_count = 1, q_score_norm=args.q_score_transform)
 
         if ribap_groups_file:
             # load holy ribap table to generate labels for test data set

@@ -499,14 +499,14 @@ def normalize_sim_scores(sim_score_dict, t = 0.5, epsilon = 1e-8, pseudo_count =
                 if q_score_norm: 
                     softmax_prob = (exp_score / denominator)
                 else:
-                    softmax_prob = (exp_score / denominator) + epsilon
+                    softmax_prob = max((exp_score / denominator), epsilon)
 
                 if (1-softmax_prob) < 0 and q_score_norm:
                     print('probability below 0')
                     softmax_prob = epsilon
                 # Q score transform
                 if q_score_norm:
-                    normalized_sim_score = -10 * np.log10(1-softmax_prob) if not np.isnan(softmax_prob) and softmax_prob != 1 else -10 * np.log10(1-epsilon)
+                    normalized_sim_score = -10 * np.log10(max(1-softmax_prob, epsilon)) if not np.isnan(softmax_prob) and softmax_prob != 1 else -10 * np.log10(1-epsilon)
                     assert not np.isnan(normalized_sim_score), f"Found nan after Q score transformation for probability: {1-softmax_prob}, affected Q score: {normalized_sim_score}"
                     assert np.isfinite(normalized_sim_score), f"Found infinite Q score transformation for probability: {1-softmax_prob}, affected Q score: {normalized_sim_score}"
                     genome_pair_dict[candidate_id] = normalized_sim_score + pseudo_count
