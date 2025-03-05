@@ -18,7 +18,6 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.tensorboard import SummaryWriter
 
 
-writer = SummaryWriter(comment = args.tb_comment)
 
 # low embedding dim will reduce risk of overfitting but may prevent model form learning nuanced patterns
 gene_id_embedding_dim = 64
@@ -32,11 +31,16 @@ edge_feature_dim = 128
 
 #dataset = HomogenousDataset(args.annotation, args.similarity, args.ribap_groups, args.neighbours) if args.train else HomogenousDataset(args.annotation, args.similarity, args.neighbours)
 if not args.simulate_dataset:
-    log.info('Simulating dataset.')
-    num_genomes = len(args.annotation)
-    dataset = UnionGraphDataset(args.annotation, args.similarity, args.ribap_groups, args.neighbours, split=(0.6, 0.4), categorical_nodes = args.categorical_node) if args.train else HomogenousDataset(args.annotation, args.similarity, args.neighbours)
+    if args.from_pickle:
+        dataset  = UnionGraphDataset()
+        dataset.load(args.from_pickle)
+        num_genomes = 'number of genomes not available since dataset was loaded from disk'
+    else:
+        num_genomes = len(args.annotation)
+        dataset = UnionGraphDataset(args.annotation, args.similarity, args.ribap_groups, split=(0.6, 0.4), categorical_nodes = args.categorical_node) if args.train else HomogenousDataset(args.annotation, args.similarity)
     #dataset.generate_graph_data()
 else:
+    log.info('Simulating dataset.')
     num_genomes = 3
     dataset  = UnionGraphDataset()
     dataset.simulate_dataset(2000, num_genomes, 0.15)
@@ -54,7 +58,6 @@ else:
 
 log.info(f"Constructed train dataset from node, egde and index tensors: {dataset.train}")
 plot_logit_distribution(dataset.train.edge_attr, path= os.path.join('plots', 'normalized_sim_scores_prob.png'))
-
 #if args.plot_graph: plot_graph(dataset.train, os.path.join('plots', 'input_graph.png'))
 
 #plot_simscore_class(dataset.train)
@@ -84,7 +87,7 @@ recall_lst = []
 binary_th = args.binary_threshold
 
 start = time.time()
-
+writer = SummaryWriter(comment = args.tb_comment)
 
 if not args.train or os.path.exists(args.model_args):
     if os.path.exists(args.model_args):
@@ -200,6 +203,8 @@ elif args.train:
                 print('AP', average_precision)
                 writer.add_scalar("ROC_AUC/val", roc_auc, epoch)
                 writer.add_scalar("AP/val", average_precision, epoch)
+                writer.add_scalar("learning_rate", optimizer.param_groups[0]['lr'], epoch)
+                
 
                 if args.dynamic_binary_threshold:
                     youden_index = tpr - fpr
@@ -217,7 +222,10 @@ elif args.train:
                 f1_train = (2*(((tp/(tp+fp))*(tp/(tp+fn)))/((tp/(tp+fp))+(tp/(tp+fn)))))
 
                 precision_lst.append(tp/(tp+fp))
+                writer.add_scalar("precision/val", tp/(tp+fp), epoch)
+
                 recall_lst.append(tp/(tp+fn))
+                writer.add_scalar("recall/val", tp/(tp+fn), epoch)
                 #f1_val = 0 
                 #f1_train = 0
 

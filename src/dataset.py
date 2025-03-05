@@ -302,7 +302,7 @@ class UnionGraphDataset(Dataset):
 
 
 
-        self.sim_score_dict = normalize_sim_scores(self.sim_score_dict, t = args.normalization_temp, pseudo_count = 1, q_score_norm=args.q_score_transform)
+        self.sim_score_dict = normalize_sim_scores(self.sim_score_dict, t = args.normalization_temp, pseudo_count = 1, q_score_norm=args.no_q_score_transform)
 
         if ribap_groups_file:
             # load holy ribap table to generate labels for test data set
@@ -376,8 +376,8 @@ class UnionGraphDataset(Dataset):
 
         return graph_data
     
-
-    def sub_sample_graph_edges(self, graph, fraction = 0.8):
+    # TODO: this function is moved to src.helper right??
+    def sub_sample_graph_edges(self, graph, fraction = 0.8, sample_pos_edges = False):
         """Subsample graph by sampling from the edge, weight, and label tensors, effectively removing 1-fraction edges from the resulting graph.
 
         Args:
@@ -387,7 +387,27 @@ class UnionGraphDataset(Dataset):
             PyG Data object: The randomly subsampled graph
         """
         num_neighbour_edges = len(graph.union_edge_index[0]) - len(graph.y)
-        sim_indices = random.sample(range(0, len(graph.y)), int(len(graph.y) * fraction))
+        
+        if sample_pos_edges:
+            
+            sim_indices = random.sample(range(0, len(graph.y)), int(len(graph.y) * fraction))
+            sim_labels = torch.index_select(graph.y, 0, torch.tensor(sim_indices))
+        
+        # dont leave pos edges behind, sample the counter fraction from edges we leave behind but only sample from the negative indices
+        # then use the inverse tensor as batch
+        else:
+
+            assert (graph.y.sum() / len(graph.y)) <= fraction, f'Trying to subsample {fraction} of the edges in the data when only {graph.y.sum() / len(graph.y)} of edges are positive is not possible when sample_pos_edges is set to False, increase positive edges in data or decrease subsampling fraction'
+
+            negative_labels_indices = torch.nonzero(graph.y == 0, as_tuple=True)[0]
+            counter_frac_sim_indices = random.sample(negative_labels_indices, int(len(graph.y) * (1 - fraction)))
+            all_indices = torch.arange(len(graph.y))
+            inverse_indices = all_indices[~torch.isin(all_indices, counter_frac_sim_indices)]
+            sim_labels = torch.index_select(graph.y, 0, torch.tensor(inverse_indices))
+            print('pos edges: ', graph.y.sum())
+            
+            assert (graph.y.sum() - sim_labels.sum()) <= 2, f'A total of {graph.y.sum() - sim_labels.sum()} positive edges have been removed during the graph subsampling but at most 2 are allowed when sample_pos_edges is set to False.'
+
         # maybe we should sample from the additional edges in the union, such that the edges in the sim part are the same in every batch?
         union_indices = sim_indices + random.sample(range(len(graph.y), len(graph.y) + num_neighbour_edges), int(num_neighbour_edges * fraction))
 
@@ -400,7 +420,6 @@ class UnionGraphDataset(Dataset):
         union_edge_index = torch.stack((union_edge_index_origin, union_edge_index_target))
         sim_edge_weights = torch.index_select(graph.edge_attr, 0, torch.tensor(sim_indices))
         #union_edge_weights = torch.index_select(self.union_edge_weight_ts, 0, torch.tensor(union_indices))
-        sim_labels = torch.index_select(graph.y, 0, torch.tensor(sim_indices))
         #union_labels = torch.index_select(self.labels_ts, 0, torch.tensor(union_indices))
         
         graph = Data(graph.x, sim_edge_index, sim_edge_weights.float(), sim_labels)
@@ -440,6 +459,9 @@ class UnionGraphDataset(Dataset):
     def save(self, path):
 
         save_dict = {}
+
+        if os.path.exists(path):
+            log.warning('')
         
         if self.train:
             save_dict['train'] = self.train.to_dict()
@@ -461,17 +483,22 @@ class UnionGraphDataset(Dataset):
 
     def load(self, path):
 
-        with open(path, 'rb'):
-            load_dict = pickle.load(path)
+        if os.path.exists(path):
+            log.info(f'Loading pickled dataset from file {path}..')
+            with open(path, 'rb') as handle:
+                load_dict = pickle.load(handle)
+        else:
+            log.info(f'File {path} doesn\'t exists, exiting.')
+            quit()        
 
         if 'train' in load_dict:
-            self.train = load_dict['train']
+            self.train = Data().from_dict(load_dict['train'])
         else:
             log.info("Did not find any training data in the dataset that is being loaded.")
             self.train = None
                 
         if 'test' in load_dict:
-            self.test = load_dict['test']
+            self.test = Data().from_dict(load_dict['test'])
         else:
             log.info("Did not find any test data in the dataset that is being loaded.")
             self.test = None

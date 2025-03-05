@@ -6,7 +6,7 @@ from torch_geometric.data import Data
 
 
 
-def sub_sample_graph_edges(graph, device, fraction = 0.8):
+def sub_sample_graph_edges(graph, device, fraction = 0.8, sample_pos_edges = False):
     """Subsample graph by sampling from the edge, weight, and label tensors, effectively removing 1-fraction edges from the resulting graph.
 
     Args:
@@ -17,7 +17,28 @@ def sub_sample_graph_edges(graph, device, fraction = 0.8):
     """
     graph.cpu()
     num_neighbour_edges = len(graph.union_edge_index[0]) - len(graph.y)
-    sim_indices = random.sample(range(0, len(graph.y)), int(len(graph.y) * fraction))
+    
+    if sample_pos_edges:
+        
+        sim_indices = random.sample(range(0, len(graph.y)), int(len(graph.y) * fraction))
+        sim_labels = torch.index_select(graph.y, 0, torch.tensor(sim_indices))
+    
+    # dont leave pos edges behind, sample the counter fraction from edges we leave behind but only sample from the negative indices
+    # then use the inverse tensor as batch
+    else:
+
+        log.debug('Keeping homolog gene structure intact during graph subsampling.')
+        assert (graph.y.sum() / len(graph.y)) <= fraction, f'Trying to subsample {fraction} of the edges in the data when only {graph.y.sum() / len(graph.y)} of edges are positive is not possible when sample_pos_edges is set to False, increase positive edges in data or decrease subsampling fraction'
+
+        negative_labels_indices = list(torch.nonzero(graph.y == 0, as_tuple=True)[0])
+        counter_frac_sim_indices = torch.tensor(random.sample(negative_labels_indices, int(len(graph.y) * (1 - fraction))))
+        all_indices = torch.arange(len(graph.y))
+        inverse_indices = all_indices[~torch.isin(all_indices, counter_frac_sim_indices)]
+        sim_indices = list(inverse_indices)
+        sim_labels = torch.index_select(graph.y, 0, torch.tensor(inverse_indices))
+        
+        assert (graph.y.sum() - sim_labels.sum()) < 2, f'A total of {graph.y.sum() - sim_labels.sum()} positive edges have been removed during the graph subsampling but at most 2 are allowed when sample_pos_edges is set to False.'
+
     # maybe we should sample from the additional edges in the union, such that the edges in the sim part are the same in every batch?
     union_indices = sim_indices + random.sample(range(len(graph.y), len(graph.y) + num_neighbour_edges), int(num_neighbour_edges * fraction))
 

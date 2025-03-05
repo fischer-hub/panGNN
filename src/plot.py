@@ -339,7 +339,7 @@ def plot_violin_distributions(violin_dict_lst, ribap_dict, prob, path = os.path.
     plt.savefig(path, dpi = 300)
 
  
-def plot_homolog_positions(ribap_dict, gene_str_int_dict, path = os.path.join('plots', 'normalized_score_violin.png')):
+def plot_homolog_positions(ribap_dict, gene_str_int_dict, path = os.path.join('plots', 'homolog_positions.png')):
     
     average_dist_lst, x, y = [], [], []
     for origin_gene, candidate_lst in ribap_dict.items():
