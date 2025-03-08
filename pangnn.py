@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from src.plot import plot_loss_accuracy, plot_graph, plot_simscore_class, plot_logit_distribution, plot_union_graph, plot_simscore_distribution_by_class, plot_umap_pca
-from src.setup import log, args
-import torch, os, random, datetime, time
+from src.setup import log, args, hparams
+import torch, os, random, datetime, time, shutil
 from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader
 from torch_geometric.transforms import RandomLinkSplit
@@ -70,7 +70,7 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu") if args.
 #model = MyGCN(dataset = dataset.train, hidden_dim = hidden_dim, num_neighbours = args.neighbours, node_feature_dim = gene_id_embedding_dim, device = device)
 model = AlternateGCN(device = device, dataset = dataset.train, categorical_nodes = dataset.categorical_nodes)
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)#selflr=0.00005)
-scheduler = ReduceLROnPlateau(optimizer, mode='min', patience = 5)
+scheduler = ReduceLROnPlateau(optimizer, mode='min', patience = 5, factor = 0.5)
 
 # TODO: is this a good loss function for our scenario?
 # criterion = torch.nn.BCELoss() # if your model outputs probabilities, outputs logits
@@ -87,7 +87,16 @@ recall_lst = []
 binary_th = args.binary_threshold
 
 start = time.time()
-writer = SummaryWriter(comment = args.tb_comment)
+
+if os.path.exists('temp'):
+    log.info('Clearing temporary directory from previous runs')
+    shutil.rmtree("temp")
+    os.mkdir('temp')
+else:
+    os.mkdir('temp')
+
+run_id = datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + args.tb_comment
+writer = SummaryWriter(log_dir = os.path.join('temp', run_id), comment = args.tb_comment)
 
 if not args.train or os.path.exists(args.model_args):
     if os.path.exists(args.model_args):
@@ -135,7 +144,7 @@ elif args.train:
                 #batch = dataset.train
                 labels = batch[0].y if isinstance(batch, tuple) else batch.y
                 class_balance_factor = (labels == 0.).sum()/labels.sum()
-                criterion = torch.nn.BCEWithLogitsLoss(pos_weight = class_balance_factor)
+                criterion = torch.nn.BCEWithLogitsLoss(pos_weight = min(10, max(0.1, class_balance_factor)))
                 #print(class_balance_factor)
 
                 # clear old gradients so only current batch gradients are used
@@ -156,10 +165,13 @@ elif args.train:
                 progress.update(batch_bar, advance = 1)
 
                 if args.dynamic_binary_threshold:
-                    fpr, tpr, thresholds = roc_curve(labels, output)
+                    fpr, tpr, thresholds = roc_curve(labels, torch.sigmoid(output.detach()))
                     youden_index = tpr - fpr
                     optimal_threshold = thresholds[youden_index.argmax()]
+                    writer.add_scalar("Optimal_Binary_Threshold/val", optimal_threshold, epoch)
                     binary_th = optimal_threshold
+
+                    print(optimal_threshold)
                 
                 binary_prediction = (torch.sigmoid(output) >= binary_th).int()
                 accuracy.append(((binary_prediction == labels).sum().item()) / len(labels))
@@ -205,15 +217,10 @@ elif args.train:
                 writer.add_scalar("AP/val", average_precision, epoch)
                 writer.add_scalar("learning_rate", optimizer.param_groups[0]['lr'], epoch)
                 
-
-                if args.dynamic_binary_threshold:
-                    youden_index = tpr - fpr
-                    optimal_threshold = thresholds[youden_index.argmax()]
-                    writer.add_scalar("Optimal_Binary_Threshold/val", optimal_threshold, epoch)
-
-                    print(optimal_threshold)
-                
-                f1_val = (2*(((tp/(tp+fp))*(tp/(tp+fn)))/((tp/(tp+fp))+(tp/(tp+fn)))))
+                precision = tp / (tp + fp + 1e-10)
+                recall = tp / (tp + fn + 1e-10)
+                f1_val = 2 * (precision * recall) / (precision + recall + 1e-10)
+                #f1_val = (2*(((tp/(tp+fp))*(tp/(tp+fn)))/((tp/(tp+fp))+(tp/(tp+fn)))))
                 writer.add_scalar("F1/val", f1_val, epoch)
 
 
@@ -231,7 +238,7 @@ elif args.train:
 
         
             # get some metrics, maybe do this in the model class?
-            log.info(f"Epoch {epoch+1}, Loss: {loss.item():.4f}, Acc: {epoch_correct / epoch_total:.4f}, F1 {f1_train:.4f}, Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}, LR: {optimizer.param_groups[0]['lr']:.10f},  Val F1: {f1_val:.4f}{f'Optimal Bin. Th. {binary_th:.4f}' if args.dynamic_binary_threshold else ''}")
+            log.info(f"Epoch {epoch+1}, Loss: {loss.item():.4f}, Acc: {epoch_correct / epoch_total:.4f}, F1 {f1_train:.4f}, Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}, LR: {optimizer.param_groups[0]['lr']:.10f},  Val F1: {f1_val:.4f}, {f'Optimal Bin. Th. {binary_th:.4f}' if args.dynamic_binary_threshold else ''}")
 
             train_losses.append(loss.item())
             val_losses.append(val_loss.item())
@@ -246,11 +253,13 @@ elif args.train:
     log.info(f"Finished model training.\nPlotting metrics..")
     log.debug(f"\nLoss: {train_losses}\nAccuracy: {train_accuracies}")
     plot_loss_accuracy(args.epochs, train_losses, train_accuracies, val_losses, val_accuracies, f1_train_lst)
-    log.info(f"Saving model to file '{args.model_args}'")
-    torch.save(model.state_dict(), args.model_args)
+    log.info(f"Saving model to file '{os.path.join('temp', run_id, args.model_args)}'")
+    torch.save(model.state_dict(), os.path.join('temp', run_id, args.model_args))
 
     # get metrics on test dataset
     prediction_bin, prediction_scores, stats = predict_homolog_genes(model, dataset.train, dataset.test, binary_th=binary_th)
+    writer.add_pr_curve('PR/val', dataset.test.y, torch.sigmoid(prediction_scores))
+    writer.add_hparams(hparams, stats)
     log.debug(prediction_bin)
     log.info(f"Time elapsed: {time.time() - start:.4f} seconds")
 
@@ -268,9 +277,14 @@ elif args.train:
     stats['runtime'] = (time.time() - start)
     stats['num_genomes'] = num_genomes
     write_stats_csv(stats)
+    writer.flush()
     
+
+writer.close()
+shutil.move(os.path.join('temp', run_id), 'runs')
+shutil.move(os.path.join('plots', 'pr_curve.png'), os.path.join('runs', run_id + 'pr_curve.png'))
+dataset.save(os.path.join('runs', run_id + 'dataset.pickle'))
 #write_groups_file(dataset.test, prediction_bin)
-writer.flush()
 # map quality Q score transform
 # test different architectures / scores on sim data, then introduce hard cases in sim data and 
 # test again, 8-20 genomes

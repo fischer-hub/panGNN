@@ -129,14 +129,14 @@ class AlternateGCN(torch.nn.Module):
         nodes = self.conv_hidden(nodes, graph.union_edge_index)
         nodes = self.activation_fct(nodes)
 
-        for layer in range(max(args.neighbours-1, 1)):
-
-            log.debug(f'Passing union graph data to convolution layer {layer + 1}..')
-            # convolute over similarity edges
-            nodes = self.conv_hidden(nodes, graph.edge_index, graph.edge_attr)
-            # convolute over union graph edges
-            nodes = self.conv_hidden(nodes, graph.union_edge_index)
-            nodes = self.activation_fct(nodes)
+        #for layer in range(max(args.neighbours-2, 1)):
+        #
+        #    log.debug(f'Passing union graph data to convolution layer {layer + 1}..')
+        #    # convolute over similarity edges
+        #    nodes = self.conv_hidden(nodes, graph.edge_index, graph.edge_attr)
+        #    # convolute over union graph edges
+        #    nodes = self.conv_hidden(nodes, graph.union_edge_index)
+        #    nodes = self.activation_fct(nodes)
 
 
         nodes = self.conv_hidden(nodes, graph.edge_index, graph.edge_attr)

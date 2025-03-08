@@ -471,7 +471,7 @@ def normalize_sim_scores(sim_score_dict, t = 0.5, epsilon = 1e-8, pseudo_count =
     normalized_dict = {}
     empty_dict_ids = []
 
-    for origin_gene in sim_score_dict.keys():
+    for origin_gene in track(sim_score_dict.keys(), description = 'Normalizing similarity scores...', transient = True):
 
         candidate_genome_ids = set([id.split('_')[0] for id in sim_score_dict[origin_gene].keys()])
         dict_lst = []

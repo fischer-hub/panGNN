@@ -302,12 +302,15 @@ class UnionGraphDataset(Dataset):
 
 
 
-        self.sim_score_dict = normalize_sim_scores(self.sim_score_dict, t = args.normalization_temp, pseudo_count = 1, q_score_norm=args.no_q_score_transform)
+        if args.normalization_temp != 0: 
+            self.sim_score_dict = normalize_sim_scores(self.sim_score_dict, t = args.normalization_temp, pseudo_count = 1, q_score_norm=args.no_q_score_transform)
+        else:
+            log.warning("Similarity score normalization temp set to 0, skipping normalization. This can decrease model performance.")
 
         if ribap_groups_file:
             # load holy ribap table to generate labels for test data set
             self.ribap_groups_dict = load_ribap_groups(ribap_groups_file, genome_name_lst)
-            plot_homolog_positions(self.ribap_groups_dict, self.gene_id_position_dict)
+            #plot_homolog_positions(self.ribap_groups_dict, self.gene_id_position_dict)
         else:
             self.ribap_groups_dict = None
             self.labels_ts = None

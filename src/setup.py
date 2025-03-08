@@ -26,7 +26,7 @@ parser.add_argument('--dynamic_binary_threshold', help = 'dynamically calculate 
 parser.add_argument('--simulate_dataset', help = 'simulate input data instead of constructing dataset from input files', action = 'store_true')
 parser.add_argument('--categorical_node', help = 'embed node features as categorical feature embeddings using embedding layer, where category referes to the position of each gene in its genome', action = 'store_true')
 parser.add_argument('--no_q_score_transform', help = 'dont transform normalized edge probabilities between homolog candidates to Q-score like values before training [default: True]', action = 'store_false')
-parser.add_argument('--normalization_temp', help = 'temperature value for similarity score normalization', default = 0.8)
+parser.add_argument('--normalization_temp', help = 'temperature value for similarity score normalization, turns of normalization if set to 0', default = 0.8, type = float)
 parser.add_argument('--tb_comment',         help = 'comment to append to current run for evaluation with tensorboard', default = '')
 parser.add_argument('--from_pickle',        help = 'path to pickle file to load saved dataset from', default = '')
 
@@ -56,3 +56,16 @@ if args.train and not args.ribap_groups:
 
 # print header text
 print_header(True, args)
+
+hparams = {
+    "num_batches": args.num_batches,
+    "num_epochs": args.epochs,
+    "num_neighbours": args.neighbours,
+    "binary_threshold": args.binary_threshold,
+    "dynamic_binary_threshold": args.dynamic_binary_threshold,  
+    "simulate_dataset": args.simulate_dataset,
+    "categorical_node": args.categorical_node,
+    'no_q_score_transform': args.no_q_score_transform,
+    'normalization_temp': args.normalization_temp,
+    'tb_comment': args.tb_comment
+}
