@@ -92,7 +92,7 @@ class HomogenousDataset(Dataset):
             self.gene_id_position_dict.update({gene: (idx / len(list(genome_annotation_df.index))) for idx, gene in enumerate(list(genome_annotation_df.index))})
 
 
-            genome_name_lst.append(os.path.basename(gff_file).split('.')[0].replace('_RENAMED', ''))
+            genome_name_lst.append(os.path.basename(gff_file).rsplit('.', 1)[0].replace('_RENAMED', ''))
 
         #self.neighbour_lst = construct_neighbour_lst(num_genes, self.num_neighbours)
 
@@ -286,7 +286,7 @@ class UnionGraphDataset(Dataset):
             # for each string gene ID save its normalized position in the gff file into the dictionary
             self.gene_id_position_dict.update({gene: idx for idx, gene in enumerate(list(genome_annotation_df.index))})
 
-            genome_name_lst.append(os.path.basename(gff_file).split('.')[0].replace('_RENAMED', ''))
+            genome_name_lst.append(os.path.basename(gff_file).rsplit('.', 1)[0].replace('_RENAMED', ''))
 
         log.info(f"Total number of genes found in annotation files: {num_genes}")
         #self.neighbour_lst = construct_neighbour_lst(num_genes, self.num_neighbours)
@@ -302,7 +302,7 @@ class UnionGraphDataset(Dataset):
 
 
 
-        if args.normalization_temp != 0: 
+        if args.normalization_temp != 0:
             self.sim_score_dict = normalize_sim_scores(self.sim_score_dict, t = args.normalization_temp, pseudo_count = 1, q_score_norm=args.no_q_score_transform)
         else:
             log.warning("Similarity score normalization temp set to 0, skipping normalization. This can decrease model performance.")
@@ -510,6 +510,56 @@ class UnionGraphDataset(Dataset):
             log.error("Failed to load dataset from file, check that file contains at least one of training or test data.")
             quit()
 
+    
+    def separate_components(self):
+        """Separate connected components in a given graph based on its edge index.
+
+        Args:
+            edge_index (pytorch tensor): tensor containing the edges of the graph to separate
+        
+        Returns:
+            connected components (list of tuples): list containing for each connected component (subgraph)
+            a tuple of form ([originial_indices], [origin_node_id], [target_node_id]), where all nodes in the
+            tuple are connected by an edge defined in tuple[1], tuple[2] and tuple[0] containing the index
+            of that edge in the original edge index (might be equal to the index of e.g. the corresponding edge weight)
+        """
+
+        adj_matrix = to_scipy_sparse_matrix(self.edge_index)
+        graph = csr_array(adj_matrix)
+        n_components, labels = connected_components(csgraph=graph, directed=False, return_labels=True)
+
+        log.debug(f"Number of connected components: {n_components}.")
+
+        connected_components_nodes = [[] for x in range(n_components)]
+        
+        for idx, label in enumerate(labels):
+            connected_components_nodes[label].append(idx)
+
+        for idx, component_nodes in enumerate(connected_components_nodes): #, description='Generating subgraphs from connected components..', transient=True):
+            x = torch.tensor(component_nodes)
+            # x is a tensor of categorical node IDs where a nodes index is in edge_index if it is connected to an edge,
+            # so we have to either remap the indices in edge_index to the new x, or use the whole tensor for each data 
+            # object so the indices work out 
+
+            log.debug(f"subsetting similarity score dict for component nodes.. {component_nodes} {idx/len(connected_components_nodes) *100} % done.")
+            gene_str_ids_lst = [self.gene_str_ids_lst[i] for i in component_nodes]
+            sub_sim_score_dict = dict((gene_str_id, self.sim_score_dict[gene_str_id]) for gene_str_id in gene_str_ids_lst if gene_str_id in self.sim_score_dict)
+
+            component_edge_index = build_edge_index(sub_sim_score_dict, self.gene_id_integer_dict, fully_connected = False)
+            component_edge_weight_ts = map_edge_weights(component_edge_index, sub_sim_score_dict, self.gene_str_ids_lst)
+
+            if self.ribap_groups_file:
+                component_labels_ts = map_labels_to_edge_index(component_edge_index, self.gene_str_ids_lst, self.ribap_groups_dict)
+            else:
+                component_labels_ts = None
+
+
+            graph_data = Data(x, component_edge_index, component_edge_weight_ts, component_labels_ts)
+            graph.neighbour_edge_weights_ts = None # neighbour_edge_weights_ts
+            self.data_lst.append(graph_data) 
+
+
+        return connected_components
         
 
 

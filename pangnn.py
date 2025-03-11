@@ -45,6 +45,9 @@ else:
     dataset  = UnionGraphDataset()
     dataset.simulate_dataset(2000, num_genomes, 0.15)
 
+hparams['num_genomes'] = num_genomes
+hparams['num_genes'] = len(dataset.train.x) + len(dataset.test.x)
+hparams['class_balance'] = (((dataset.train.y == 0.).sum()/dataset.train.y.sum() + (dataset.test.y == 0.).sum()/dataset.test.y.sum()) / 2).item()
 
 #print(dataset.train.edge_attr.max())
 #plot_simscore_distribution_by_class(dataset.train, path= os.path.join('plots', 'sim_dist', '50_genomes_sim_score_distribution_by_class.png'))
@@ -70,12 +73,15 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu") if args.
 #model = MyGCN(dataset = dataset.train, hidden_dim = hidden_dim, num_neighbours = args.neighbours, node_feature_dim = gene_id_embedding_dim, device = device)
 model = AlternateGCN(device = device, dataset = dataset.train, categorical_nodes = dataset.categorical_nodes)
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)#selflr=0.00005)
-scheduler = ReduceLROnPlateau(optimizer, mode='min', patience = 5, factor = 0.5)
+scheduler = ReduceLROnPlateau(optimizer, mode='min', patience = 7, factor = 0.6)
+#scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.90)
 
 # TODO: is this a good loss function for our scenario?
 # criterion = torch.nn.BCELoss() # if your model outputs probabilities, outputs logits
 # nn.CrossEntropyLoss() # multi-class classification where each sample belongs to only one class out of multiple classes., outputs logits
-criterion = torch.nn.BCEWithLogitsLoss()#pos_weight = dataset.class_balance) # if your model outputs raw logits and you want the loss function to handle the sigmoid activation internally, outputs probabilities
+#criterion = torch.nn.BCEWithLogitsLoss()#pos_weight = dataset.class_balance) # if your model outputs raw logits and you want the loss function to handle the sigmoid activation internally, outputs probabilities
+
+criterion = torch.nn.BCEWithLogitsLoss(pos_weight = torch.tensor(hparams['class_balance']))
 
 train_losses = []
 val_losses = []
@@ -144,7 +150,7 @@ elif args.train:
                 #batch = dataset.train
                 labels = batch[0].y if isinstance(batch, tuple) else batch.y
                 class_balance_factor = (labels == 0.).sum()/labels.sum()
-                criterion = torch.nn.BCEWithLogitsLoss(pos_weight = min(10, max(0.1, class_balance_factor)))
+                #criterion = torch.nn.BCEWithLogitsLoss(pos_weight = min(10, max(0.1, class_balance_factor)))
                 #print(class_balance_factor)
 
                 # clear old gradients so only current batch gradients are used
@@ -194,6 +200,7 @@ elif args.train:
 
                 val_loss = criterion(output, test_labels)
                 writer.add_scalar("Loss/val", val_loss, epoch)
+                #scheduler.step()
                 scheduler.step(val_loss)
                 probabilities = torch.sigmoid(output)
                 binary_prediction_val = (probabilities >= binary_th).int()
@@ -211,34 +218,35 @@ elif args.train:
                 fpr, tpr, thresholds = roc_curve(test_labels, probabilities)
                 roc_auc = auc(fpr, tpr)
                 average_precision = average_precision_score(test_labels, probabilities)
-                print('AUC', roc_auc)
-                print('AP', average_precision)
+
                 writer.add_scalar("ROC_AUC/val", roc_auc, epoch)
                 writer.add_scalar("AP/val", average_precision, epoch)
                 writer.add_scalar("learning_rate", optimizer.param_groups[0]['lr'], epoch)
                 
-                precision = tp / (tp + fp + 1e-10)
-                recall = tp / (tp + fn + 1e-10)
-                f1_val = 2 * (precision * recall) / (precision + recall + 1e-10)
+                precision_val = tp / (tp + fp + 1e-10)
+                recall_val = tp / (tp + fn + 1e-10)
+                f1_val = 2 * (precision_val * recall_val) / (precision_val + recall_val + 1e-10)
                 #f1_val = (2*(((tp/(tp+fp))*(tp/(tp+fn)))/((tp/(tp+fp))+(tp/(tp+fn)))))
                 writer.add_scalar("F1/val", f1_val, epoch)
 
 
                 conf_matrix = confusion_matrix(labels, binary_prediction)
                 tn, fp, fn, tp = conf_matrix.ravel()
-                f1_train = (2*(((tp/(tp+fp))*(tp/(tp+fn)))/((tp/(tp+fp))+(tp/(tp+fn)))))
+                precision_train = tp / (tp + fp + 1e-10)
+                recall_train = tp / (tp + fn + 1e-10)
+                f1_train = 2 * (precision_train * recall_train) / (precision_train + recall_train + 1e-10)
 
-                precision_lst.append(tp/(tp+fp))
-                writer.add_scalar("precision/val", tp/(tp+fp), epoch)
+                precision_lst.append(precision_train)
+                writer.add_scalar("precision/val", precision_val, epoch)
 
-                recall_lst.append(tp/(tp+fn))
-                writer.add_scalar("recall/val", tp/(tp+fn), epoch)
+                recall_lst.append(recall_val)
+                writer.add_scalar("recall/val", recall_val, epoch)
                 #f1_val = 0 
                 #f1_train = 0
 
         
             # get some metrics, maybe do this in the model class?
-            log.info(f"Epoch {epoch+1}, Loss: {loss.item():.4f}, Acc: {epoch_correct / epoch_total:.4f}, F1 {f1_train:.4f}, Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}, LR: {optimizer.param_groups[0]['lr']:.10f},  Val F1: {f1_val:.4f}, {f'Optimal Bin. Th. {binary_th:.4f}' if args.dynamic_binary_threshold else ''}")
+            log.info(f"Epoch {epoch+1}, Loss: {loss.item():.4f}, Acc: {epoch_correct / epoch_total:.4f}, F1 {f1_train:.4f}, Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}, LR: {optimizer.param_groups[0]['lr']:.10f},  Val F1: {f1_val:.4f}, Val AP: {average_precision:.4f}{f'Optimal Bin. Th. {binary_th:.4f}' if args.dynamic_binary_threshold else ''}")
 
             train_losses.append(loss.item())
             val_losses.append(val_loss.item())
@@ -281,9 +289,9 @@ elif args.train:
     
 
 writer.close()
+shutil.move(os.path.join('plots', 'pr_curve.png'), os.path.join('temp', run_id, run_id + 'pr_curve.png'))
+dataset.save(os.path.join('temp', run_id, run_id + '_dataset.pickle'))
 shutil.move(os.path.join('temp', run_id), 'runs')
-shutil.move(os.path.join('plots', 'pr_curve.png'), os.path.join('runs', run_id + 'pr_curve.png'))
-dataset.save(os.path.join('runs', run_id + 'dataset.pickle'))
 #write_groups_file(dataset.test, prediction_bin)
 # map quality Q score transform
 # test different architectures / scores on sim data, then introduce hard cases in sim data and 

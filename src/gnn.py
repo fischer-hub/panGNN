@@ -103,6 +103,7 @@ class AlternateGCN(torch.nn.Module):
 
         #self.activation_fct = torch.nn.LeakyReLU()
         self.activation_fct = F.relu
+        self.activation_fct = torch.nn.ELU()
 
         self.mlp = nn.Sequential(
             nn.Linear(64 * 2, 64),  # Input size 6 (concatenated embeddings)
@@ -125,21 +126,26 @@ class AlternateGCN(torch.nn.Module):
         torch.set_printoptions(threshold=1_000)
         # convolute over similarity edges
         nodes = self.conv_in(node_embeddings, graph.edge_index, graph.edge_attr)
+        nodes = self.activation_fct(nodes)
+
         # convolute over union graph edges
         nodes = self.conv_hidden(nodes, graph.union_edge_index)
         nodes = self.activation_fct(nodes)
+        
+        for layer in range(max(args.neighbours-2, 1)):
+        
+            log.debug(f'Passing union graph data to convolution layer {layer + 1}..')
+            # convolute over similarity edges
+            nodes = self.conv_hidden(nodes, graph.edge_index, graph.edge_attr)
+            nodes = self.activation_fct(nodes)
 
-        #for layer in range(max(args.neighbours-2, 1)):
-        #
-        #    log.debug(f'Passing union graph data to convolution layer {layer + 1}..')
-        #    # convolute over similarity edges
-        #    nodes = self.conv_hidden(nodes, graph.edge_index, graph.edge_attr)
-        #    # convolute over union graph edges
-        #    nodes = self.conv_hidden(nodes, graph.union_edge_index)
-        #    nodes = self.activation_fct(nodes)
+            # convolute over union graph edges
+            nodes = self.conv_hidden(nodes, graph.union_edge_index)
+            nodes = self.activation_fct(nodes)
 
 
         nodes = self.conv_hidden(nodes, graph.edge_index, graph.edge_attr)
+        nodes = self.activation_fct(nodes)
         nodes = self.conv_out(nodes, graph.union_edge_index)
         nodes = self.activation_fct(nodes)
 
