@@ -19,15 +19,6 @@ from torch.utils.tensorboard import SummaryWriter
 
 
 
-# low embedding dim will reduce risk of overfitting but may prevent model form learning nuanced patterns
-gene_id_embedding_dim = 64
-
-# more dims
-hidden_dim = 64
-
-# this (the edge features) later holds the similarity bit score of MMSeqs2 clustering for each two gene nodes connected by an edge
-edge_feature_dim = 128
-
 
 #dataset = HomogenousDataset(args.annotation, args.similarity, args.ribap_groups, args.neighbours) if args.train else HomogenousDataset(args.annotation, args.similarity, args.neighbours)
 if not args.simulate_dataset:
@@ -71,7 +62,7 @@ log.info(f"Constructed test dataset from node, egde and index tensors: {dataset.
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu") if args.gpu else 'cpu'
 #model = MyGCN(dataset = dataset.train, hidden_dim = hidden_dim, num_neighbours = args.neighbours, node_feature_dim = gene_id_embedding_dim, device = device)
-model = AlternateGCN(device = device, dataset = dataset.train, categorical_nodes = dataset.categorical_nodes)
+model = AlternateGCN(device = device, dataset = dataset.train, categorical_nodes = dataset.categorical_nodes, dims = [args.node_dim, args.hidden_dim])
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)#selflr=0.00005)
 scheduler = ReduceLROnPlateau(optimizer, mode='min', patience = 7, factor = 0.6)
 #scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.90)
@@ -100,6 +91,8 @@ if os.path.exists('temp'):
     os.mkdir('temp')
 else:
     os.mkdir('temp')
+
+if not os.path.exists('runs'): os.mkdir('runs')
 
 run_id = datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + args.tb_comment
 writer = SummaryWriter(log_dir = os.path.join('temp', run_id), comment = args.tb_comment)
@@ -144,7 +137,8 @@ elif args.train:
                 
                 model.train()
 
-                batch = sub_sample_graph_edges(dataset.train, device, fraction = 0.8)
+                batch = sub_sample_graph_edges(dataset.train, device, fraction = 0.8) if not args.union_edge_weights else dataset.train
+                batch = dataset.train
                 #dataset.graph_to(batch, device)
 
                 #batch = dataset.train

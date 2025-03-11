@@ -83,34 +83,35 @@ class MyGCN(torch.nn.Module):
 
 
 class AlternateGCN(torch.nn.Module):
-    def __init__(self, device, dataset, categorical_nodes):
+    def __init__(self, device, dataset, categorical_nodes, dims = [64, 128]):
         super().__init__()
         self.device = device
+        node_embedding_dim, hidden_dim = dims
 
         # embedding layer for node features
         if categorical_nodes:
             # handle gene nodes as categorical data embeddings
-            self.embedding = torch.nn.Embedding(len(dataset.x), 64)
+            self.embedding = torch.nn.Embedding(len(dataset.x), node_embedding_dim)
             log.debug(dataset.x)
         else:
             # handle gene nodes as numerical data embeddings
-            self.embedding = torch.nn.Linear(1, 64)
+            self.embedding = torch.nn.Linear(1, node_embedding_dim)
 
         # define convolution layers
-        self.conv_in = GCNConv(64, 128, add_self_loops = False)
-        self.conv_hidden = GCNConv(128, 128, add_self_loops = False)
-        self.conv_out = GCNConv(128, 64, add_self_loops = False)
+        self.conv_in = GCNConv(node_embedding_dim, hidden_dim, add_self_loops = False)
+        self.conv_hidden = GCNConv(hidden_dim, hidden_dim, add_self_loops = False)
+        self.conv_out = GCNConv(hidden_dim, node_embedding_dim, add_self_loops = False)
 
         #self.activation_fct = torch.nn.LeakyReLU()
-        self.activation_fct = F.relu
+        #self.activation_fct = F.relu
         self.activation_fct = torch.nn.ELU()
 
         self.mlp = nn.Sequential(
-            nn.Linear(64 * 2, 64),  # Input size 6 (concatenated embeddings)
+            nn.Linear(node_embedding_dim * 2, node_embedding_dim),
             nn.ReLU(),
-            nn.Linear(64, 16),
+            nn.Linear(node_embedding_dim, node_embedding_dim),
             nn.ReLU(),
-            nn.Linear(16, 1)   # Output scalar
+            nn.Linear(node_embedding_dim, 1)
         )
 
         self.epoch = 0
@@ -119,40 +120,60 @@ class AlternateGCN(torch.nn.Module):
     def forward(self, graph):
     
         log.debug('Passing nodes to embedding layer..')
-        #assert not torch.isnan().any()
         log.debug(graph.x.shape)
         node_embeddings = self.embedding(graph.x)
         log.debug('Passing similarity graph data to convolution layer 1..')
-        torch.set_printoptions(threshold=1_000)
-        # convolute over similarity edges
-        nodes = self.conv_in(node_embeddings, graph.edge_index, graph.edge_attr)
-        nodes = self.activation_fct(nodes)
 
-        # convolute over union graph edges
-        nodes = self.conv_hidden(nodes, graph.union_edge_index)
-        nodes = self.activation_fct(nodes)
-        
-        for layer in range(max(args.neighbours-2, 1)):
-        
-            log.debug(f'Passing union graph data to convolution layer {layer + 1}..')
-            # convolute over similarity edges
-            nodes = self.conv_hidden(nodes, graph.edge_index, graph.edge_attr)
+        if args.union_edge_weights:
+            nodes = self.conv_in(node_embeddings, graph.union_edge_index, graph.edge_attr)
+            nodes = self.activation_fct(nodes)
+
+            for layer in range(max(args.neighbours-2, 1)):
+            
+                log.debug(f'Passing union graph data to convolution layer {layer + 1}..')
+                nodes = self.conv_hidden(nodes, graph.union_edge_index, graph.edge_attr)
+                nodes = self.activation_fct(nodes)
+            
+            nodes = self.conv_out(nodes, graph.union_edge_index)
+            nodes = self.activation_fct(nodes)
+
+            log.debug(f"Outputting nodes to decode function of shape: {nodes.shape}\n{nodes}")
+
+            #link_predictions = self.decode(nodes, graph.edge_index)
+            concat_node_embeddings = torch.cat((nodes[graph.edge_index[0]], nodes[graph.edge_index[1]]), dim = 1)
+
+        else:
+
+        # convolute over similarity edges
+            nodes = self.conv_in(node_embeddings, graph.edge_index, graph.edge_attr)
             nodes = self.activation_fct(nodes)
 
             # convolute over union graph edges
             nodes = self.conv_hidden(nodes, graph.union_edge_index)
             nodes = self.activation_fct(nodes)
+            
+            for layer in range(max(args.neighbours-2, 1)):
+            
+                log.debug(f'Passing union graph data to convolution layer {layer + 1}..')
+                # convolute over similarity edges
+                nodes = self.conv_hidden(nodes, graph.edge_index, graph.edge_attr)
+                nodes = self.activation_fct(nodes)
+
+                # convolute over union graph edges
+                nodes = self.conv_hidden(nodes, graph.union_edge_index)
+                nodes = self.activation_fct(nodes)
 
 
-        nodes = self.conv_hidden(nodes, graph.edge_index, graph.edge_attr)
-        nodes = self.activation_fct(nodes)
-        nodes = self.conv_out(nodes, graph.union_edge_index)
-        nodes = self.activation_fct(nodes)
+            nodes = self.conv_hidden(nodes, graph.edge_index, graph.edge_attr)
+            nodes = self.activation_fct(nodes)
+            nodes = self.conv_out(nodes, graph.union_edge_index)
+            nodes = self.activation_fct(nodes)
 
-        log.debug(f"Outputting nodes to decode function of shape: {nodes.shape}\n{nodes}")
+            log.debug(f"Outputting nodes to decode function of shape: {nodes.shape}\n{nodes}")
 
-        #link_predictions = self.decode(nodes, graph.edge_index)
-        concat_node_embeddings = torch.cat((nodes[graph.edge_index[0]], nodes[graph.edge_index[1]]), dim = 1)
+            #link_predictions = self.decode(nodes, graph.edge_index)
+            concat_node_embeddings = torch.cat((nodes[graph.edge_index[0]], nodes[graph.edge_index[1]]), dim = 1)
+
         link_predictions = self.mlp(concat_node_embeddings).squeeze(-1)
         #print(link_predictions)
 

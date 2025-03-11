@@ -46,15 +46,15 @@ def sub_sample_graph_edges(graph, device, fraction = 0.8, sample_pos_edges = Fal
     union_indices = sim_indices + random.sample(range(len(graph.y), len(graph.y) + num_neighbour_edges), int(num_neighbour_edges * fraction))
 
     # remap nodes too?
-    sim_edge_index_origin = torch.index_select(graph.edge_index[0], 0, torch.tensor(sim_indices))
-    sim_edge_index_target = torch.index_select(graph.edge_index[1], 0, torch.tensor(sim_indices))
+    sim_edge_index_origin = torch.index_select(graph.edge_index[0], 0, torch.tensor(sim_indices)) if not args.union_edge_weights else graph.edge_index[0]
+    sim_edge_index_target = torch.index_select(graph.edge_index[1], 0, torch.tensor(sim_indices)) if not args.union_edge_weights else graph.edge_index[1]
     union_edge_index_origin = torch.index_select(graph.union_edge_index[0], 0, torch.tensor(union_indices))
     union_edge_index_target = torch.index_select(graph.union_edge_index[1], 0, torch.tensor(union_indices))
     sim_edge_index = torch.stack((sim_edge_index_origin, sim_edge_index_target))
     union_edge_index = torch.stack((union_edge_index_origin, union_edge_index_target))
     sim_edge_weights = torch.index_select(graph.edge_attr, 0, torch.tensor(sim_indices))
     #union_edge_weights = torch.index_select(graph.union_edge_weight_ts, 0, torch.tensor(union_indices))
-    sim_labels = torch.index_select(graph.y, 0, torch.tensor(sim_indices))
+    sim_labels = torch.index_select(graph.y, 0, torch.tensor(sim_indices)) if not args.union_edge_weights else graph.y
     #union_labels = torch.index_select(graph.labels_ts, 0, torch.tensor(union_indices))
     
     graph = Data(graph.x, sim_edge_index, sim_edge_weights.float(), sim_labels)

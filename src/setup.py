@@ -24,11 +24,15 @@ parser.add_argument('-s', '--similarity', help = 'path to the similarity score f
 parser.add_argument('--binary_threshold', help = 'binary threshold to classify output probabilities to the label class', default = 0.5, type = float)
 parser.add_argument('--dynamic_binary_threshold', help = 'dynamically calculate the binary threshold that separates the predictions best based on yuden index', action = 'store_true')
 parser.add_argument('--simulate_dataset', help = 'simulate input data instead of constructing dataset from input files', action = 'store_true')
+parser.add_argument('--union_edge_weights', help = 'unite edge weights from sim and neighbour graph and only convolute over one', action = 'store_true')
 parser.add_argument('--categorical_node', help = 'embed node features as categorical feature embeddings using embedding layer, where category referes to the position of each gene in its genome', action = 'store_true')
 parser.add_argument('--no_q_score_transform', help = 'dont transform normalized edge probabilities between homolog candidates to Q-score like values before training [default: True]', action = 'store_false')
 parser.add_argument('--normalization_temp', help = 'temperature value for similarity score normalization, turns of normalization if set to 0', default = 0.8, type = float)
 parser.add_argument('--tb_comment',         help = 'comment to append to current run for evaluation with tensorboard', default = '')
 parser.add_argument('--from_pickle',        help = 'path to pickle file to load saved dataset from', default = '')
+parser.add_argument('--node_dim',           help = 'dimension of node embedding and input of first convolution layer', default = 64, type = int)
+parser.add_argument('--hidden_dim',         help = 'dimension of hidden convoluytion layer(s)', default = 128, type = int)
+parser.add_argument('--decoder',         help = "decoding strategy (similarity measure) to use predict link between two node embeddings ['mlp', 'cosine', 'dotproduct']", default = 'mlp', type = str)
 
 # train mode args
 parser.add_argument('--train',              help = 'set pangnn into training mode', action='store_true')

@@ -340,7 +340,7 @@ class UnionGraphDataset(Dataset):
         log.info('Successfully built edge index')
 
         with Console().status("Mapping edge weights to respective edge index positions..") as status:
-            edge_weight_ts = map_edge_weights(edge_index_ts, self.sim_score_dict, gene_str_ids_lst, use_cache=False) #torch.randn((num_genes/2, edge_feature_dim))  # Edge 
+            edge_weight_ts = map_edge_weights(edge_index_ts, self.sim_score_dict, gene_str_ids_lst, use_cache=False) #torch.randn((num_genes/2, edge_feature_dim))  # Edge
         log.info('Successfully mapped weights to the edge index')
 
         # construct list of labels from ribap groups and format to match edge_index
@@ -367,6 +367,11 @@ class UnionGraphDataset(Dataset):
         transform = RemoveDuplicatedEdges()
         union_edge_index_ts = transform(Data(x = normalized_gene_positions_ts, edge_index = union_edge_index_ts, edge_attr = None, y = None)).edge_index
 
+        if args.union_edge_weights:
+            print('creating union graph edge weights', (len(union_edge_index_ts[0]) - len(edge_index_ts[0])))
+            edge_weight_ts = torch.cat((edge_weight_ts, torch.tensor([1] * (len(union_edge_index_ts[0]) - len(edge_index_ts[0])))))
+            #labels_ts      = torch.cat((labels_ts, torch.tensor([1] * (len(union_edge_index_ts[0]) - len(labels_ts)))))
+        
         if self.categorical_nodes:
             x = torch.tensor(gene_str_int_lst)
         else:
