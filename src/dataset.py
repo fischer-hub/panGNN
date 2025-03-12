@@ -319,11 +319,21 @@ class UnionGraphDataset(Dataset):
         #plot_violin_distributions(prob_lst, self.ribap_groups_dict, prob = True, path = os.path.join('plots', 'normalized_scores_violin_prob.png'))
         #plot_violin_distributions(qscore_lst, self.ribap_groups_dict, prob = False, path = os.path.join('plots', 'normalized_scores_violin_qscore.png'))
         #quit()
+        #self.train = self.generate_sub_graphs()
+        #quit()
+
         self.train = self.generate_graphs(self.gene_str_ids_lst_train, self.gene_str_int_lst_train)
         self.test = self.generate_graphs(self.gene_str_ids_lst_val, self.gene_str_int_lst_val)
 
     def len(self):
         return len(self.train.x) + len(self.test.x)
+    
+    def generate_sub_graphs(self):
+
+        for origin_gene, homolog_lst in self.ribap_groups_dict.items():
+            print(origin_gene, homolog_lst)
+            quit()
+
 
     def generate_graphs(self, gene_str_ids_lst, gene_str_int_lst):
         # total number of genes found in all annotation files
@@ -518,15 +528,6 @@ class UnionGraphDataset(Dataset):
     
     def separate_components(self):
         """Separate connected components in a given graph based on its edge index.
-
-        Args:
-            edge_index (pytorch tensor): tensor containing the edges of the graph to separate
-        
-        Returns:
-            connected components (list of tuples): list containing for each connected component (subgraph)
-            a tuple of form ([originial_indices], [origin_node_id], [target_node_id]), where all nodes in the
-            tuple are connected by an edge defined in tuple[1], tuple[2] and tuple[0] containing the index
-            of that edge in the original edge index (might be equal to the index of e.g. the corresponding edge weight)
         """
 
         adj_matrix = to_scipy_sparse_matrix(self.edge_index)
@@ -535,10 +536,14 @@ class UnionGraphDataset(Dataset):
 
         log.debug(f"Number of connected components: {n_components}.")
 
+        # list of node lists where each node list contains the node indices of the original node tensor that is part of this component
         connected_components_nodes = [[] for x in range(n_components)]
         
         for idx, label in enumerate(labels):
             connected_components_nodes[label].append(idx)
+
+        # now component node lst looks like this 
+        # connected_components_nodes = [[0, 1, 2], [3]]
 
         for idx, component_nodes in enumerate(connected_components_nodes): #, description='Generating subgraphs from connected components..', transient=True):
             x = torch.tensor(component_nodes)

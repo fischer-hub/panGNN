@@ -16,8 +16,9 @@ from src.helper import generate_minimal_dataset, simulate_dataset, sub_sample_gr
 from sklearn.metrics import roc_curve, auc, average_precision_score
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.tensorboard import SummaryWriter
+from accelerate import Accelerator
 
-
+accelerator = Accelerator()
 
 
 #dataset = HomogenousDataset(args.annotation, args.similarity, args.ribap_groups, args.neighbours) if args.train else HomogenousDataset(args.annotation, args.similarity, args.neighbours)
@@ -66,6 +67,7 @@ model = AlternateGCN(device = device, dataset = dataset.train, categorical_nodes
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)#selflr=0.00005)
 scheduler = ReduceLROnPlateau(optimizer, mode='min', patience = 7, factor = 0.6)
 #scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.90)
+model, optimizer, data = accelerator.prepare(model, optimizer, dataset)
 
 # TODO: is this a good loss function for our scenario?
 # criterion = torch.nn.BCELoss() # if your model outputs probabilities, outputs logits
@@ -138,7 +140,7 @@ elif args.train:
                 model.train()
 
                 batch = sub_sample_graph_edges(dataset.train, device, fraction = 0.8) if not args.union_edge_weights else dataset.train
-                batch = dataset.train
+                #batch = dataset.train
                 #dataset.graph_to(batch, device)
 
                 #batch = dataset.train

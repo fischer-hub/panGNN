@@ -139,9 +139,6 @@ class AlternateGCN(torch.nn.Module):
 
             log.debug(f"Outputting nodes to decode function of shape: {nodes.shape}\n{nodes}")
 
-            #link_predictions = self.decode(nodes, graph.edge_index)
-            concat_node_embeddings = torch.cat((nodes[graph.edge_index[0]], nodes[graph.edge_index[1]]), dim = 1)
-
         else:
 
         # convolute over similarity edges
@@ -171,11 +168,13 @@ class AlternateGCN(torch.nn.Module):
 
             log.debug(f"Outputting nodes to decode function of shape: {nodes.shape}\n{nodes}")
 
-            #link_predictions = self.decode(nodes, graph.edge_index)
-            concat_node_embeddings = torch.cat((nodes[graph.edge_index[0]], nodes[graph.edge_index[1]]), dim = 1)
 
-        link_predictions = self.mlp(concat_node_embeddings).squeeze(-1)
-        #print(link_predictions)
+        if 'mlp' in args.decoder: 
+            concat_node_embeddings = torch.cat((nodes[graph.edge_index[0]], nodes[graph.edge_index[1]]), dim = 1)
+            link_predictions = self.mlp(concat_node_embeddings).squeeze(-1)
+
+        if 'cosine' in args.decoder: link_predictions = self.cosine_sim(nodes, graph.edge_index)
+        if 'dot' in args.decoder: link_predictions = self.decode(nodes, graph.edge_index)
 
         if not True:
             import numpy as np
@@ -201,3 +200,6 @@ class AlternateGCN(torch.nn.Module):
     def decode(self, z, edge_index):
         # calculate dot product between pairs of node embeddings to predict links
         return (z[edge_index[0]] * z[edge_index[1]]).sum(dim=1)
+    
+    def cosine_sim(self, z, edge_index):
+        return F.cosine_similarity(z[edge_index[0]], z[edge_index[1]], dim = 1)
