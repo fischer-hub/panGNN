@@ -273,3 +273,60 @@ def simulate_dataset(num_genes, num_genomes, class_balance = 0.2, class_0_stdev 
 
     return graph_data
 
+
+def get_connected_nodes(gene_lst, sim_score_dict, n, connected_nodes = None):
+
+    if connected_nodes is None:
+        connected_nodes = set(gene_lst)
+
+    if n == 0:
+        return list(connected_nodes)
+
+    new_connected_nodes = set()
+    
+    for gene in gene_lst:
+        
+        if gene in sim_score_dict:
+            new_connected_nodes.update(sim_score_dict[gene].keys())
+
+    new_connected_nodes = new_connected_nodes - connected_nodes
+    connected_nodes.update(new_connected_nodes)
+
+    return get_connected_nodes(new_connected_nodes, sim_score_dict, n-1, connected_nodes)
+
+
+
+def get_neighbour_graph(gene_lst, gene_id_pos_dict, gene_id_lst, n):
+
+    origin_idx, target_idx = [], []
+    neighbour_id_lst = list(gene_lst)
+    old_new_pos_dict = {}
+
+    for new_idx, gene in enumerate(gene_lst):
+
+        old_gene_pos = gene_id_pos_dict[gene]
+
+        for old_neighbour_gene_pos in range(old_gene_pos - n, old_gene_pos + n + 1):
+
+            if old_neighbour_gene_pos <= 0 or old_neighbour_gene_pos >= len(gene_id_lst):
+                continue
+
+            neighbour_gene_id = gene_id_lst[old_neighbour_gene_pos]
+
+            if neighbour_gene_id not in neighbour_id_lst:
+                new_neighbour_gene_pos = len(neighbour_id_lst)-1
+                neighbour_id_lst.append(neighbour_gene_id)
+                old_new_pos_dict[old_gene_pos] = new_idx
+                old_new_pos_dict[old_neighbour_gene_pos] = new_neighbour_gene_pos
+            else:
+                new_neighbour_gene_pos = old_new_pos_dict[old_neighbour_gene_pos]
+
+            origin_idx.append(new_idx)
+            origin_idx.append(new_neighbour_gene_pos)
+            target_idx.append(new_idx)
+            target_idx.append(new_neighbour_gene_pos)
+
+    
+    return Data(x = torch.tensor([1] * len(neighbour_id_lst)), 
+                edge_index = torch.stack((torch.tensor(origin_idx), torch.tensor(target_idx))),
+                y = torch.tensor([0] * len(origin_idx)))

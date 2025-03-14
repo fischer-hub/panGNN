@@ -228,7 +228,7 @@ def load_ribap_groups(ribap_group_file, genome_name_lst):
         ribap_group_file (string, path object): Filename of the file containing the ribap groups.
     """
     ribap_groups_dict = {}
-    ribap_groups_dict_tmp = {}
+    ribap_groups_lst = []
     
     log.info(f"Loading RIBAP groups file: {ribap_group_file}")
 
@@ -259,6 +259,8 @@ def load_ribap_groups(ribap_group_file, genome_name_lst):
     
     for _, row in track(ribap_groups_df.iterrows(), transient = True, description = "Constructing two way mapping for ortholog genes.."):
 
+        ribap_groups_lst.append([gene for gene in row if isinstance(gene, str)])
+
         for key_gene in row:
             if not isinstance(key_gene, str):
                 continue
@@ -271,7 +273,7 @@ def load_ribap_groups(ribap_group_file, genome_name_lst):
     for homologs_lst in ribap_groups_dict.values():
         assert len(homologs_lst) == len(set(homologs_lst)), f'Gene family contains one gene more than once but a gene can be not a homolog to itself: {homologs_lst}'
 
-    return ribap_groups_dict
+    return (ribap_groups_dict, ribap_groups_lst)
 
 
 def combine_neighbour_embeddings(gene_embeddings, neighbor_lst, device):

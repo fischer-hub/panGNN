@@ -1,6 +1,6 @@
 from src.preprocessing import load_gff, load_similarity_score, load_ribap_groups, build_edge_index, map_edge_weights, map_labels_to_edge_index, construct_neighbour_lst, generate_neighbour_edge_features, build_adjacency_vectors, normalize_sim_scores
 from src.setup import log, args
-from src.helper import concat_graph_data, simulate_dataset, generate_minimal_dataset, sub_sample_graph_edges
+from src.helper import concat_graph_data, simulate_dataset, generate_minimal_dataset, sub_sample_graph_edges, get_connected_nodes, get_neighbour_graph
 import torch, os, pickle, random
 from torch_geometric.data import Dataset, Data
 from rich.progress import track, Console, Progress
@@ -246,8 +246,10 @@ class UnionGraphDataset(Dataset):
         genome_name_lst = []
         self.gene_str_ids_lst_train = []
         self.gene_str_ids_lst_val = []
+        self.gene_str_ids_lst = []
         self.gene_str_int_lst_train = []
         self.gene_str_int_lst_val = []
+        self.gene_str_int_lst = []
         self.gene_id_position_dict = {}
 
         self.categorical_nodes = categorical_nodes
@@ -276,14 +278,16 @@ class UnionGraphDataset(Dataset):
             
             self.gene_str_ids_lst_train += list(genome_annotation_df.index)[:int(len(genome_annotation_df.index) * split[0])]
             self.gene_str_ids_lst_val   += list(genome_annotation_df.index)[int(len(genome_annotation_df.index) * split[0]):]
+            self.gene_str_ids_lst       += list(genome_annotation_df.index)
 
             self.gene_str_int_lst_train += range(len(self.gene_str_ids_lst_train))
             self.gene_str_int_lst_val   += range(len(self.gene_str_ids_lst_val))
+            self.gene_str_int_lst       += range(len(self.gene_str_ids_lst))
 
 
             #self.gene_str_ids_lst_test  += list(genome_annotation_df.index)[]
             
-            # for each string gene ID save its normalized position in the gff file into the dictionary
+            # for each string gene ID save its position in the gff file into the dictionary
             self.gene_id_position_dict.update({gene: idx for idx, gene in enumerate(list(genome_annotation_df.index))})
 
             genome_name_lst.append(os.path.basename(gff_file).rsplit('.', 1)[0].replace('_RENAMED', ''))
@@ -309,7 +313,7 @@ class UnionGraphDataset(Dataset):
 
         if ribap_groups_file:
             # load holy ribap table to generate labels for test data set
-            self.ribap_groups_dict = load_ribap_groups(ribap_groups_file, genome_name_lst)
+            self.ribap_groups_dict, self.ribap_groups_lst = load_ribap_groups(ribap_groups_file, genome_name_lst)
             #plot_homolog_positions(self.ribap_groups_dict, self.gene_id_position_dict)
         else:
             self.ribap_groups_dict = None
@@ -319,7 +323,7 @@ class UnionGraphDataset(Dataset):
         #plot_violin_distributions(prob_lst, self.ribap_groups_dict, prob = True, path = os.path.join('plots', 'normalized_scores_violin_prob.png'))
         #plot_violin_distributions(qscore_lst, self.ribap_groups_dict, prob = False, path = os.path.join('plots', 'normalized_scores_violin_qscore.png'))
         #quit()
-        #self.train = self.generate_sub_graphs()
+        self.train = self.generate_sub_graphs()
         #quit()
 
         self.train = self.generate_graphs(self.gene_str_ids_lst_train, self.gene_str_int_lst_train)
@@ -330,9 +334,21 @@ class UnionGraphDataset(Dataset):
     
     def generate_sub_graphs(self):
 
-        for origin_gene, homolog_lst in self.ribap_groups_dict.items():
-            print(origin_gene, homolog_lst)
-            quit()
+        for group in self.ribap_groups_lst:
+
+            gene_str_lst = get_connected_nodes(group, self.sim_score_dict, args.neighbours)
+
+            neighbour_graph = get_neighbour_graph(group, self.gene_id_position_dict, self.gene_str_ids_lst, args.neighbours)
+
+            # add homolog genes to node index
+            x = torch.tensor([1] * len(gene_str_lst))
+            gene_id_integer_dict = {gene: idx for idx, gene in enumerate(gene_str_lst)}
+            sim_edge_index = build_edge_index(self.sim_score_dict, gene_id_integer_dict)
+
+
+
+            print(neighbour_graph)
+        quit()
 
 
     def generate_graphs(self, gene_str_ids_lst, gene_str_int_lst):
