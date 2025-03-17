@@ -19,6 +19,7 @@ from torch.utils.tensorboard import SummaryWriter
 from accelerate import Accelerator
 
 accelerator = Accelerator()
+os.system('ulimit -n 4096')
 
 
 #dataset = HomogenousDataset(args.annotation, args.similarity, args.ribap_groups, args.neighbours) if args.train else HomogenousDataset(args.annotation, args.similarity, args.neighbours)
@@ -38,8 +39,8 @@ else:
     dataset.simulate_dataset(2000, num_genomes, 0.15)
 
 hparams['num_genomes'] = num_genomes
-hparams['num_genes'] = len(dataset.train.x) + len(dataset.test.x)
-hparams['class_balance'] = (((dataset.train.y == 0.).sum()/dataset.train.y.sum() + (dataset.test.y == 0.).sum()/dataset.test.y.sum()) / 2).item()
+hparams['num_genes'] = dataset.num_genes
+hparams['class_balance'] = dataset.class_balance
 
 #print(dataset.train.edge_attr.max())
 #plot_simscore_distribution_by_class(dataset.train, path= os.path.join('plots', 'sim_dist', '50_genomes_sim_score_distribution_by_class.png'))
@@ -51,13 +52,13 @@ hparams['class_balance'] = (((dataset.train.y == 0.).sum()/dataset.train.y.sum()
 
 #dataset.split_data((0.8,0.20,0), batch_size = args.batch_size)
 
-log.info(f"Constructed train dataset from node, egde and index tensors: {dataset.train}")
-plot_logit_distribution(dataset.train.edge_attr, path= os.path.join('plots', 'normalized_sim_scores_prob.png'))
+log.debug(f"Constructed train dataset from node, egde and index tensors: {dataset.train}")
+#plot_logit_distribution(dataset.train.edge_attr, path= os.path.join('plots', 'normalized_sim_scores_prob.png'))
 #if args.plot_graph: plot_graph(dataset.train, os.path.join('plots', 'input_graph.png'))
 
 #plot_simscore_class(dataset.train)
 
-log.info(f"Constructed test dataset from node, egde and index tensors: {dataset.test}")
+log.debug(f"Constructed test dataset from node, egde and index tensors: {dataset.test}")
 #log.info(f"Constructed {dataset.train[1].x}")
 #log.info(f"Constructed {dataset.train[1].edge_index}")
 
@@ -117,35 +118,36 @@ elif args.train:
     #dataset.to(device)
     model.to(device)
 
-    log.info(f"Entering training loop with: {args.num_batches} batches, class weight ")#{dataset.class_balance}.")
+    log.info(f"Entering training loop with batch size: {args.batch_size}, class balance: {dataset.class_balance}, {len(dataset.train)} batches.")#{dataset.class_balance}.")
 
     with Progress(transient = True) as progress:
 
         training_bar = progress.add_task("Epochs completed:", total=args.epochs)
-        batch_bar    = progress.add_task("Training current batch:", total=args.num_batches)
+        batch_bar    = progress.add_task("Training current batch set:", total=len(dataset.train))
 
         for epoch in range(args.epochs):
             total = 0
 
             # shuffle list of input graphs so the model sees the data in different order every time 
-            #random.shuffle(dataset.train)
+            random.shuffle(dataset.train)
             accuracy = []
             epoch_correct = 0
             epoch_total = 0
             val_loss = 0
 
-            #for batch_num, batch in enumerate(dataset.train):
-            for batch_num in range(args.num_batches):
+            for batch_num, batch in enumerate(dataset.train):
+            #for batch_num in range(args.num_batches):
                 
                 model.train()
 
-                batch = sub_sample_graph_edges(dataset.train, device, fraction = 0.8) if not args.union_edge_weights else dataset.train
+                #batch = sub_sample_graph_edges(dataset.train, device, fraction = 0.8) if not args.union_edge_weights else dataset.train
                 #batch = dataset.train
                 #dataset.graph_to(batch, device)
 
                 #batch = dataset.train
+                #print(batch)
                 labels = batch[0].y if isinstance(batch, tuple) else batch.y
-                class_balance_factor = (labels == 0.).sum()/labels.sum()
+                #class_balance_factor = (labels == 0.).sum()/labels.sum()
                 #criterion = torch.nn.BCEWithLogitsLoss(pos_weight = min(10, max(0.1, class_balance_factor)))
                 #print(class_balance_factor)
 
@@ -207,7 +209,6 @@ elif args.train:
                 binary_prediction_val = binary_prediction_val.cpu()
                 binary_prediction = binary_prediction.cpu()
                 labels = labels.cpu()
-                #print(f"logits: \n{output}")
                 conf_matrix = confusion_matrix(test_labels, binary_prediction_val)
                 tn, fp, fn, tp = conf_matrix.ravel()
 
@@ -226,7 +227,7 @@ elif args.train:
                 writer.add_scalar("F1/val", f1_val, epoch)
 
 
-                conf_matrix = confusion_matrix(labels, binary_prediction)
+                conf_matrix = confusion_matrix(labels, binary_prediction, labels = [0, 1])
                 tn, fp, fn, tp = conf_matrix.ravel()
                 precision_train = tp / (tp + fp + 1e-10)
                 recall_train = tp / (tp + fn + 1e-10)
@@ -262,6 +263,7 @@ elif args.train:
 
     # get metrics on test dataset
     prediction_bin, prediction_scores, stats = predict_homolog_genes(model, dataset.train, dataset.test, binary_th=binary_th)
+    print(hparams)
     writer.add_pr_curve('PR/val', dataset.test.y, torch.sigmoid(prediction_scores))
     writer.add_hparams(hparams, stats)
     log.debug(prediction_bin)
@@ -270,13 +272,13 @@ elif args.train:
     stats['binary_threshold'] = binary_th
     stats['date'] = str(datetime.date.today())
     stats['neighbours'] = args.neighbours
-    stats['num_nodes_train'] = len(dataset.train.x)
-    stats['num_nodes_sim_edges_train'] = len(dataset.train.edge_index)
+    #stats['num_nodes_train'] = len(dataset.train.x)
+    #stats['num_nodes_sim_edges_train'] = len(dataset.train.edge_index)
     stats['num_nodes_test'] = len(dataset.test.x)
     stats['num_nodes_sim_edges_test'] = len(dataset.test.edge_index)
     stats['mode'] = 'train'
     stats['epochs'] = args.epochs
-    stats['batches'] = args.num_batches
+    stats['batch_size'] = args.batch_size
     stats['device'] = device
     stats['runtime'] = (time.time() - start)
     stats['num_genomes'] = num_genomes
@@ -286,7 +288,7 @@ elif args.train:
 
 writer.close()
 shutil.move(os.path.join('plots', 'pr_curve.png'), os.path.join('temp', run_id, run_id + 'pr_curve.png'))
-dataset.save(os.path.join('temp', run_id, run_id + '_dataset.pickle'))
+#dataset.save(os.path.join('temp', run_id, run_id + '_dataset.pickle'))
 shutil.move(os.path.join('temp', run_id), 'runs')
 #write_groups_file(dataset.test, prediction_bin)
 # map quality Q score transform

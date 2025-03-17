@@ -74,24 +74,70 @@ def concat_graph_data(graph_lst):
         Data(): Data object containing the concatenated graph data objects.
     """
 
-    x = torch.tensor([])
-    edge_index = torch.stack((torch.tensor([]), torch.tensor([])))
-    edge_attr = torch.tensor([])
-    y = torch.tensor([])
+    #x = torch.tensor([])
+    idx = 0
+    num_graphs = len(graph_lst)
+    x, edge_attr, y = [None] * num_graphs, [None] * num_graphs, [None] * num_graphs
+    edge_index, union_edge_index = [[None] * num_graphs, [None] * num_graphs], [[None] * num_graphs, [None] * num_graphs]
+        
+    has_union_index = hasattr(graph_lst[0], 'union_edge_index')
+    has_y = True if len(graph_lst[0].y) > 1 else False
+    #edge_index = torch.stack((torch.tensor([]), torch.tensor([])))
+
+    #edge_attr = torch.tensor([])
+    #union_edge_index = torch.stack((torch.tensor([]), torch.tensor([])))
+    #y = torch.tensor([])
 
     for graph in graph_lst:
-        x = torch.concat((x, graph.x))
-        edge_index = torch.stack((torch.concat((edge_index[0], graph.edge_index[0])), torch.concat((edge_index[1], graph.edge_index[1]))))
-        edge_attr = torch.concat((edge_attr, graph.edge_attr))
+        x[idx] = graph.x
+        #edge_index = torch.stack((torch.concat((edge_index[0], graph.edge_index[0])), torch.concat((edge_index[1], graph.edge_index[1]))))
         
-        if graph.y is not None:
-            y = torch.concat((y, graph.y))
+        edge_index[0][idx] = graph.edge_index[0]
+        edge_index[1][idx] = graph.edge_index[1]
+
+        if has_union_index:
+            #union_edge_index = torch.stack((torch.concat((union_edge_index[0], graph.union_edge_index[0])), torch.concat((union_edge_index[1], graph.union_edge_index[1]))))
+            union_edge_index[0][idx] = graph.union_edge_index[0]
+            union_edge_index[1][idx] = graph.union_edge_index[1]
+            
+        #edge_attr = torch.concat((edge_attr, graph.edge_attr))
+        edge_attr[idx] = graph.edge_attr
+        
+        if has_y is not None:
+            #y = torch.concat((y, graph.y))
+            y[idx] = graph.y
         else:
             y = None
-
-    edge_index = edge_index.long()
     
-    return Data(x, edge_index, edge_attr, y)
+        idx += 1
+
+    x = torch.cat(x)
+    edge_attr = torch.cat(edge_attr)
+    y = torch.cat(y) if has_y else None
+
+
+    edge_index = torch.stack((
+        torch.cat(edge_index[0]),
+        torch.cat(edge_index[1])
+    ))
+
+
+    union_edge_index = torch.stack((
+        torch.cat(union_edge_index[0]),
+        torch.cat(union_edge_index[1])
+    ))
+    
+    assert has_union_index and len(edge_attr) == len(union_edge_index[0]), f'Number of edges ({len(union_edge_index[0])}) in union edge index does not match number of edge weights ({len(edge_attr)}).'
+    assert has_y and len(y) == len(edge_index[0]), f'Number of edges ({len(edge_index[0])}) in similarity edge index does not match number of labels ({len(y)}).'
+    
+    if has_union_index:
+        concated_graph =  Data(x, edge_index.int(), edge_attr, y)
+        concated_graph.union_edge_index = union_edge_index.long()
+    else:
+        concated_graph =  Data(x, edge_index.int(), edge_attr, y)
+
+    return concated_graph
+
 
 
             
@@ -275,6 +321,17 @@ def simulate_dataset(num_genes, num_genomes, class_balance = 0.2, class_0_stdev 
 
 
 def get_connected_nodes(gene_lst, sim_score_dict, n, connected_nodes = None):
+    """Find n-nearest nodes to nodes from input list that are connected by a similarity edge.
+
+    Args:
+        gene_lst (list): list of gene names in input
+        sim_score_dict (dict): dictionary holding similarity scores between two genes
+        n (int): number of hops to consider from origin node in search
+        connected_nodes (set, optional): set of nodes that have already been visited, used for recursion only. Defaults to None.
+
+    Returns:
+        list: list of n-nearest nodes connected to the input nodes by a similarity edges
+    """
 
     if connected_nodes is None:
         connected_nodes = set(gene_lst)
@@ -298,35 +355,56 @@ def get_connected_nodes(gene_lst, sim_score_dict, n, connected_nodes = None):
 
 def get_neighbour_graph(gene_lst, gene_id_pos_dict, gene_id_lst, n):
 
-    origin_idx, target_idx = [], []
+    origin_idx = target_idx = [None] * (len(gene_lst) * n * 2)
+    edge_counter = 0
+
+    # this will be the remapped node index of neighbour nodes
     neighbour_id_lst = list(gene_lst)
-    old_new_pos_dict = {}
+    old_new_pos_dict = {gene_id_pos_dict[gene]: idx for idx, gene in enumerate(gene_lst)}
 
-    for new_idx, gene in enumerate(gene_lst):
+    for new_origin_gene_pos, origin_gene in enumerate(gene_lst):
 
-        old_gene_pos = gene_id_pos_dict[gene]
+        # get position of origin gene in old node index
+        old_origin_gene_pos = gene_id_pos_dict[origin_gene]
 
-        for old_neighbour_gene_pos in range(old_gene_pos - n, old_gene_pos + n + 1):
+        # get gene positions of n neighbours in old node index
+        for old_neighbour_gene_pos in range(old_origin_gene_pos - n, old_origin_gene_pos + n + 1):
 
-            if old_neighbour_gene_pos <= 0 or old_neighbour_gene_pos >= len(gene_id_lst):
+            # check if neighbour position is out of range (start/end of old node index),
+            # TODO: we dont check for end of genomes range, but this is at most 2*num_genomes cases
+            if old_neighbour_gene_pos < 0 or old_neighbour_gene_pos >= len(gene_id_lst) or old_neighbour_gene_pos == old_origin_gene_pos:
                 continue
 
+            # get string id of neighbour gene
             neighbour_gene_id = gene_id_lst[old_neighbour_gene_pos]
 
+            # if we havent seen the string id of the neighbour add it to list (new node index)
+            # since we just added the node its edge index id will be len(new node idx) -1
+            # map the old position of origin and neighbour nodes to new pos in case we come across the node again
             if neighbour_gene_id not in neighbour_id_lst:
                 new_neighbour_gene_pos = len(neighbour_id_lst)-1
                 neighbour_id_lst.append(neighbour_gene_id)
-                old_new_pos_dict[old_gene_pos] = new_idx
                 old_new_pos_dict[old_neighbour_gene_pos] = new_neighbour_gene_pos
             else:
+                # we have already seen this neighbour use the position it has in the new node index
                 new_neighbour_gene_pos = old_new_pos_dict[old_neighbour_gene_pos]
 
-            origin_idx.append(new_idx)
-            origin_idx.append(new_neighbour_gene_pos)
-            target_idx.append(new_idx)
-            target_idx.append(new_neighbour_gene_pos)
+            # add edges between the nodes based on new node index
+            origin_idx[edge_counter] = new_origin_gene_pos
+            target_idx[edge_counter] = new_neighbour_gene_pos
+            edge_counter += 1
 
-    
-    return Data(x = torch.tensor([1] * len(neighbour_id_lst)), 
-                edge_index = torch.stack((torch.tensor(origin_idx), torch.tensor(target_idx))),
-                y = torch.tensor([0] * len(origin_idx)))
+    origin_idx = origin_idx[:edge_counter]
+    target_idx = target_idx[:edge_counter]
+    undirected_origin_idx = origin_idx + target_idx
+    undirected_target_idx = target_idx + origin_idx
+
+    edge_index = torch.stack((
+        torch.tensor(undirected_origin_idx),
+        torch.tensor(undirected_target_idx)
+    ))
+
+    gene_id_pos_dict = {gene: idx for idx, gene in enumerate(neighbour_id_lst)}
+
+    # return data object with node features = 1 and labels = 0 (neighbour edges are never label 1)
+    return (edge_index, gene_id_pos_dict, neighbour_id_lst)

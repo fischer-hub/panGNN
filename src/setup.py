@@ -37,9 +37,10 @@ parser.add_argument('--decoder',         help = "decoding strategy (similarity m
 # train mode args
 parser.add_argument('--train',              help = 'set pangnn into training mode', action='store_true')
 parser.add_argument('-g', '--gpu',          help = 'train model on gpu if available', action = 'store_true')
-parser.add_argument('-b', '--num_batches',  help = 'set number of batches to train during each epoch', default = 32, type = int)
+parser.add_argument('-b', '--batch_size',   help = 'set number of graphes to be contained in one batch', default = 32, type = int)
 parser.add_argument('-e', '--epochs',       help = 'set number of epochs for model training', default = 10, type = int)
 parser.add_argument('-r', '--ribap_groups', help = 'path to file holding the ribap groups calculated for the input genomes', default = os.path.join('data', 'dummy_dataset', 'dummy_ribap.csv'), type = str)
+parser.add_argument('-@', '--cpus',         help = 'max number of threads used during preprocessing', default = 4, type = int)
 
 # parse args
 args = parser.parse_args()
@@ -62,7 +63,7 @@ if args.train and not args.ribap_groups:
 print_header(True, args)
 
 hparams = {
-    "num_batches": args.num_batches,
+    "batch_size": args.batch_size,
     "num_epochs": args.epochs,
     "num_neighbours": args.neighbours,
     "binary_threshold": args.binary_threshold,

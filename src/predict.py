@@ -33,8 +33,8 @@ def predict_homolog_genes(model, train_dataset = None, test_dataset = None, bina
             if isinstance(test_dataset, tuple): test_dataset = test_dataset[0]
 
             if train_dataset:
-                train_dataset.to(device)
-                #concat_train = concat_graph_data(train_dataset)
+                #train_dataset.to(device)
+                train_dataset = concat_graph_data(train_dataset)
                 edge_scores_train = model(train_dataset)
                 if isinstance(train_dataset, tuple): train_dataset = train_dataset[0]
         

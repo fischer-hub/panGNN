@@ -9,6 +9,7 @@ from scipy.sparse.csgraph import connected_components
 from torch_geometric.utils.convert import to_scipy_sparse_matrix
 from torch_geometric.transforms import RemoveDuplicatedEdges
 from src.plot import plot_violin_distributions, plot_homolog_positions
+from multiprocessing import Pool, current_process
 
 
 class HomogenousDataset(Dataset):
@@ -247,15 +248,15 @@ class UnionGraphDataset(Dataset):
         self.gene_str_ids_lst_train = []
         self.gene_str_ids_lst_val = []
         self.gene_str_ids_lst = []
-        self.gene_str_int_lst_train = []
-        self.gene_str_int_lst_val = []
-        self.gene_str_int_lst = []
         self.gene_id_position_dict = {}
 
+        self.data_lst = []
+
         self.categorical_nodes = categorical_nodes
-        num_genes = 0
+        self.num_genes = 0
         self.split = split
         self.val = torch.tensor([])
+        self.class_balance = None
 
         
         if not gff_files:
@@ -264,37 +265,32 @@ class UnionGraphDataset(Dataset):
             return
         
         # load annotations from gff files and format to pandas dataframe
-        for gff_file in track(gff_files, description='Loading annotation files..', transient=True):
+        for file_counter, gff_file in track(enumerate(gff_files), description='Loading annotation files..', transient=True):
             genome_annotation_df = load_gff(gff_file)
 
             if 'hemB' not in genome_annotation_df.iloc[0].values[-1]:
                 log.error('Annotation data does not start with start gene, uncentered gene data will lead to falsy gene positions.')
                 log.error(f"Annotation data starts with '{genome_annotation_df.iloc[0].values}'")
 
-            genome_annotation_df_lst.append(genome_annotation_df)
-            log.info(f"Loaded annotation file of genome number {len(genome_annotation_df_lst)}: {gff_file}")
+            log.info(f"Loaded annotation file of genome number {file_counter}: {gff_file}")
             log.debug(f"Genome 1 annotation dataframe:\n {genome_annotation_df}")
-            num_genes += len(genome_annotation_df.index)
+            self.num_genes += len(genome_annotation_df.index)
             
-            self.gene_str_ids_lst_train += list(genome_annotation_df.index)[:int(len(genome_annotation_df.index) * split[0])]
-            self.gene_str_ids_lst_val   += list(genome_annotation_df.index)[int(len(genome_annotation_df.index) * split[0]):]
+            #self.gene_str_ids_lst_train += list(genome_annotation_df.index)[:int(len(genome_annotation_df.index) * split[0])]
+            #self.gene_str_ids_lst_val   += list(genome_annotation_df.index)[int(len(genome_annotation_df.index) * split[0]):]
             self.gene_str_ids_lst       += list(genome_annotation_df.index)
-
-            self.gene_str_int_lst_train += range(len(self.gene_str_ids_lst_train))
-            self.gene_str_int_lst_val   += range(len(self.gene_str_ids_lst_val))
-            self.gene_str_int_lst       += range(len(self.gene_str_ids_lst))
-
 
             #self.gene_str_ids_lst_test  += list(genome_annotation_df.index)[]
             
             # for each string gene ID save its position in the gff file into the dictionary
-            self.gene_id_position_dict.update({gene: idx for idx, gene in enumerate(list(genome_annotation_df.index))})
 
             genome_name_lst.append(os.path.basename(gff_file).rsplit('.', 1)[0].replace('_RENAMED', ''))
 
-        log.info(f"Total number of genes found in annotation files: {num_genes}")
+        log.info(f"Total number of genes found in annotation files: {self.num_genes}")
         #self.neighbour_lst = construct_neighbour_lst(num_genes, self.num_neighbours)
         
+        self.gene_id_position_dict = {gene: idx for idx, gene in enumerate(self.gene_str_ids_lst)}
+
         self.sim_score_dict = load_similarity_score(similarity_score_file)
 
         prob_lst = []
@@ -323,35 +319,147 @@ class UnionGraphDataset(Dataset):
         #plot_violin_distributions(prob_lst, self.ribap_groups_dict, prob = True, path = os.path.join('plots', 'normalized_scores_violin_prob.png'))
         #plot_violin_distributions(qscore_lst, self.ribap_groups_dict, prob = False, path = os.path.join('plots', 'normalized_scores_violin_qscore.png'))
         #quit()
-        self.train = self.generate_sub_graphs()
-        #quit()
+        ribap_groups_chunked = [self.ribap_groups_lst[i::args.cpus] for i in range(args.cpus) if self.ribap_groups_lst[i::args.cpus]]
+        
+        # free some mem before multiprocessing and copying old objects
+        del genome_annotation_df
+        del genome_name_lst
+        del self.ribap_groups_lst
+        del genome_annotation_df_lst
 
-        self.train = self.generate_graphs(self.gene_str_ids_lst_train, self.gene_str_int_lst_train)
-        self.test = self.generate_graphs(self.gene_str_ids_lst_val, self.gene_str_int_lst_val)
+        import time
+        mstart = time.time()
+
+        # Console().status("Generating sub-graphs (this might take some time)..") as status, 
+        #log.info("Generating sub-graphs (this might take some time)..")
+        
+        with Console().status("Generating sub-graphs (this might take some time)..") as status, Pool(processes = args.cpus) as pool:
+            results  = pool.map(self.generate_sub_graphs, ribap_groups_chunked)
+            self.data_lst = [sublist for tup in results for sublist in tup[0]]
+            class_balance_lst = [result[1] for result in results]
+            self.class_balance = sum(class_balance_lst) / len(class_balance_lst)
+        
+        mend = time.time()
+        print(mend-mstart)
+
+        del results
+        del class_balance_lst
+        
+        log.info(f'Generated sub-graphs successfully.')
+
+        #self.generate_sub_graphs()
+        self.split_data(split, args.batch_size)
+
+        #self.train = self.generate_graphs(self.gene_str_ids_lst_train, self.gene_str_int_lst_train)
+        #self.test = self.generate_graphs(self.gene_str_ids_lst_val, self.gene_str_int_lst_val)
 
     def len(self):
         return len(self.train.x) + len(self.test.x)
     
-    def generate_sub_graphs(self):
 
-        for group in self.ribap_groups_lst:
+    def split_data(self, split = (0.7, 0.15, 0.15), batch_size = 32):
+        """Split the singular graph data into train, test and validations sets, also create batches in the train dataset.
 
-            gene_str_lst = get_connected_nodes(group, self.sim_score_dict, args.neighbours)
+        Args:
+            split (tuple, optional): . fraction of the graphs to go to train, test and validation sets respectively. Defaults to (0.7, 0.15, 0.15).
+            batch_size (int, optional): number of graphs to trasin on in a single batch. Defaults to 32.
+        """
+        if not self.data_lst:
+            log.error("Data object list of this dataset is empty. What have you done..")
 
-            neighbour_graph = get_neighbour_graph(group, self.gene_id_position_dict, self.gene_str_ids_lst, args.neighbours)
+        if args.batch_size == 1:
+            log.info('Batch size set to 1, train and test datasets are the same.')
+            self.train = self.data_lst
+            self.test = self.data_lst[0]
+            return
+        
+        # calculate train, test, val split and batches for train data
+        num_train_data = int(len(self.data_lst) * split[0])
+        num_test_data = int(len(self.data_lst) * split[1])
+        num_val_data = max(len(self.data_lst)-(num_test_data+num_train_data), 2)
 
-            # add homolog genes to node index
-            x = torch.tensor([1] * len(gene_str_lst))
-            gene_id_integer_dict = {gene: idx for idx, gene in enumerate(gene_str_lst)}
-            sim_edge_index = build_edge_index(self.sim_score_dict, gene_id_integer_dict)
+        random.shuffle(self.data_lst)
+
+        log.info(f"Splitting data ({len(self.data_lst)}) into sets of train: {num_train_data}, test: {num_test_data}, val: {num_val_data} graphs.")
+        self.train = self.data_lst[:num_train_data]
+        self.train = [concat_graph_data(self.train[i:i + batch_size]) for i in range(0, len(self.train), batch_size)]
+        self.test = concat_graph_data(self.data_lst[num_train_data:num_train_data + num_test_data])
+        self.val = concat_graph_data(self.data_lst[-num_val_data:])
+    
+
+    def generate_sub_graphs(self, ribap_groups_lst):
+
+        pos = 0
+        neg = 0
+        data_lst = []
+
+        for group in ribap_groups_lst:
+
+            if len(group) <= 1:
+                continue
+
+            similar_gene_lst = get_connected_nodes(group, self.sim_score_dict, args.neighbours)
+            assert set(group).issubset(similar_gene_lst), f'Genes from gene family {group} not part of connected similarity nodes {similar_gene_lst}.'
+
+            neighbour_edge_index, sub_gene_id_pos_dict, gene_lst = get_neighbour_graph(similar_gene_lst, self.gene_id_position_dict, self.gene_str_ids_lst, args.neighbours)
+            assert set(similar_gene_lst).issubset(gene_lst), f'Genes from similarity gene set {similar_gene_lst} not part of sub graph gene set with neighbour genes {gene_lst}.'
+            assert len(neighbour_edge_index[0]) == len(neighbour_edge_index[1]), f'List or origin nodes ({len(neighbour_edge_index[0])}) is of different length than list of target nodes ({len(neighbour_edge_index[1])}), invalid edge index!'
+
+            sub_sim_score_dict = { gene_str_id: self.sim_score_dict[gene_str_id] for gene_str_id in gene_lst if gene_str_id in self.sim_score_dict}
+
+            sim_edge_index = build_edge_index(sub_sim_score_dict, sub_gene_id_pos_dict, fully_connected = False)
+            assert len(sim_edge_index[0]) >= len(group), f'Found less similarity edges than edges neccessary to connect genes from origin gene family, number of edges is: {len(sim_edge_index[0])}, but {len(group)} genes belong to origin gene family of this graph.'
+            assert len(sim_edge_index[0]) == len(sim_edge_index[1]), f'List or origin nodes ({len(sim_edge_index[0])}) is of different length than list of target nodes ({len(sim_edge_index[1])}), invalid edge index!'
+
+            sim_edge_weights = map_edge_weights(sim_edge_index, sub_sim_score_dict, gene_lst, use_cache=False)
+            assert len(sim_edge_weights) == len(sim_edge_index[0]), f'Number of similarity edges is differetn from number of edge weights (similarity scores), can not map {len(sim_edge_weights)} edge weights to {len(sim_edge_index[0])} edges.'
+
+
+            if self.ribap_groups_dict:
+                labels_ts = map_labels_to_edge_index(sim_edge_index, gene_lst, self.ribap_groups_dict, use_cache=False)
+                pos += labels_ts.sum().item()
+                neg += len(labels_ts) - labels_ts.sum().item()
+
+            else:
+
+                labels_ts = None
+
+
+            x = torch.tensor([1] * len(gene_lst)).unsqueeze(1).float()
+
+            sim_edge_index = torch.stack((
+                torch.tensor((sim_edge_index[0]), dtype = torch.long),
+                torch.tensor((sim_edge_index[1]), dtype = torch.long)
+            ))
+
+            union_edge_index = torch.stack((
+                torch.cat((neighbour_edge_index[0], sim_edge_index[0])),
+                torch.cat((neighbour_edge_index[1], sim_edge_index[1]))
+            ))
+
+
+            union_edge_weights = torch.cat((
+                torch.tensor([1] * (len(union_edge_index[0]) - len(sim_edge_index[0]))),
+                sim_edge_weights
+            ))
+
+            assert len(union_edge_weights) == len(union_edge_index[0]), f'Number of similarity edges is different from number of edge weights (similarity scores), can not map {len(union_edge_weights)} edge weights to {len(union_edge_index[0])} edges.'
+
+            graph = Data(x, sim_edge_index, union_edge_weights, labels_ts)
+            
+            graph.union_edge_index = union_edge_index.long()
+
+            data_lst.append(graph)
+
+        local_class_balance = neg / pos
+        log.debug(f'{current_process().name} finished.')
+        return (data_lst, local_class_balance)
+        return 
+        #log.info(f'{pos / (neg + pos) * 100} % edges in positive class.')
 
 
 
-            print(neighbour_graph)
-        quit()
-
-
-    def generate_graphs(self, gene_str_ids_lst, gene_str_int_lst):
+    def generate_graphs(self, gene_str_ids_lst):
         # total number of genes found in all annotation files
         gene_id_integer_dict = {gene: idx for idx, gene in enumerate(gene_str_ids_lst)}
         gene_ids_ts = torch.tensor(list(gene_id_integer_dict.values()))
@@ -399,7 +507,7 @@ class UnionGraphDataset(Dataset):
             #labels_ts      = torch.cat((labels_ts, torch.tensor([1] * (len(union_edge_index_ts[0]) - len(labels_ts)))))
         
         if self.categorical_nodes:
-            x = torch.tensor(gene_str_int_lst)
+            x = torch.tensor([1] * len(gene_str_ids_lst))
         else:
             x = normalized_gene_positions_ts.unsqueeze(1)
 
@@ -485,7 +593,7 @@ class UnionGraphDataset(Dataset):
 
 
     def to(self, device):
-        self.train = self.train.to(device)
+        self.train = [graph.to(device) for graph in self.train]
         self.test = self.test.to(device)
         self.val = self.val.to(device)
 
@@ -540,53 +648,3 @@ class UnionGraphDataset(Dataset):
         if not self.test and not self.train:
             log.error("Failed to load dataset from file, check that file contains at least one of training or test data.")
             quit()
-
-    
-    def separate_components(self):
-        """Separate connected components in a given graph based on its edge index.
-        """
-
-        adj_matrix = to_scipy_sparse_matrix(self.edge_index)
-        graph = csr_array(adj_matrix)
-        n_components, labels = connected_components(csgraph=graph, directed=False, return_labels=True)
-
-        log.debug(f"Number of connected components: {n_components}.")
-
-        # list of node lists where each node list contains the node indices of the original node tensor that is part of this component
-        connected_components_nodes = [[] for x in range(n_components)]
-        
-        for idx, label in enumerate(labels):
-            connected_components_nodes[label].append(idx)
-
-        # now component node lst looks like this 
-        # connected_components_nodes = [[0, 1, 2], [3]]
-
-        for idx, component_nodes in enumerate(connected_components_nodes): #, description='Generating subgraphs from connected components..', transient=True):
-            x = torch.tensor(component_nodes)
-            # x is a tensor of categorical node IDs where a nodes index is in edge_index if it is connected to an edge,
-            # so we have to either remap the indices in edge_index to the new x, or use the whole tensor for each data 
-            # object so the indices work out 
-
-            log.debug(f"subsetting similarity score dict for component nodes.. {component_nodes} {idx/len(connected_components_nodes) *100} % done.")
-            gene_str_ids_lst = [self.gene_str_ids_lst[i] for i in component_nodes]
-            sub_sim_score_dict = dict((gene_str_id, self.sim_score_dict[gene_str_id]) for gene_str_id in gene_str_ids_lst if gene_str_id in self.sim_score_dict)
-
-            component_edge_index = build_edge_index(sub_sim_score_dict, self.gene_id_integer_dict, fully_connected = False)
-            component_edge_weight_ts = map_edge_weights(component_edge_index, sub_sim_score_dict, self.gene_str_ids_lst)
-
-            if self.ribap_groups_file:
-                component_labels_ts = map_labels_to_edge_index(component_edge_index, self.gene_str_ids_lst, self.ribap_groups_dict)
-            else:
-                component_labels_ts = None
-
-
-            graph_data = Data(x, component_edge_index, component_edge_weight_ts, component_labels_ts)
-            graph.neighbour_edge_weights_ts = None # neighbour_edge_weights_ts
-            self.data_lst.append(graph_data) 
-
-
-        return connected_components
-        
-
-
-

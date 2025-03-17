@@ -162,28 +162,35 @@ def build_edge_index(sim_score_dict, gene_id_integer_dict, fully_connected = Fal
         mask = (row != col)
         edge_index_ts = torch.stack((row, col), dim=0) if self_loops else torch.stack((row[mask], col[mask]), dim=0) 
     else:
-        origin_idx, target_idx = [], []
+        max_edge_number = ((len(sim_score_dict)-1) ** 2)
+        origin_idx = [None] * max_edge_number
+        target_idx = [None] * max_edge_number
+        edge_counter = 0
 
-        for origin_id in sim_score_dict.keys():
-            for target_id in sim_score_dict[origin_id].keys():
+        for origin_id in sim_score_dict:
+            for target_id in sim_score_dict[origin_id]:
                 # skip self loop edges if self_loops is false
                 if not self_loops and (target_id == origin_id):
                     continue
                 # when using part of the input genomes from ribap we might have gene pairs in the sim_score_dict 
                 # that are not actually loaded in the gene dict, this probably slows down the edge index creation tho
                 # so we might need to remove this check once we have a model / use the full dataset as input..
-                if origin_id in gene_id_integer_dict.keys() and target_id in gene_id_integer_dict.keys():                     
-                    origin_idx.append(gene_id_integer_dict[origin_id])
-                    target_idx.append(gene_id_integer_dict[target_id])
+                if target_id in gene_id_integer_dict:
+                    origin_idx[edge_counter] = gene_id_integer_dict[origin_id]
+                    target_idx[edge_counter] = gene_id_integer_dict[target_id]
+                    edge_counter += 1
 
-        # remove duplicate edges, e.g. in case when two neighbours also have a sim score calculated between them
-        edge_index_ts = torch.stack((torch.tensor(origin_idx), torch.tensor(target_idx)), dim=0)
+        #edge_index_ts = torch.stack((torch.tensor(origin_idx), torch.tensor(target_idx)), dim=0)
+        origin_idx = origin_idx[:edge_counter]
+        target_idx = target_idx[:edge_counter]
+        undirected_origin_idx = origin_idx + target_idx
+        undirected_target_idx = target_idx + origin_idx
 
 
-    return edge_index_ts
+    return (undirected_origin_idx, undirected_target_idx)
 
 
-
+# TODO: slow
 def map_labels_to_edge_index(edge_index, gene_ids_lst, ribap_groups_dict, use_cache = False):
     """Map labels for test dataset from RIBAP result table to respective edge
     position in the edge index.
@@ -191,7 +198,7 @@ def map_labels_to_edge_index(edge_index, gene_ids_lst, ribap_groups_dict, use_ca
     Args:
         edge_index
     """
-    if os.path.isfile('data/labels.pkl') and args.cache and use_cache:
+    if args.cache and use_cache and not os.path.isfile('data/labels.pkl'):
         with open('data/labels.pkl', 'rb') as f:
             log.info(f"Found pickled labels, loading file..")
             label_lst = pickle.load(f)
@@ -212,14 +219,14 @@ def map_labels_to_edge_index(edge_index, gene_ids_lst, ribap_groups_dict, use_ca
             elif destination_gene_str_id in ribap_groups_dict and source_gene_str_id in ribap_groups_dict[destination_gene_str_id]:
                 label_lst[edge] = 1
 
-        if not os.path.isfile('data/labels.pkl') and args.cache and use_cache:
+        if args.cache and use_cache and not os.path.isfile('data/labels.pkl'):
             log.info(f"Dumping labels list to pickle file..")
             with open('data/labels.pkl', 'wb') as f:
                 pickle.dump(label_lst, f)
     
     #log.info(f"{sum(label_lst) / len(label_lst)} of edges in ground truth are positive.")
     return torch.tensor(label_lst).float()
-
+    
 
 def load_ribap_groups(ribap_group_file, genome_name_lst):
     """Loads the ribap group file (tab seperated) and returns a pandas dataframe.
