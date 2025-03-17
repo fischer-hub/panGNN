@@ -19,7 +19,7 @@ from torch.utils.tensorboard import SummaryWriter
 from accelerate import Accelerator
 
 accelerator = Accelerator()
-os.system('ulimit -n 4096')
+os.system('ulimit -n 40960')
 
 
 #dataset = HomogenousDataset(args.annotation, args.similarity, args.ribap_groups, args.neighbours) if args.train else HomogenousDataset(args.annotation, args.similarity, args.neighbours)
