@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from src.plot import plot_loss_accuracy, plot_graph, plot_simscore_class, plot_logit_distribution, plot_union_graph, plot_simscore_distribution_by_class, plot_umap_pca
 from src.setup import log, args, hparams
-import torch, os, random, datetime, time, shutil
+import torch, os, random, datetime, time, shutil, resource
 from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader
 from torch_geometric.transforms import RandomLinkSplit
@@ -19,7 +19,8 @@ from torch.utils.tensorboard import SummaryWriter
 from accelerate import Accelerator
 
 accelerator = Accelerator()
-os.system('ulimit -n 40960')
+soft_limit, hard_limit = resource.getrlimit(resource.RLIMIT_NOFILE)
+if soft_limit < 50000: resource.setrlimit(resource.RLIMIT_NOFILE, (hard_limit-10, hard_limit))
 
 
 #dataset = HomogenousDataset(args.annotation, args.similarity, args.ribap_groups, args.neighbours) if args.train else HomogenousDataset(args.annotation, args.similarity, args.neighbours)
