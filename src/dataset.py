@@ -256,6 +256,8 @@ class UnionGraphDataset(Dataset):
         self.num_genes = 0
         self.split = split
         self.val = torch.tensor([])
+        self.train = torch.tensor([])
+        self.test = torch.tensor([])
         self.class_balance = None
 
         
@@ -347,7 +349,6 @@ class UnionGraphDataset(Dataset):
         
         log.info(f'Generated sub-graphs successfully.')
 
-        #self.generate_sub_graphs()
         self.split_data(split, args.batch_size)
 
         #self.train = self.generate_graphs(self.gene_str_ids_lst_train, self.gene_str_int_lst_train)
@@ -356,7 +357,7 @@ class UnionGraphDataset(Dataset):
     def len(self):
         return len(self.train.x) + len(self.test.x)
     
-
+    # pygs dataloader does this on its own im going to cry, remider to read the docs before reinventing the wheel
     def split_data(self, split = (0.7, 0.15, 0.15), batch_size = 32):
         """Split the singular graph data into train, test and validations sets, also create batches in the train dataset.
 
@@ -367,24 +368,28 @@ class UnionGraphDataset(Dataset):
         if not self.data_lst:
             log.error("Data object list of this dataset is empty. What have you done..")
 
-        if args.batch_size == 1:
-            log.info('Batch size set to 1, train and test datasets are the same.')
-            self.train = self.data_lst
-            self.test = self.data_lst[0]
-            return
+        #if args.batch_size == 1:
+        #    log.info('Batch size set to 1, train and test datasets are the same.')
+        #    self.train = self.data_lst
+        #    self.test = self.data_lst[0]
+        #    return
         
         # calculate train, test, val split and batches for train data
         num_train_data = int(len(self.data_lst) * split[0])
-        num_test_data = int(len(self.data_lst) * split[1])
-        num_val_data = max(len(self.data_lst)-(num_test_data+num_train_data), 2)
+        num_val_data = int(len(self.data_lst) * split[1])
+        num_test_data = max(len(self.data_lst)-(num_val_data+num_train_data), 2)
 
         random.shuffle(self.data_lst)
 
         log.info(f"Splitting data ({len(self.data_lst)}) into sets of train: {num_train_data}, test: {num_test_data}, val: {num_val_data} graphs.")
         self.train = self.data_lst[:num_train_data]
-        self.train = [concat_graph_data(self.train[i:i + batch_size]) for i in range(0, len(self.train), batch_size)]
-        self.test = concat_graph_data(self.data_lst[num_train_data:num_train_data + num_test_data])
-        self.val = concat_graph_data(self.data_lst[-num_val_data:])
+        self.val  = self.data_lst[num_train_data:num_train_data + num_val_data]
+        self.test   = self.data_lst[-num_test_data:]
+
+        #self.train = self.data_lst[:num_train_data]
+        #self.train = [concat_graph_data(self.train[i:i + batch_size]) for i in range(0, len(self.train), batch_size)]
+        #self.test = concat_graph_data(self.data_lst[num_train_data:num_train_data + num_test_data])
+        #self.val = concat_graph_data(self.data_lst[-num_val_data:])
     
 
     def generate_sub_graphs(self, ribap_groups_lst):
@@ -648,3 +653,7 @@ class UnionGraphDataset(Dataset):
         if not self.test and not self.train:
             log.error("Failed to load dataset from file, check that file contains at least one of training or test data.")
             quit()
+    
+    
+    def get(self, idx):
+        return self.data_lst[idx]

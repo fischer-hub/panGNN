@@ -17,6 +17,8 @@ from sklearn.metrics import roc_curve, auc, average_precision_score
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.tensorboard import SummaryWriter
 from accelerate import Accelerator
+from rich.progress import track, Console, Progress
+
 
 accelerator = Accelerator()
 soft_limit, hard_limit = resource.getrlimit(resource.RLIMIT_NOFILE)
@@ -31,7 +33,7 @@ if not args.simulate_dataset:
         num_genomes = 'number of genomes not available since dataset was loaded from disk'
     else:
         num_genomes = len(args.annotation)
-        dataset = UnionGraphDataset(args.annotation, args.similarity, args.ribap_groups, split=(0.6, 0.4), categorical_nodes = args.categorical_node) if args.train else HomogenousDataset(args.annotation, args.similarity)
+        dataset = UnionGraphDataset(args.annotation, args.similarity, args.ribap_groups, split=(0.7, 0.15, 0.15), categorical_nodes = args.categorical_node) if args.train else HomogenousDataset(args.annotation, args.similarity)
     #dataset.generate_graph_data()
 else:
     log.info('Simulating dataset.')
@@ -63,13 +65,14 @@ log.debug(f"Constructed test dataset from node, egde and index tensors: {dataset
 #log.info(f"Constructed {dataset.train[1].x}")
 #log.info(f"Constructed {dataset.train[1].edge_index}")
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu") if args.gpu else 'cpu'
+#device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu") if args.gpu else 'cpu'
+device = accelerator.device
 #model = MyGCN(dataset = dataset.train, hidden_dim = hidden_dim, num_neighbours = args.neighbours, node_feature_dim = gene_id_embedding_dim, device = device)
 model = AlternateGCN(device = device, dataset = dataset.train, categorical_nodes = dataset.categorical_nodes, dims = [args.node_dim, args.hidden_dim])
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)#selflr=0.00005)
 scheduler = ReduceLROnPlateau(optimizer, mode='min', patience = 7, factor = 0.6)
 #scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.90)
-model, optimizer, data = accelerator.prepare(model, optimizer, dataset)
+#model, optimizer, data = accelerator.prepare(model, optimizer, dataset)
 
 # TODO: is this a good loss function for our scenario?
 # criterion = torch.nn.BCELoss() # if your model outputs probabilities, outputs logits
@@ -98,6 +101,12 @@ else:
 
 if not os.path.exists('runs'): os.mkdir('runs')
 
+train_data_loader = DataLoader(dataset.train, batch_size=args.batch_size, shuffle=True)
+val_data_loader = DataLoader(dataset.val, batch_size=args.batch_size, shuffle=False)
+test_data_loader = DataLoader(dataset.test, batch_size=len(dataset.test), shuffle=False)
+
+model, optimizer, train_data_loader, scheduler, val_data_loader, test_data_loader = accelerator.prepare(model, optimizer, train_data_loader, scheduler, val_data_loader, test_data_loader)
+
 run_id = datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + args.tb_comment
 writer = SummaryWriter(log_dir = os.path.join('temp', run_id), comment = args.tb_comment)
 
@@ -117,26 +126,30 @@ elif args.train:
     log.info(f"Training on device: {device}")
 
     #dataset.to(device)
-    model.to(device)
+    #model.to(device)
 
-    log.info(f"Entering training loop with batch size: {args.batch_size}, class balance: {dataset.class_balance}, {len(dataset.train)} batches.")#{dataset.class_balance}.")
+    log.info(f"Entering training loop with batch size: {args.batch_size}, class balance: {dataset.class_balance}, {len(train_data_loader)} batches.")#{dataset.class_balance}.")
 
     with Progress(transient = True) as progress:
 
         training_bar = progress.add_task("Epochs completed:", total=args.epochs)
-        batch_bar    = progress.add_task("Training current batch set:", total=len(dataset.train))
+        batch_bar    = progress.add_task("Training model on training data set", total=len(train_data_loader))
+        val_bar      = progress.add_task("Infering model on validation data set:", total=len(val_data_loader))
 
         for epoch in range(args.epochs):
             total = 0
 
             # shuffle list of input graphs so the model sees the data in different order every time 
-            random.shuffle(dataset.train)
+            #random.shuffle(dataset.train)
             accuracy = []
             epoch_correct = 0
             epoch_total = 0
-            val_loss = 0
+            val_loss, train_loss = 0, 0
+            all_labels_val, all_probabilities_val, all_predictions_val = [], [], []
+            all_labels_train, all_probabilities_train, all_predictions_train = [], [], []
 
-            for batch_num, batch in enumerate(dataset.train):
+            for batch_num, batch in enumerate(train_data_loader):
+            #for batch_num, batch in enumerate(dataset.train):
             #for batch_num in range(args.num_batches):
                 
                 model.train()
@@ -145,29 +158,33 @@ elif args.train:
                 #batch = dataset.train
                 #dataset.graph_to(batch, device)
 
-                #batch = dataset.train
-                #print(batch)
                 labels = batch[0].y if isinstance(batch, tuple) else batch.y
-                #class_balance_factor = (labels == 0.).sum()/labels.sum()
-                #criterion = torch.nn.BCEWithLogitsLoss(pos_weight = min(10, max(0.1, class_balance_factor)))
-                #print(class_balance_factor)
 
                 # clear old gradients so only current batch gradients are used
                 optimizer.zero_grad()
 
                 # this calls the models forward function since model is callable
                 log.debug('Calling forward step on current batch..')
+
                 output = model(batch)
                 #print(f"logits after decoding:\n{output}")
                 log.debug('Calling loss function on current batch..')
                 log.debug(batch)
                 loss = criterion(output, labels)
+                train_loss += loss
                 log.debug('Calling backward step on current batch..')
-                loss.backward()
+                #loss.backward()
+                accelerator.backward(loss)
                 log.debug('Calling optimizer step on current batch..')
                 optimizer.step()
+                
+                probabilities = torch.sigmoid(output).cpu()
+                binary_prediction_train = (probabilities >= binary_th).int()
+                
+                all_probabilities_train += list(probabilities)
+                all_predictions_train += list(binary_prediction_train)
+                all_labels_train += list(labels.cpu())
 
-                progress.update(batch_bar, advance = 1)
 
                 if args.dynamic_binary_threshold:
                     fpr, tpr, thresholds = roc_curve(labels, torch.sigmoid(output.detach()))
@@ -178,94 +195,91 @@ elif args.train:
 
                     print(optimal_threshold)
                 
-                binary_prediction = (torch.sigmoid(output) >= binary_th).int()
-                accuracy.append(((binary_prediction == labels).sum().item()) / len(labels))
+                progress.update(batch_bar, advance = 1)
 
-                epoch_correct += (binary_prediction == labels).sum().item()  # Count correct predictions
-                epoch_total += len(labels)  # Total number of samples in the batch
-                batch_accuracy = (binary_prediction == labels).sum().item() / len(labels)  # Calculate accuracy
-                writer.add_scalar("Loss/train", loss, epoch)
-                writer.add_scalar("Acc/train", ((binary_prediction == labels).sum().item()) / len(labels), epoch)
                 """                 for name, param in model.named_parameters():
                                     if param.grad is not None:
                                         print(f'{name}: {param.grad.mean()}') """
 
             with torch.no_grad():  # Disable gradient calculation for validation
-                model.eval()
-                dataset.test.to(device)
-                output = model(dataset.test)
 
-                test_labels = dataset.test[0].y if isinstance(dataset.test, tuple) else dataset.test.y
+                for num_batch, batch in enumerate(val_data_loader):
 
-                val_loss = criterion(output, test_labels)
-                writer.add_scalar("Loss/val", val_loss, epoch)
-                #scheduler.step()
-                scheduler.step(val_loss)
-                probabilities = torch.sigmoid(output)
-                binary_prediction_val = (probabilities >= binary_th).int()
-                val_acc = (binary_prediction_val == test_labels).sum().item() / len(test_labels)
-                writer.add_scalar("Acc/val", val_acc, epoch)
+                    model.eval()
+                    output = model(batch)
+
+                    val_labels = batch.y
+
+                    loss = criterion(output, val_labels)
+                    scheduler.step(loss)
+                    val_loss += loss
+
+                    probabilities = torch.sigmoid(output).cpu()
+                    binary_prediction_val = (probabilities >= binary_th).int()
+                    
+                    val_labels = val_labels.cpu()
+                    all_probabilities_val += list(probabilities)
+                    all_predictions_val += list(binary_prediction_val.cpu())
+                    all_labels_val += list(val_labels)
+        
+                    progress.update(val_bar, advance = 1)
+
+
                 
-                test_labels = test_labels.cpu()
-                binary_prediction_val = binary_prediction_val.cpu()
-                binary_prediction = binary_prediction.cpu()
-                labels = labels.cpu()
-                conf_matrix = confusion_matrix(test_labels, binary_prediction_val)
-                tn, fp, fn, tp = conf_matrix.ravel()
+            # val metrics
+            conf_matrix = confusion_matrix(all_labels_val, all_predictions_val, labels = [0, 1])
+            tn, fp, fn, tp = conf_matrix.ravel()
 
-                fpr, tpr, thresholds = roc_curve(test_labels, probabilities)
-                roc_auc = auc(fpr, tpr)
-                average_precision = average_precision_score(test_labels, probabilities)
+            fpr, tpr, thresholds = roc_curve(all_labels_val, all_probabilities_val)
+            roc_auc_val = auc(fpr, tpr)
+            pr_auc_val = average_precision_score(val_labels, probabilities)
 
-                writer.add_scalar("ROC_AUC/val", roc_auc, epoch)
-                writer.add_scalar("AP/val", average_precision, epoch)
-                writer.add_scalar("learning_rate", optimizer.param_groups[0]['lr'], epoch)
-                
-                precision_val = tp / (tp + fp + 1e-10)
-                recall_val = tp / (tp + fn + 1e-10)
-                f1_val = 2 * (precision_val * recall_val) / (precision_val + recall_val + 1e-10)
-                #f1_val = (2*(((tp/(tp+fp))*(tp/(tp+fn)))/((tp/(tp+fp))+(tp/(tp+fn)))))
-                writer.add_scalar("F1/val", f1_val, epoch)
+            precision_val = tp / (tp + fp + 1e-10)
+            recall_val = tp / (tp + fn + 1e-10)
+            f1_val = 2 * (precision_val * recall_val) / (precision_val + recall_val + 1e-10)
+            acc_val = (tp + tn) / (tp + tn + fp + fn)
 
+            writer.add_scalar("ROC-AUC/val", roc_auc_val, epoch)
+            writer.add_scalar("PR-AUC/val", pr_auc_val, epoch)
+            writer.add_scalar("Loss/val", val_loss/len(val_data_loader), epoch)
+            writer.add_scalar("Acc/val", acc_val, epoch)
+            writer.add_scalar("learning_rate", optimizer.param_groups[0]['lr'], epoch)
+            writer.add_scalar("precision/val", precision_val, epoch)
+            writer.add_scalar("recall/val", recall_val, epoch)
+            writer.add_scalar("F1/val", f1_val, epoch)
 
-                conf_matrix = confusion_matrix(labels, binary_prediction, labels = [0, 1])
-                tn, fp, fn, tp = conf_matrix.ravel()
-                precision_train = tp / (tp + fp + 1e-10)
-                recall_train = tp / (tp + fn + 1e-10)
-                f1_train = 2 * (precision_train * recall_train) / (precision_train + recall_train + 1e-10)
+            #train metrics
+            conf_matrix = confusion_matrix(all_labels_train, all_predictions_train, labels = [0, 1])
+            tn, fp, fn, tp = conf_matrix.ravel()
 
-                precision_lst.append(precision_train)
-                writer.add_scalar("precision/val", precision_val, epoch)
+            precision_train = tp / (tp + fp + 1e-10)
+            recall_train = tp / (tp + fn + 1e-10)
+            f1_train = 2 * (precision_train * recall_train) / (precision_train + recall_train + 1e-10)
+            acc_train = (tp + tn) / (tp + tn + fp + fn)
 
-                recall_lst.append(recall_val)
-                writer.add_scalar("recall/val", recall_val, epoch)
-                #f1_val = 0 
-                #f1_train = 0
-
+            writer.add_scalar("Loss/train", train_loss/len(train_data_loader), epoch)
+            writer.add_scalar("Acc/train", acc_train, epoch)
+            writer.add_scalar("F1/train", f1_train, epoch)
         
             # get some metrics, maybe do this in the model class?
-            log.info(f"Epoch {epoch+1}, Loss: {loss.item():.4f}, Acc: {epoch_correct / epoch_total:.4f}, F1 {f1_train:.4f}, Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}, LR: {optimizer.param_groups[0]['lr']:.10f},  Val F1: {f1_val:.4f}, Val AP: {average_precision:.4f}{f'Optimal Bin. Th. {binary_th:.4f}' if args.dynamic_binary_threshold else ''}")
-
-            train_losses.append(loss.item())
-            val_losses.append(val_loss.item())
-            train_accuracies.append(epoch_correct / epoch_total)
-            val_accuracies.append(val_acc)
-
-            f1_train_lst.append(f1_train)
+            log.info(f"Epoch {epoch+1}, Loss: {loss.item():.4f}, Acc: {acc_train:.4f}, F1 {f1_train:.4f}, Val Loss: {val_loss:.4f}, Val Acc: {acc_val:.4f}, LR: {optimizer.param_groups[0]['lr']:.10f},  Val F1: {f1_val:.4f}, Val AP: {pr_auc_val:.4f}{f'Optimal Bin. Th. {binary_th:.4f}' if args.dynamic_binary_threshold else ''}")
             
             progress.update(training_bar, advance = 1)
             progress.reset(batch_bar)
+            progress.reset(val_bar)
 
-    log.info(f"Finished model training.\nPlotting metrics..")
-    log.debug(f"\nLoss: {train_losses}\nAccuracy: {train_accuracies}")
-    plot_loss_accuracy(args.epochs, train_losses, train_accuracies, val_losses, val_accuracies, f1_train_lst)
+    #plot_loss_accuracy(args.epochs, train_losses, train_accuracies, val_losses, val_accuracies, f1_train_lst)
+    log.info('Unwrapping model from accelerate layers.')
+    model = accelerator.unwrap_model(model)
     log.info(f"Saving model to file '{os.path.join('temp', run_id, args.model_args)}'")
     torch.save(model.state_dict(), os.path.join('temp', run_id, args.model_args))
 
-    # get metrics on test dataset
-    prediction_bin, prediction_scores, stats = predict_homolog_genes(model, dataset.train, dataset.test, binary_th=binary_th)
-    print(hparams)
-    writer.add_pr_curve('PR/val', dataset.test.y, torch.sigmoid(prediction_scores))
+    with Console().status("Finished model training, plotting metrics..") as status:
+        # get metrics on test dataset
+        for batch in test_data_loader:
+            prediction_bin, prediction_scores, stats = predict_homolog_genes(model, None, batch, binary_th=binary_th)
+            writer.add_pr_curve('PR/val', batch.y.cpu(), torch.sigmoid(prediction_scores))
+
     writer.add_hparams(hparams, stats)
     log.debug(prediction_bin)
     log.info(f"Time elapsed: {time.time() - start:.4f} seconds")
@@ -275,8 +289,8 @@ elif args.train:
     stats['neighbours'] = args.neighbours
     #stats['num_nodes_train'] = len(dataset.train.x)
     #stats['num_nodes_sim_edges_train'] = len(dataset.train.edge_index)
-    stats['num_nodes_test'] = len(dataset.test.x)
-    stats['num_nodes_sim_edges_test'] = len(dataset.test.edge_index)
+    #stats['num_nodes_test'] = len(dataset.test.x)
+    #stats['num_nodes_sim_edges_test'] = len(dataset.test.edge_index)
     stats['mode'] = 'train'
     stats['epochs'] = args.epochs
     stats['batch_size'] = args.batch_size

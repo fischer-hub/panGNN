@@ -23,11 +23,11 @@ def predict_homolog_genes(model, train_dataset = None, test_dataset = None, bina
         
     """
     stats = {}
-    model.to(device)
+    #model.to(device)
     model.eval()
     with torch.no_grad():
         with Console().status("Infering model on test data..") as status:
-            test_dataset.to(device)
+            #test_dataset.to(device)
             edge_scores = model(test_dataset)
 
             if isinstance(test_dataset, tuple): test_dataset = test_dataset[0]
@@ -46,14 +46,16 @@ def predict_homolog_genes(model, train_dataset = None, test_dataset = None, bina
                 binary_prediction_train = (probablilities_train >= binary_th).int()
 
 
-            probablilities = torch.sigmoid(edge_scores)
+            probablilities = torch.sigmoid(edge_scores).cpu()
             binary_prediction = (probablilities >= binary_th).int()
 
-            auc, opt_th = plot_roc(test_dataset.y, probablilities)
+            test_labels = test_dataset.y.cpu()
+
+            auc, opt_th = plot_roc(test_labels, probablilities)
             stats['auc_test'] = auc
             stats['optimatl_threshold'] = opt_th
 
-            conf_matrix = confusion_matrix(test_dataset.y, binary_prediction)
+            conf_matrix = confusion_matrix(test_labels, binary_prediction, labels = [0, 1])
             tn, fp, fn, tp = conf_matrix.ravel()
 
             stats['tn'] = tn
@@ -61,25 +63,25 @@ def predict_homolog_genes(model, train_dataset = None, test_dataset = None, bina
             stats['fn'] = fn
             stats['tp'] = tp
 
-            plot_logit_distribution(edge_scores, 'plots/logit_dist.png')
+            plot_logit_distribution(edge_scores.cpu(), 'plots/logit_dist.png')
             plot_logit_distribution(probablilities, 'plots/prob_hist.png')
 
             random_pred = torch.randint(0,2,(len(binary_prediction),))
 
-            AP = plot_pr_curve(test_dataset.y, probablilities)
+            AP = plot_pr_curve(test_labels, probablilities)
             stats['average_precision'] = AP
 
-            accuracy_test = ((binary_prediction == test_dataset.y).sum().item()) / len(test_dataset.y)
+            accuracy_test = ((binary_prediction == test_labels).sum().item()) / len(test_labels)
             stats['acc_test'] = accuracy_test
-            stats['acc_train'] = None
+            stats['acc_train'] = 0
 
             if train_dataset: 
                 accuracy_train = ((binary_prediction_train == train_dataset.y).sum().item()) / len(train_dataset.y)
                 stats['acc_train'] = accuracy_train
 
-            guess = ((random_pred == test_dataset.y).sum().item()) / len(test_dataset.y)
+            guess = ((random_pred == test_labels).sum().item()) / len(test_labels)
             log.info("\n\n----------METRICS----------\n")
-            log.info(f"Correctly predicted: {(binary_prediction == test_dataset.y).sum().item() } out of {len(test_dataset.y)} edges.")
+            log.info(f"Correctly predicted: {(binary_prediction == test_labels).sum().item() } out of {len(test_labels)} edges.")
             log.info(f"AUC on test dataset: {auc}")
             log.info(f"Average precision on test dataset: {AP}")
             log.info(f"Accuracy on test dataset: {accuracy_test}")
@@ -97,11 +99,10 @@ def predict_homolog_genes(model, train_dataset = None, test_dataset = None, bina
             stats['f1'] = 2*(((tp/(tp+fp))*(tp/(tp+fn)))/((tp/(tp+fp))+(tp/(tp+fn))))
             log.info(f"Got confusion matrix:\n\n\n{'':15}|{'pred negative':^15}|{'pred positive':^15}")
             log.info(f"---------------------------------------------")
-            log.info(f"{'label negative':15}|{round(conf_matrix[0][0]/len(test_dataset.y)*100, 2):^15}|{round(conf_matrix[0][1]/len(test_dataset.y)*100, 2):^15}")
+            log.info(f"{'label negative':15}|{round(conf_matrix[0][0]/len(test_labels)*100, 2):^15}|{round(conf_matrix[0][1]/len(test_labels)*100, 2):^15}")
             log.info(f"---------------------------------------------")
-            log.info(f"{'label positive':15}|{round(conf_matrix[1][0]/len(test_dataset.y)*100, 2):^15}|{round(conf_matrix[1][1]/len(test_dataset.y)*100, 2):^15}\n\n")
+            log.info(f"{'label positive':15}|{round(conf_matrix[1][0]/len(test_labels)*100, 2):^15}|{round(conf_matrix[1][1]/len(test_labels)*100, 2):^15}\n\n")
         else:
             log.error('No labels supplied, can not calculate metrics.')
-        log.info('Exiting.')
     
     return (binary_prediction, edge_scores, stats)
