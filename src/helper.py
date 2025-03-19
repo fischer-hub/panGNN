@@ -320,7 +320,7 @@ def simulate_dataset(num_genes, num_genomes, class_balance = 0.2, class_0_stdev 
     return graph_data
 
 
-def get_connected_nodes(gene_lst, sim_score_dict, n, connected_nodes = None):
+def get_connected_nodes(gene_lst, sim_score_dict, n, connected_nodes = None, gene_id_pos_dict):
     """Find n-nearest nodes to nodes from input list that are connected by a similarity edge.
 
     Args:
@@ -343,7 +343,9 @@ def get_connected_nodes(gene_lst, sim_score_dict, n, connected_nodes = None):
     
     for gene in gene_lst:
         
-        if gene in sim_score_dict:
+        # check if gene is in list of all genes before checking its in sims core dict, when using a 
+        # subset of gff files we can have genes in sim score dict that are not in any gff file
+        if gene in gene_id_pos_dict and gene in sim_score_dict:
             new_connected_nodes.update(sim_score_dict[gene].keys())
 
     new_connected_nodes = new_connected_nodes - connected_nodes
@@ -355,7 +357,7 @@ def get_connected_nodes(gene_lst, sim_score_dict, n, connected_nodes = None):
 
 def get_neighbour_graph(gene_lst, gene_id_pos_dict, gene_id_lst, n):
 
-    origin_idx = target_idx = [None] * (len(gene_lst) * n * 2)
+    origin_idx, target_idx = [None] * (len(gene_lst) * n * 2),  [None] * (len(gene_lst) * n * 2)
     edge_counter = 0
 
     # this will be the remapped node index of neighbour nodes

@@ -2,7 +2,6 @@ name: panGNN
 channels:
   - conda-forge
   - bioconda
-  - defaults
   - pyg
 dependencies:
   - pandas
@@ -11,3 +10,6 @@ dependencies:
   - matplotlib
   - networkx
   - umap-learn
+  - seaborn
+  - accelerate
+  - numpy

@@ -462,7 +462,7 @@ def load_gff(annotation_file_name, start_gene = 'hemB'):
     return annotation_df
 
 
-def load_similarity_score(similarity_score_file):
+def load_similarity_score(similarity_score_file, center_scores = True):
 
     log.info(f"Loading similarity scores file: {similarity_score_file}")
     with open(similarity_score_file) as sim_score_handle:
@@ -473,7 +473,10 @@ def load_similarity_score(similarity_score_file):
                                             'qstart', 'qend', 'qlen', 'tstart', 
                                             'tend', 'tlen', 'qcov', 'tcov', 
                                             'evalue', 'bits'])
-        
+    if center_scores:
+        min_score = sim_score_df['bits'].min()
+        sim_score_df['bits'] = sim_score_df['bits'] - min_score + 1
+
     sim_score_df.drop(columns=['pident','alnlen', 'mismatch', 'gapopen',
     #sim_score_df.drop(columns=['bits','alnlen', 'mismatch', 'gapopen',
                                'qstart', 'qend', 'qlen', 'tstart', 
@@ -497,7 +500,7 @@ def normalize_sim_scores(sim_score_dict, t = 0.5, epsilon = 1e-8, pseudo_count =
     empty_dict_ids = []
 
     for origin_gene in track(sim_score_dict.keys(), description = 'Normalizing similarity scores...', transient = True):
-
+        
         candidate_genome_ids = set([id.split('_')[0] for id in sim_score_dict[origin_gene].keys()])
         dict_lst = []
         origin_gene_dict = {}
@@ -511,11 +514,18 @@ def normalize_sim_scores(sim_score_dict, t = 0.5, epsilon = 1e-8, pseudo_count =
                 
                 if candidate_genome_id in candidate_id and candidate_id not in origin_gene:
                     # this might cause an underflow in np.exp depending on how
-                    # high the score is and how big t is which results in nan in
+                    # low the score is and how big t is which results in nan in
                     # the division if there are no other scores adding to the sum
                     # in which case the normalized score will be set to 1
-                    exp_score = np.exp(t * score)
-                    denominator += exp_score
+                    # this can also overflow when score is to high so we clip it
+                    safe_score = np.clip(t * score, -708, 708)
+                    exp_score = np.exp(safe_score)
+
+                    if exp_score > (1.7e308 - denominator):
+                        denominator = 1.7e308
+                    else:
+                        denominator += exp_score
+                        
                     genome_pair_dict.update({candidate_id: exp_score})
             
             # all candidates with the current genome id are in the genome_pair_dict

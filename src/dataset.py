@@ -274,7 +274,7 @@ class UnionGraphDataset(Dataset):
                 log.error('Annotation data does not start with start gene, uncentered gene data will lead to falsy gene positions.')
                 log.error(f"Annotation data starts with '{genome_annotation_df.iloc[0].values}'")
 
-            log.info(f"Loaded annotation file of genome number {file_counter}: {gff_file}")
+            log.info(f"Loaded annotation file of genome number {file_counter + 1}: {gff_file}")
             log.debug(f"Genome 1 annotation dataframe:\n {genome_annotation_df}")
             self.num_genes += len(genome_annotation_df.index)
             
@@ -403,7 +403,7 @@ class UnionGraphDataset(Dataset):
             if len(group) <= 1:
                 continue
 
-            similar_gene_lst = get_connected_nodes(group, self.sim_score_dict, args.neighbours)
+            similar_gene_lst = get_connected_nodes(group, self.sim_score_dict, args.neighbours, self.gene_id_pos_dict)
             assert set(group).issubset(similar_gene_lst), f'Genes from gene family {group} not part of connected similarity nodes {similar_gene_lst}.'
 
             neighbour_edge_index, sub_gene_id_pos_dict, gene_lst = get_neighbour_graph(similar_gene_lst, self.gene_id_position_dict, self.gene_str_ids_lst, args.neighbours)
