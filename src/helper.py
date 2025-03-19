@@ -320,7 +320,7 @@ def simulate_dataset(num_genes, num_genomes, class_balance = 0.2, class_0_stdev 
     return graph_data
 
 
-def get_connected_nodes(gene_lst, sim_score_dict, n, connected_nodes = None, gene_id_pos_dict):
+def get_connected_nodes(gene_lst, sim_score_dict, n, gene_id_pos_dict, connected_nodes = None):
     """Find n-nearest nodes to nodes from input list that are connected by a similarity edge.
 
     Args:
