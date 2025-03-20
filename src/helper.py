@@ -401,12 +401,22 @@ def get_neighbour_graph(gene_lst, gene_id_pos_dict, gene_id_lst, n):
     undirected_origin_idx = origin_idx + target_idx
     undirected_target_idx = target_idx + origin_idx
 
-    edge_index = torch.stack((
-        torch.tensor(undirected_origin_idx),
-        torch.tensor(undirected_target_idx)
-    ))
+    edge_index = (undirected_origin_idx, undirected_target_idx)
 
     gene_id_pos_dict = {gene: idx for idx, gene in enumerate(neighbour_id_lst)}
 
     # return data object with node features = 1 and labels = 0 (neighbour edges are never label 1)
     return (edge_index, gene_id_pos_dict, neighbour_id_lst)
+
+
+def remove_duplicate_edges_tuple(edge_index):
+    # Unpack the tuple
+    src, dst = edge_index
+
+    # Create a set of unique edges (sorted tuples for undirected graphs)
+    unique_edges = set(zip(src, dst))
+
+    # Rebuild the edge_index tuple from the unique edges
+    src_clean, dst_clean = zip(*unique_edges)
+    
+    return list(src_clean), list(dst_clean)

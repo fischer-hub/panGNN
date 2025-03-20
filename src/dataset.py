@@ -10,7 +10,7 @@ from torch_geometric.utils.convert import to_scipy_sparse_matrix
 from torch_geometric.transforms import RemoveDuplicatedEdges
 from src.plot import plot_violin_distributions, plot_homolog_positions
 from multiprocessing import Pool, current_process
-
+from src.helper import remove_duplicate_edges_tuple
 
 class HomogenousDataset(Dataset):
     """Class holding the input graph datastructures.
@@ -409,12 +409,14 @@ class UnionGraphDataset(Dataset):
             assert set(group).issubset(similar_gene_lst), f'Genes from gene family {group} not part of connected similarity nodes {similar_gene_lst}.'
 
             neighbour_edge_index, sub_gene_id_pos_dict, gene_lst = get_neighbour_graph(similar_gene_lst, self.gene_id_position_dict, self.gene_str_ids_lst, args.neighbours)
+            neighbour_edge_index = remove_duplicate_edges_tuple(neighbour_edge_index)
             assert set(similar_gene_lst).issubset(gene_lst), f'Genes from similarity gene set {similar_gene_lst} not part of sub graph gene set with neighbour genes {gene_lst}.'
             assert len(neighbour_edge_index[0]) == len(neighbour_edge_index[1]), f'List or origin nodes ({len(neighbour_edge_index[0])}) is of different length than list of target nodes ({len(neighbour_edge_index[1])}), invalid edge index!'
 
             sub_sim_score_dict = { gene_str_id: self.sim_score_dict[gene_str_id] for gene_str_id in gene_lst if gene_str_id in self.sim_score_dict}
 
             sim_edge_index = build_edge_index(sub_sim_score_dict, sub_gene_id_pos_dict, fully_connected = False)
+            sim_edge_index = remove_duplicate_edges_tuple(sim_edge_index)
             if self.gff_is_subset and len(sim_edge_index[0]) < len(group): continue
             assert len(sim_edge_index[0]) >= len(group), f'Found less similarity edges than edges neccessary to connect genes from origin gene family, number of edges is: {len(sim_edge_index[0])}, but {len(group)} genes belong to origin gene family ({group}) of this graph.'
             assert len(sim_edge_index[0]) == len(sim_edge_index[1]), f'List or origin nodes ({len(sim_edge_index[0])}) is of different length than list of target nodes ({len(sim_edge_index[1])}), invalid edge index!'
@@ -441,8 +443,8 @@ class UnionGraphDataset(Dataset):
             ))
 
             union_edge_index = torch.stack((
-                torch.cat((neighbour_edge_index[0], sim_edge_index[0])),
-                torch.cat((neighbour_edge_index[1], sim_edge_index[1]))
+                torch.cat((torch.tensor(neighbour_edge_index[0]), sim_edge_index[0])),
+                torch.cat((torch.tensor(neighbour_edge_index[1]), sim_edge_index[1]))
             ))
 
 

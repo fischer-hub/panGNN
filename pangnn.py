@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from src.plot import plot_loss_accuracy, plot_graph, plot_simscore_class, plot_logit_distribution, plot_union_graph, plot_simscore_distribution_by_class, plot_umap_pca
 from src.setup import log, args, hparams
-import torch, os, random, datetime, time, shutil, resource
+import torch, os, random, datetime, time, shutil, resource, cProfile, pstats
 from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader
 from torch_geometric.transforms import RandomLinkSplit
@@ -17,10 +17,20 @@ from sklearn.metrics import roc_curve, auc, average_precision_score
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.tensorboard import SummaryWriter
 from accelerate import Accelerator
+from torchmetrics.classification import BinaryConfusionMatrix, BinaryAveragePrecision, BinaryAUROC
 from rich.progress import track, Console, Progress
 
-
 accelerator = Accelerator()
+
+binary_confusion_matrix_train = BinaryConfusionMatrix().to(accelerator.device)
+binary_confusion_matrix_val = BinaryConfusionMatrix().to(accelerator.device)
+binary_auroc = BinaryAUROC().to(accelerator.device)
+binary_average_precision = BinaryAveragePrecision().to(accelerator.device)
+
+profiler = cProfile.Profile()
+profiler.enable()
+
+
 soft_limit, hard_limit = resource.getrlimit(resource.RLIMIT_NOFILE)
 if soft_limit < 50000: resource.setrlimit(resource.RLIMIT_NOFILE, (hard_limit-10, hard_limit))
 
@@ -33,7 +43,7 @@ if not args.simulate_dataset:
         num_genomes = 'number of genomes not available since dataset was loaded from disk'
     else:
         num_genomes = len(args.annotation)
-        dataset = UnionGraphDataset(args.annotation, args.similarity, args.ribap_groups, split=(0.5, 0.2, 0.1), categorical_nodes = args.categorical_node) if args.train else HomogenousDataset(args.annotation, args.similarity)
+        dataset = UnionGraphDataset(args.annotation, args.similarity, args.ribap_groups, split=(0.7, 0.15, 0.15), categorical_nodes = args.categorical_node) if args.train else HomogenousDataset(args.annotation, args.similarity)
     #dataset.generate_graph_data()
 else:
     log.info('Simulating dataset.')
@@ -102,7 +112,7 @@ else:
 if not os.path.exists('runs'): os.mkdir('runs')
 
 train_data_loader = DataLoader(dataset.train, batch_size=args.batch_size, shuffle=True, pin_memory = True)
-val_data_loader = DataLoader(dataset.val, batch_size=args.batch_size, shuffle=False, pin_memory = True)
+val_data_loader = DataLoader(dataset.val, batch_size=args.batch_size, shuffle=True, pin_memory = True)
 test_data_loader = DataLoader(dataset.test, batch_size=len(dataset.test), shuffle=False, pin_memory = True)
 
 model, optimizer, train_data_loader, scheduler, val_data_loader, test_data_loader = accelerator.prepare(model, optimizer, train_data_loader, scheduler, val_data_loader, test_data_loader)
@@ -178,12 +188,14 @@ elif args.train:
                 log.debug('Calling optimizer step on current batch..')
                 optimizer.step()
                 
-                probabilities = torch.sigmoid(output).cpu()
+                probabilities = torch.sigmoid(output)
                 binary_prediction_train = (probabilities >= binary_th).int()
+                binary_confusion_matrix_train.update(binary_prediction_train, labels)
+
                 
                 all_probabilities_train += list(probabilities)
                 all_predictions_train += list(binary_prediction_train)
-                all_labels_train += list(labels.cpu())
+                all_labels_train += list(labels)
 
 
                 if args.dynamic_binary_threshold:
@@ -214,12 +226,16 @@ elif args.train:
                     scheduler.step(loss)
                     val_loss += loss
 
-                    probabilities = torch.sigmoid(output).cpu()
+                    probabilities = torch.sigmoid(output)
                     binary_prediction_val = (probabilities >= binary_th).int()
                     
-                    val_labels = val_labels.cpu()
+                    val_labels = val_labels.int()
+                    binary_confusion_matrix_val.update(binary_prediction_val, val_labels)
+                    binary_auroc.update( probabilities, val_labels)
+                    binary_average_precision.update( probabilities, val_labels)
+
                     all_probabilities_val += list(probabilities)
-                    all_predictions_val += list(binary_prediction_val.cpu())
+                    all_predictions_val += list(binary_prediction_val)
                     all_labels_val += list(val_labels)
         
                     progress.update(val_bar, advance = 1)
@@ -227,12 +243,17 @@ elif args.train:
 
                 
             # val metrics
-            conf_matrix = confusion_matrix(all_labels_val, all_predictions_val, labels = [0, 1])
-            tn, fp, fn, tp = conf_matrix.ravel()
+            conf_matrix = binary_confusion_matrix_val.compute()
+            tn = conf_matrix[0, 0].item()
+            fp = conf_matrix[0, 1].item()
+            fn = conf_matrix[1, 0].item()
+            tp = conf_matrix[1, 1].item()
+            #tn, fp, fn, tp = conf_matrix.ravel()
 
-            fpr, tpr, thresholds = roc_curve(all_labels_val, all_probabilities_val)
-            roc_auc_val = auc(fpr, tpr)
-            pr_auc_val = average_precision_score(val_labels, probabilities)
+            #fpr, tpr, thresholds = roc_curve(all_labels_val, all_probabilities_val)
+            roc_auc_val = binary_auroc.compute()
+            #pr_auc_val = average_precision_score(val_labels, probabilities)
+            pr_auc_val = binary_average_precision.compute()
 
             precision_val = tp / (tp + fp + 1e-10)
             recall_val = tp / (tp + fn + 1e-10)
@@ -249,8 +270,12 @@ elif args.train:
             writer.add_scalar("F1/val", f1_val, epoch)
 
             #train metrics
-            conf_matrix = confusion_matrix(all_labels_train, all_predictions_train, labels = [0, 1])
-            tn, fp, fn, tp = conf_matrix.ravel()
+            conf_matrix = binary_confusion_matrix_train.compute()
+            tn = conf_matrix[0, 0].item()
+            fp = conf_matrix[0, 1].item()
+            fn = conf_matrix[1, 0].item()
+            tp = conf_matrix[1, 1].item()
+            #tn, fp, fn, tp = conf_matrix.ravel()
 
             precision_train = tp / (tp + fp + 1e-10)
             recall_train = tp / (tp + fn + 1e-10)
@@ -278,7 +303,7 @@ elif args.train:
         # get metrics on test dataset
         for batch in test_data_loader:
             prediction_bin, prediction_scores, stats = predict_homolog_genes(model, None, batch, binary_th=binary_th)
-            writer.add_pr_curve('PR/val', batch.y.cpu(), torch.sigmoid(prediction_scores))
+            writer.add_pr_curve('PR/test', batch.y.cpu(), torch.sigmoid(prediction_scores))
 
     writer.add_hparams(hparams, stats)
     log.debug(prediction_bin)
@@ -312,3 +337,11 @@ shutil.move(os.path.join('temp', run_id), 'runs')
 # shuffle gene synteny (by block), hardest case - just shuffle all gibs sampling
 # compare metrics, auc, pr, f1 etc..
 # improvement?
+
+# Stop cProfile for time profiling
+profiler.disable()
+
+# Process and print time stats
+stats = pstats.Stats(profiler)
+stats.strip_dirs()
+stats.sort_stats("cumulative").print_stats(20)
