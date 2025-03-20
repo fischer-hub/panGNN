@@ -293,7 +293,7 @@ class UnionGraphDataset(Dataset):
         
         self.gene_id_position_dict = {gene: idx for idx, gene in enumerate(self.gene_str_ids_lst)}
 
-        self.sim_score_dict = load_similarity_score(similarity_score_file)
+        self.sim_score_dict = load_similarity_score(similarity_score_file, self.gene_id_position_dict)
 
         prob_lst = []
         qscore_lst = []
@@ -403,7 +403,7 @@ class UnionGraphDataset(Dataset):
             if len(group) <= 1:
                 continue
 
-            similar_gene_lst = get_connected_nodes(group, self.sim_score_dict, args.neighbours, self.gene_id_pos_dict)
+            similar_gene_lst = get_connected_nodes(group, self.sim_score_dict, args.neighbours)
             assert set(group).issubset(similar_gene_lst), f'Genes from gene family {group} not part of connected similarity nodes {similar_gene_lst}.'
 
             neighbour_edge_index, sub_gene_id_pos_dict, gene_lst = get_neighbour_graph(similar_gene_lst, self.gene_id_position_dict, self.gene_str_ids_lst, args.neighbours)

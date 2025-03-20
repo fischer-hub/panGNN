@@ -462,7 +462,7 @@ def load_gff(annotation_file_name, start_gene = 'hemB'):
     return annotation_df
 
 
-def load_similarity_score(similarity_score_file, center_scores = True):
+def load_similarity_score(similarity_score_file, gene_id_position_dict, center_scores = True):
 
     log.info(f"Loading similarity scores file: {similarity_score_file}")
     with open(similarity_score_file) as sim_score_handle:
@@ -473,6 +473,10 @@ def load_similarity_score(similarity_score_file, center_scores = True):
                                             'qstart', 'qend', 'qlen', 'tstart', 
                                             'tend', 'tlen', 'qcov', 'tcov', 
                                             'evalue', 'bits'])
+    
+    sim_score_df = sim_score_df[sim_score_df['query'].isin(gene_id_position_dict)]
+    sim_score_df = sim_score_df[sim_score_df['target'].isin(gene_id_position_dict)]
+
     if center_scores:
         min_score = sim_score_df['bits'].min()
         sim_score_df['bits'] = sim_score_df['bits'] - min_score + 1
@@ -525,7 +529,7 @@ def normalize_sim_scores(sim_score_dict, t = 0.5, epsilon = 1e-8, pseudo_count =
                         denominator = 1.7e308
                     else:
                         denominator += exp_score
-                        
+
                     genome_pair_dict.update({candidate_id: exp_score})
             
             # all candidates with the current genome id are in the genome_pair_dict

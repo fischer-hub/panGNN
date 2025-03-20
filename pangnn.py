@@ -101,9 +101,9 @@ else:
 
 if not os.path.exists('runs'): os.mkdir('runs')
 
-train_data_loader = DataLoader(dataset.train, batch_size=args.batch_size, shuffle=True)
-val_data_loader = DataLoader(dataset.val, batch_size=args.batch_size, shuffle=False)
-test_data_loader = DataLoader(dataset.test, batch_size=len(dataset.test), shuffle=False)
+train_data_loader = DataLoader(dataset.train, batch_size=args.batch_size, shuffle=True, pin_memory = True)
+val_data_loader = DataLoader(dataset.val, batch_size=args.batch_size, shuffle=False, pin_memory = True)
+test_data_loader = DataLoader(dataset.test, batch_size=len(dataset.test), shuffle=False, pin_memory = True)
 
 model, optimizer, train_data_loader, scheduler, val_data_loader, test_data_loader = accelerator.prepare(model, optimizer, train_data_loader, scheduler, val_data_loader, test_data_loader)
 
