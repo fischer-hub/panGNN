@@ -260,6 +260,8 @@ class UnionGraphDataset(Dataset):
         self.test = torch.tensor([])
         self.class_balance = None
 
+        self.gff_is_subset = False
+
         
         if not gff_files:
             if not args.simulate_dataset:
@@ -311,7 +313,7 @@ class UnionGraphDataset(Dataset):
 
         if ribap_groups_file:
             # load holy ribap table to generate labels for test data set
-            self.ribap_groups_dict, self.ribap_groups_lst = load_ribap_groups(ribap_groups_file, genome_name_lst)
+            self.ribap_groups_dict, self.ribap_groups_lst, self.gff_is_subset = load_ribap_groups(ribap_groups_file, genome_name_lst)
             #plot_homolog_positions(self.ribap_groups_dict, self.gene_id_position_dict)
         else:
             self.ribap_groups_dict = None
@@ -413,7 +415,8 @@ class UnionGraphDataset(Dataset):
             sub_sim_score_dict = { gene_str_id: self.sim_score_dict[gene_str_id] for gene_str_id in gene_lst if gene_str_id in self.sim_score_dict}
 
             sim_edge_index = build_edge_index(sub_sim_score_dict, sub_gene_id_pos_dict, fully_connected = False)
-            assert len(sim_edge_index[0]) >= len(group), f'Found less similarity edges than edges neccessary to connect genes from origin gene family, number of edges is: {len(sim_edge_index[0])}, but {len(group)} genes belong to origin gene family of this graph.'
+            if self.gff_is_subset and len(sim_edge_index[0]) < len(group): continue
+            assert len(sim_edge_index[0]) >= len(group), f'Found less similarity edges than edges neccessary to connect genes from origin gene family, number of edges is: {len(sim_edge_index[0])}, but {len(group)} genes belong to origin gene family ({group}) of this graph.'
             assert len(sim_edge_index[0]) == len(sim_edge_index[1]), f'List or origin nodes ({len(sim_edge_index[0])}) is of different length than list of target nodes ({len(sim_edge_index[1])}), invalid edge index!'
 
             sim_edge_weights = map_edge_weights(sim_edge_index, sub_sim_score_dict, gene_lst, use_cache=False)

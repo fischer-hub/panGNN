@@ -240,29 +240,11 @@ def load_ribap_groups(ribap_group_file, genome_name_lst):
     log.info(f"Loading RIBAP groups file: {ribap_group_file}")
 
     with open(ribap_group_file) as ribap_file_handle:
-
+        
         ribap_groups_df = pd.read_csv(ribap_file_handle, comment = '#', sep = '\t', header = 0)
+        is_subset = not ribap_groups_df.columns.difference(genome_name_lst).empty
         ribap_groups_df.drop(ribap_groups_df.columns.difference(genome_name_lst), axis = 1, inplace=True)
 
-
-    """     for i in track(range(len(genome_name_lst)-1), transient = True, description = "Constructing two way mapping for ortholog genes.."):
-        for j in range(1, len(genome_name_lst)):
-            # not sure if this is the best way to get random access but oh well I never claimed to be good at this
-            for _, row in ribap_groups_df.iterrows():#, description = 'Constructing two way mapping for ortholog genes..', transient = True):
-                if not pd.isna(row[genome_name_lst[j]]) and not pd.isna(row[genome_name_lst[i]]):
-                    ribap_groups_dict_tmp[row[genome_name_lst[i]]] = row[genome_name_lst[j]]
-                    ribap_groups_dict_tmp[row[genome_name_lst[j]]] = row[genome_name_lst[i]]
-    
-        # TODO: this could be solved with a good pandas operation (groupby, toDict or smth)
-        for origin_gene, target_gene in ribap_groups_dict_tmp.items():
-            #print(origin_gene, target_gene)
-
-            if origin_gene in ribap_groups_dict and target_gene not in ribap_groups_dict[origin_gene]:
-                ribap_groups_dict[origin_gene].append(target_gene)
-            else:
-
-                ribap_groups_dict[origin_gene] = [target_gene]
-        ribap_groups_dict_tmp={} """
     
     for _, row in track(ribap_groups_df.iterrows(), transient = True, description = "Constructing two way mapping for ortholog genes.."):
 
@@ -280,7 +262,7 @@ def load_ribap_groups(ribap_group_file, genome_name_lst):
     for homologs_lst in ribap_groups_dict.values():
         assert len(homologs_lst) == len(set(homologs_lst)), f'Gene family contains one gene more than once but a gene can be not a homolog to itself: {homologs_lst}'
 
-    return (ribap_groups_dict, ribap_groups_lst)
+    return (ribap_groups_dict, ribap_groups_lst, is_subset)
 
 
 def combine_neighbour_embeddings(gene_embeddings, neighbor_lst, device):
