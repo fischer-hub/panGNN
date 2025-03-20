@@ -413,6 +413,9 @@ def remove_duplicate_edges_tuple(edge_index):
     # Unpack the tuple
     src, dst = edge_index
 
+    if not src or not dst:
+        return ([], [])
+
     # Create a set of unique edges (sorted tuples for undirected graphs)
     unique_edges = set(zip(src, dst))
 
