@@ -153,7 +153,7 @@ elif args.train:
             all_labels_val, all_probabilities_val, all_predictions_val = [], [], []
             all_labels_train, all_probabilities_train, all_predictions_train = [], [], []
 
-            print(f"GPU mem allocated: {torch.cuda.memory_allocated('cuda:0')/1024**2} MB.")
+            #print(f"GPU mem allocated: {torch.cuda.memory_allocated('cuda:0')/1024**2} MB.")
 
             for batch_num, batch in enumerate(train_data_loader):
             #for batch_num, batch in enumerate(dataset.train):
@@ -301,7 +301,10 @@ elif args.train:
             writer.add_scalar("F1/train", f1_train, epoch)
         
             # get some metrics, maybe do this in the model class?
-            log.info(f"Epoch {epoch+1}, Loss: {train_loss/len(train_data_loader):.4f}, Acc: {acc_train:.4f}, F1 {f1_train:.4f}, Val Loss: {val_loss/len(val_data_loader):.4f}, Val Acc: {acc_val:.4f}, LR: {optimizer.param_groups[0]['lr']:.10f},  Val F1: {f1_val:.4f}, Val AP: {pr_auc_val:.4f}{f'Optimal Bin. Th. {binary_th:.4f}' if args.dynamic_binary_threshold else ''}")
+            log.info(f"Epoch: {epoch+1}, LR: {optimizer.param_groups[0]['lr']:.10f}, Val AP: {pr_auc_val:.4f}")
+            log.info(f"Train Loss: {train_loss/len(train_data_loader):.4f}, Train Acc: {acc_train:.4f}, Train F1: {f1_train:.4f}, Val   Loss: {val_loss/len(val_data_loader):.4f}, Val Acc  : {acc_val:.4f}, Val F1  : {f1_val:.4f}")
+            if 'cuda' in device.type: log.info(f"GPU mem allocated: {torch.cuda.memory_allocated('cuda:0') / 1024**2} MB.")
+            print('')
             
             progress.update(training_bar, advance = 1)
             progress.reset(batch_bar)
