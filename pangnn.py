@@ -218,7 +218,6 @@ elif args.train:
                     val_labels = batch.y
 
                     loss = criterion(output, val_labels)
-                    scheduler.step(loss)
                     val_loss += loss
 
                     probabilities = torch.sigmoid(output)
@@ -253,6 +252,9 @@ elif args.train:
             recall_val = tp / (tp + fn + 1e-10)
             f1_val = 2 * (precision_val * recall_val) / (precision_val + recall_val + 1e-10)
             acc_val = (tp + tn) / (tp + tn + fp + fn)
+
+            scheduler.step(val_loss/len(val_data_loader))
+
 
             writer.add_scalar("ROC-AUC/val", roc_auc_val, epoch)
             writer.add_scalar("PR-AUC/val", pr_auc_val, epoch)
