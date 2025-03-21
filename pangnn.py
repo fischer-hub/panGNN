@@ -193,9 +193,9 @@ elif args.train:
                 binary_confusion_matrix_train.update(binary_prediction_train, labels)
 
                 
-                all_probabilities_train += list(probabilities)
-                all_predictions_train += list(binary_prediction_train)
-                all_labels_train += list(labels)
+                #all_probabilities_train += list(probabilities)
+                #all_predictions_train += list(binary_prediction_train)
+                #all_labels_train += list(labels)
 
 
                 if args.dynamic_binary_threshold:
@@ -234,14 +234,13 @@ elif args.train:
                     binary_auroc.update( probabilities, val_labels)
                     binary_average_precision.update( probabilities, val_labels)
 
-                    all_probabilities_val += list(probabilities)
-                    all_predictions_val += list(binary_prediction_val)
-                    all_labels_val += list(val_labels)
+                    #all_probabilities_val += list(probabilities)
+                    #all_predictions_val += list(binary_prediction_val)
+                    #all_labels_val += list(val_labels)
         
                     progress.update(val_bar, advance = 1)
 
 
-                
             # val metrics
             conf_matrix = binary_confusion_matrix_val.compute()
             tn = conf_matrix[0, 0].item()
