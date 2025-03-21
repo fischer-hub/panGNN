@@ -303,7 +303,7 @@ elif args.train:
             # get some metrics, maybe do this in the model class?
             log.info(f"Epoch: {epoch+1}, LR: {optimizer.param_groups[0]['lr']:.10f}, Val AP: {pr_auc_val:.4f}")
             log.info(f"Train Loss: {train_loss/len(train_data_loader):.4f}, Train Acc: {acc_train:.4f}, Train F1: {f1_train:.4f}, Val   Loss: {val_loss/len(val_data_loader):.4f}, Val Acc  : {acc_val:.4f}, Val F1  : {f1_val:.4f}")
-            if 'cuda' in device.type: log.info(f"GPU mem allocated: {torch.cuda.memory_allocated('cuda:0') / 1024**2} MB.")
+            if 'cuda' in device.type: log.info(f"GPU mem allocated: {torch.cuda.memory_allocated('cuda:0') / 1024**2} MB, GPU mem reserved: {torch.cuda.memory_reserved('cuda:0') / 1024**2} MB.")
             print('')
             
             progress.update(training_bar, advance = 1)
