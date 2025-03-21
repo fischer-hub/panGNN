@@ -142,6 +142,11 @@ elif args.train:
         val_bar      = progress.add_task("Infering model on validation data set:", total=len(val_data_loader))
 
         for epoch in range(args.epochs):
+
+            if 'cuda' in device.type and ((epoch + 1) % 10 == 0):
+                log.info('Trying to clear unneccesarily reserved GPU memory..')
+                torch.cuda.empty_cache()
+
             total = 0
 
             # shuffle list of input graphs so the model sees the data in different order every time 
@@ -309,6 +314,10 @@ elif args.train:
             progress.update(training_bar, advance = 1)
             progress.reset(batch_bar)
             progress.reset(val_bar)
+
+    if 'cuda' in device.type and ((epoch + 1) % 10 == 0):
+        log.info('Trying to clear unneccesarily reserved GPU memory..')
+        torch.cuda.empty_cache()
 
     #plot_loss_accuracy(args.epochs, train_losses, train_accuracies, val_losses, val_accuracies, f1_train_lst)
     log.info('Unwrapping model from accelerate layers.')
