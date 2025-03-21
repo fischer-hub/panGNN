@@ -344,13 +344,11 @@ class UnionGraphDataset(Dataset):
             self.class_balance = sum(class_balance_lst) / len(class_balance_lst)
         
         mend = time.time()
-        print(mend-mstart)
+        log.info(f'Generated sub-graphs successfully, elapsed time: {mend-mstart} s.')
 
         del results
         del class_balance_lst
         
-        log.info(f'Generated sub-graphs successfully.')
-
         self.split_data(split, args.batch_size)
 
         #self.train = self.generate_graphs(self.gene_str_ids_lst_train, self.gene_str_int_lst_train)

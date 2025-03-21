@@ -1,24 +1,19 @@
 #!/usr/bin/env python3
-from src.plot import plot_loss_accuracy, plot_graph, plot_simscore_class, plot_logit_distribution, plot_union_graph, plot_simscore_distribution_by_class, plot_umap_pca
+#from src.plot import plot_loss_accuracy, plot_graph, plot_simscore_class, plot_logit_distribution, plot_union_graph, plot_simscore_distribution_by_class, plot_umap_pca
 from src.setup import log, args, hparams
-import torch, os, random, datetime, time, shutil, resource, cProfile, pstats
-from torch_geometric.data import Data
+import torch, os, datetime, time, shutil, resource
 from torch_geometric.loader import DataLoader
-from torch_geometric.transforms import RandomLinkSplit
 from src.predict import predict_homolog_genes
 from rich.progress import Progress
 from src.dataset import HomogenousDataset, UnionGraphDataset
-from src.gnn import MyGCN, AlternateGCN
-from src.simulate import generate_data
-from sklearn.metrics import confusion_matrix
-from src.postprocessing import write_groups_file, write_stats_csv
-from src.helper import generate_minimal_dataset, simulate_dataset, sub_sample_graph_edges
-from sklearn.metrics import roc_curve, auc, average_precision_score
+from src.gnn import AlternateGCN
+from src.postprocessing import write_stats_csv
+from sklearn.metrics import roc_curve
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.tensorboard import SummaryWriter
 from accelerate import Accelerator
 from torchmetrics.classification import BinaryConfusionMatrix, BinaryAveragePrecision, BinaryAUROC
-from rich.progress import track, Console, Progress
+from rich.progress import Console, Progress
 
 accelerator = Accelerator()
 
@@ -27,8 +22,8 @@ binary_confusion_matrix_val = BinaryConfusionMatrix().to(accelerator.device)
 binary_auroc = BinaryAUROC().to(accelerator.device)
 binary_average_precision = BinaryAveragePrecision().to(accelerator.device)
 
-profiler = cProfile.Profile()
-profiler.enable()
+""" profiler = cProfile.Profile()
+profiler.enable() """
 
 
 soft_limit, hard_limit = resource.getrlimit(resource.RLIMIT_NOFILE)
@@ -338,9 +333,9 @@ shutil.move(os.path.join('temp', run_id), 'runs')
 # improvement?
 
 # Stop cProfile for time profiling
-profiler.disable()
+""" profiler.disable()
 
 # Process and print time stats
 stats = pstats.Stats(profiler)
 stats.strip_dirs()
-stats.sort_stats("cumulative").print_stats(20)
+stats.sort_stats("cumulative").print_stats(20) """
