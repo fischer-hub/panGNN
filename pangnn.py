@@ -153,6 +153,8 @@ elif args.train:
             all_labels_val, all_probabilities_val, all_predictions_val = [], [], []
             all_labels_train, all_probabilities_train, all_predictions_train = [], [], []
 
+            print(f"GPU mem allocated: {torch.cuda.memory_allocated('cuda:0')/1024**2} MB.")
+
             for batch_num, batch in enumerate(train_data_loader):
             #for batch_num, batch in enumerate(dataset.train):
             #for batch_num in range(args.num_batches):
@@ -176,16 +178,22 @@ elif args.train:
                 log.debug('Calling loss function on current batch..')
                 log.debug(batch)
                 loss = criterion(output, labels)
-                train_loss += loss
                 log.debug('Calling backward step on current batch..')
                 #loss.backward()
                 accelerator.backward(loss)
                 log.debug('Calling optimizer step on current batch..')
                 optimizer.step()
                 
-                probabilities = torch.sigmoid(output)
+                train_loss += loss.detach()
+                labels = labels.detach()
+                probabilities = torch.sigmoid(output.detach())
                 binary_prediction_train = (probabilities >= binary_th).int()
                 binary_confusion_matrix_train.update(binary_prediction_train, labels)
+
+                del loss
+                del output
+                del batch
+                del labels
 
                 
                 #all_probabilities_train += list(probabilities)
@@ -218,20 +226,26 @@ elif args.train:
                     val_labels = batch.y
 
                     loss = criterion(output, val_labels)
-                    val_loss += loss
+                    val_loss += loss.detach()
+                    
 
-                    probabilities = torch.sigmoid(output)
+                    probabilities = torch.sigmoid(output.detach())
                     binary_prediction_val = (probabilities >= binary_th).int()
                     
-                    val_labels = val_labels.int()
+                    val_labels = val_labels.detach().int()
                     binary_confusion_matrix_val.update(binary_prediction_val, val_labels)
-                    binary_auroc.update( probabilities, val_labels)
-                    binary_average_precision.update( probabilities, val_labels)
+                    binary_auroc.update(probabilities, val_labels)
+                    binary_average_precision.update(probabilities, val_labels)
 
                     #all_probabilities_val += list(probabilities)
                     #all_predictions_val += list(binary_prediction_val)
                     #all_labels_val += list(val_labels)
-        
+
+                    del output
+                    del loss
+                    del batch
+                    del val_labels
+                    
                     progress.update(val_bar, advance = 1)
 
 
@@ -241,12 +255,15 @@ elif args.train:
             fp = conf_matrix[0, 1].item()
             fn = conf_matrix[1, 0].item()
             tp = conf_matrix[1, 1].item()
+            binary_confusion_matrix_val.reset()
             #tn, fp, fn, tp = conf_matrix.ravel()
 
             #fpr, tpr, thresholds = roc_curve(all_labels_val, all_probabilities_val)
             roc_auc_val = binary_auroc.compute()
+            binary_auroc.reset()
             #pr_auc_val = average_precision_score(val_labels, probabilities)
             pr_auc_val = binary_average_precision.compute()
+            binary_average_precision.reset()
 
             precision_val = tp / (tp + fp + 1e-10)
             recall_val = tp / (tp + fn + 1e-10)
@@ -271,6 +288,7 @@ elif args.train:
             fp = conf_matrix[0, 1].item()
             fn = conf_matrix[1, 0].item()
             tp = conf_matrix[1, 1].item()
+            binary_confusion_matrix_train.reset()
             #tn, fp, fn, tp = conf_matrix.ravel()
 
             precision_train = tp / (tp + fp + 1e-10)
@@ -283,7 +301,7 @@ elif args.train:
             writer.add_scalar("F1/train", f1_train, epoch)
         
             # get some metrics, maybe do this in the model class?
-            log.info(f"Epoch {epoch+1}, Loss: {loss.item():.4f}, Acc: {acc_train:.4f}, F1 {f1_train:.4f}, Val Loss: {val_loss:.4f}, Val Acc: {acc_val:.4f}, LR: {optimizer.param_groups[0]['lr']:.10f},  Val F1: {f1_val:.4f}, Val AP: {pr_auc_val:.4f}{f'Optimal Bin. Th. {binary_th:.4f}' if args.dynamic_binary_threshold else ''}")
+            log.info(f"Epoch {epoch+1}, Loss: {train_loss/len(train_data_loader):.4f}, Acc: {acc_train:.4f}, F1 {f1_train:.4f}, Val Loss: {val_loss/len(val_data_loader):.4f}, Val Acc: {acc_val:.4f}, LR: {optimizer.param_groups[0]['lr']:.10f},  Val F1: {f1_val:.4f}, Val AP: {pr_auc_val:.4f}{f'Optimal Bin. Th. {binary_th:.4f}' if args.dynamic_binary_threshold else ''}")
             
             progress.update(training_bar, advance = 1)
             progress.reset(batch_bar)
