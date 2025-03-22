@@ -38,7 +38,7 @@ if not args.simulate_dataset:
         num_genomes = 'number of genomes not available since dataset was loaded from disk'
     else:
         num_genomes = len(args.annotation)
-        dataset = UnionGraphDataset(args.annotation, args.similarity, args.ribap_groups, split=(0.7, 0.15, 0.15), categorical_nodes = args.categorical_node) if args.train else HomogenousDataset(args.annotation, args.similarity)
+        dataset = UnionGraphDataset(args.annotation, args.similarity, args.ribap_groups, split=(0.7, 0.15, 0.05), categorical_nodes = args.categorical_node) if args.train else HomogenousDataset(args.annotation, args.similarity)
     #dataset.generate_graph_data()
 else:
     log.info('Simulating dataset.')

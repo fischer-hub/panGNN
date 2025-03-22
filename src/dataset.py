@@ -240,7 +240,7 @@ class UnionGraphDataset(Dataset):
 
     Split the data points into train, test and validation sets using split_data().
     """
-    def __init__(self, gff_files = [], similarity_score_file = '', ribap_groups_file = None, split = (0.7, 0.3), categorical_nodes = False):
+    def __init__(self, gff_files = [], similarity_score_file = '', ribap_groups_file = None, split = (0.7, 0.15, 0.15), categorical_nodes = False):
         super().__init__(root = None, transform = None, pre_transform = None, pre_filter = None)
 
         genome_annotation_df_lst = []
@@ -358,7 +358,7 @@ class UnionGraphDataset(Dataset):
         return len(self.train.x) + len(self.test.x)
     
     # pygs dataloader does this on its own im going to cry, remider to read the docs before reinventing the wheel
-    def split_data(self, split = (0.7, 0.15, 0.15), batch_size = 32):
+    def split_data(self, split = (0.7, 0.15, 0.05), batch_size = 32):
         """Split the singular graph data into train, test and validations sets, also create batches in the train dataset.
 
         Args:
@@ -377,7 +377,7 @@ class UnionGraphDataset(Dataset):
         # calculate train, test, val split and batches for train data
         num_train_data = int(len(self.data_lst) * split[0])
         num_val_data = int(len(self.data_lst) * split[1])
-        num_test_data = max(len(self.data_lst)-(num_val_data+num_train_data), 2)
+        num_test_data = int(len(self.data_lst) * split[2])
 
         random.shuffle(self.data_lst)
 
