@@ -32,15 +32,16 @@ parser.add_argument('--tb_comment',         help = 'comment to append to current
 parser.add_argument('--from_pickle',        help = 'path to pickle file to load saved dataset from', default = '')
 parser.add_argument('--node_dim',           help = 'dimension of node embedding and input of first convolution layer', default = 64, type = int)
 parser.add_argument('--hidden_dim',         help = 'dimension of hidden convoluytion layer(s)', default = 128, type = int)
-parser.add_argument('--decoder',         help = "decoding strategy (similarity measure) to use predict link between two node embeddings ['mlp', 'cosine', 'dotproduct']", default = 'mlp', type = str)
+parser.add_argument('--decoder',            help = "decoding strategy (similarity measure) to use predict link between two node embeddings ['mlp', 'cosine', 'dotproduct']", default = 'mlp', type = str)
+parser.add_argument('--split',              help = "decoding strategy (similarity measure) to use predict link between two node embeddings ['mlp', 'cosine', 'dotproduct']", default = 'mlp', type = str)
 
 # train mode args
 parser.add_argument('--train',              help = 'set pangnn into training mode', action='store_true')
-parser.add_argument('-g', '--gpu',          help = 'train model on gpu if available', action = 'store_true')
 parser.add_argument('-b', '--batch_size',   help = 'set number of graphes to be contained in one batch', default = 32, type = int)
 parser.add_argument('-e', '--epochs',       help = 'set number of epochs for model training', default = 10, type = int)
 parser.add_argument('-r', '--ribap_groups', help = 'path to file holding the ribap groups calculated for the input genomes', default = os.path.join('data', 'dummy_dataset', 'dummy_ribap.csv'), type = str)
 parser.add_argument('-@', '--cpus',         help = 'max number of threads used during preprocessing', default = 4, type = int)
+parser.add_argument('--mixed_precision',    help = "mixed precision setting to use ['no', 'fp16', 'bf16']", default = 'no', type = str)
 
 # parse args
 args = parser.parse_args()

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 #from src.plot import plot_loss_accuracy, plot_graph, plot_simscore_class, plot_logit_distribution, plot_union_graph, plot_simscore_distribution_by_class, plot_umap_pca
 from src.setup import log, args, hparams
-import torch, os, datetime, time, shutil, resource
+import torch, os, datetime, time, shutil, resource, cProfile, pstats
 from torch_geometric.loader import DataLoader
 from src.predict import predict_homolog_genes
 from rich.progress import Progress
@@ -15,17 +15,18 @@ from accelerate import Accelerator
 from torchmetrics.classification import BinaryConfusionMatrix, BinaryAveragePrecision, BinaryAUROC
 from rich.progress import Console, Progress
 
-accelerator = Accelerator()
+""" profiler = cProfile.Profile()
+profiler.enable() """
+
+accelerator = Accelerator(mixed_precision = args.mixed_precision)
 
 binary_confusion_matrix_train = BinaryConfusionMatrix().to(accelerator.device)
 binary_confusion_matrix_val = BinaryConfusionMatrix().to(accelerator.device)
 binary_auroc = BinaryAUROC().to(accelerator.device)
 binary_average_precision = BinaryAveragePrecision().to(accelerator.device)
 
-""" profiler = cProfile.Profile()
-profiler.enable() """
 
-
+# if limit is too low it can crash the multithreading in preprocessing sadly
 soft_limit, hard_limit = resource.getrlimit(resource.RLIMIT_NOFILE)
 if soft_limit < 50000: resource.setrlimit(resource.RLIMIT_NOFILE, (hard_limit-10, hard_limit))
 
@@ -38,7 +39,7 @@ if not args.simulate_dataset:
         num_genomes = 'number of genomes not available since dataset was loaded from disk'
     else:
         num_genomes = len(args.annotation)
-        dataset = UnionGraphDataset(args.annotation, args.similarity, args.ribap_groups, split=(0.7, 0.15, 0.05), categorical_nodes = args.categorical_node) if args.train else HomogenousDataset(args.annotation, args.similarity)
+        dataset = UnionGraphDataset(args.annotation, args.similarity, args.ribap_groups, split=(0.7, 0.15, 0.01), categorical_nodes = args.categorical_node) if args.train else HomogenousDataset(args.annotation, args.similarity)
     #dataset.generate_graph_data()
 else:
     log.info('Simulating dataset.')
@@ -130,9 +131,6 @@ elif args.train:
     # Training loop
     log.info(f"Training on device: {device}")
 
-    #dataset.to(device)
-    #model.to(device)
-
     log.info(f"Entering training loop with batch size: {args.batch_size}, class balance: {dataset.class_balance}, {len(train_data_loader)} batches.")#{dataset.class_balance}.")
 
     with Progress(transient = True) as progress:
@@ -151,18 +149,8 @@ elif args.train:
                     log.info('Trying to clear unneccesarily reserved GPU memory..')
                     torch.cuda.empty_cache()
 
-            total = 0
-
-            # shuffle list of input graphs so the model sees the data in different order every time 
-            #random.shuffle(dataset.train)
-            accuracy = []
-            epoch_correct = 0
-            epoch_total = 0
             val_loss, train_loss = 0, 0
-            all_labels_val, all_probabilities_val, all_predictions_val = [], [], []
-            all_labels_train, all_probabilities_train, all_predictions_train = [], [], []
 
-            #print(f"GPU mem allocated: {torch.cuda.memory_allocated('cuda:0')/1024**2} MB.")
 
             for batch_num, batch in enumerate(train_data_loader):
             #for batch_num, batch in enumerate(dataset.train):
@@ -171,9 +159,6 @@ elif args.train:
                 model.train()
 
                 #batch = sub_sample_graph_edges(dataset.train, device, fraction = 0.8) if not args.union_edge_weights else dataset.train
-                #batch = dataset.train
-                #dataset.graph_to(batch, device)
-
                 labels = batch[0].y if isinstance(batch, tuple) else batch.y
 
                 # clear old gradients so only current batch gradients are used
@@ -193,7 +178,7 @@ elif args.train:
                 log.debug('Calling optimizer step on current batch..')
                 optimizer.step()
                 
-                train_loss += loss.detach()
+                train_loss += loss.item()
                 labels = labels.detach()
                 probabilities = torch.sigmoid(output.detach())
                 binary_prediction_train = (probabilities >= binary_th).int()
@@ -203,12 +188,6 @@ elif args.train:
                 del output
                 del batch
                 del labels
-
-                
-                #all_probabilities_train += list(probabilities)
-                #all_predictions_train += list(binary_prediction_train)
-                #all_labels_train += list(labels)
-
 
                 if args.dynamic_binary_threshold:
                     fpr, tpr, thresholds = roc_curve(labels, torch.sigmoid(output.detach()))
@@ -221,9 +200,6 @@ elif args.train:
                 
                 progress.update(batch_bar, advance = 1)
 
-                """                 for name, param in model.named_parameters():
-                                    if param.grad is not None:
-                                        print(f'{name}: {param.grad.mean()}') """
 
             with torch.no_grad():  # Disable gradient calculation for validation
 
@@ -235,9 +211,8 @@ elif args.train:
                     val_labels = batch.y
 
                     loss = criterion(output, val_labels)
-                    val_loss += loss.detach()
+                    val_loss += loss.item()
                     
-
                     probabilities = torch.sigmoid(output.detach())
                     binary_prediction_val = (probabilities >= binary_th).int()
                     
@@ -245,10 +220,6 @@ elif args.train:
                     binary_confusion_matrix_val.update(binary_prediction_val, val_labels)
                     binary_auroc.update(probabilities, val_labels)
                     binary_average_precision.update(probabilities, val_labels)
-
-                    #all_probabilities_val += list(probabilities)
-                    #all_predictions_val += list(binary_prediction_val)
-                    #all_labels_val += list(val_labels)
 
                     del output
                     del loss
@@ -265,13 +236,10 @@ elif args.train:
             fn = conf_matrix[1, 0].item()
             tp = conf_matrix[1, 1].item()
             binary_confusion_matrix_val.reset()
-            #tn, fp, fn, tp = conf_matrix.ravel()
 
-            #fpr, tpr, thresholds = roc_curve(all_labels_val, all_probabilities_val)
-            roc_auc_val = binary_auroc.compute()
+            roc_auc_val = binary_auroc.compute().item()
             binary_auroc.reset()
-            #pr_auc_val = average_precision_score(val_labels, probabilities)
-            pr_auc_val = binary_average_precision.compute()
+            pr_auc_val = binary_average_precision.compute().item()
             binary_average_precision.reset()
 
             precision_val = tp / (tp + fp + 1e-10)
@@ -280,7 +248,6 @@ elif args.train:
             acc_val = (tp + tn) / (tp + tn + fp + fn)
 
             scheduler.step(val_loss/len(val_data_loader))
-
 
             writer.add_scalar("ROC-AUC/val", roc_auc_val, epoch)
             writer.add_scalar("PR-AUC/val", pr_auc_val, epoch)
@@ -298,7 +265,6 @@ elif args.train:
             fn = conf_matrix[1, 0].item()
             tp = conf_matrix[1, 1].item()
             binary_confusion_matrix_train.reset()
-            #tn, fp, fn, tp = conf_matrix.ravel()
 
             precision_train = tp / (tp + fp + 1e-10)
             recall_train = tp / (tp + fn + 1e-10)
@@ -309,7 +275,7 @@ elif args.train:
             writer.add_scalar("Acc/train", acc_train, epoch)
             writer.add_scalar("F1/train", f1_train, epoch)
         
-            # get some metrics, maybe do this in the model class?
+            # get some metrics
             log.info(f"Epoch: {epoch+1}, LR: {optimizer.param_groups[0]['lr']:.10f}, Val AP: {pr_auc_val:.4f}")
             log.info(f"Train Loss: {train_loss/len(train_data_loader):.4f}, Train Acc: {acc_train:.4f}, Train F1: {f1_train:.4f}, Val   Loss: {val_loss/len(val_data_loader):.4f}, Val Acc  : {acc_val:.4f}, Val F1  : {f1_val:.4f}")
             if 'cuda' in device.type: log.info(f"GPU max mem allocated: {torch.cuda.max_memory_allocated('cuda:0') / 1024**2} MB, GPU mem reserved: {torch.cuda.memory_reserved('cuda:0') / 1024**2} MB.")
@@ -336,7 +302,7 @@ elif args.train:
             writer.add_pr_curve('PR/test', batch.y.cpu(), torch.sigmoid(prediction_scores))
 
     writer.add_hparams(hparams, stats)
-    log.debug(prediction_bin)
+    #log.debug(prediction_bin)
     log.info(f"Time elapsed: {time.time() - start:.4f} seconds")
 
     stats['binary_threshold'] = binary_th

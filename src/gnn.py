@@ -92,7 +92,7 @@ class AlternateGCN(torch.nn.Module):
         if categorical_nodes:
             # handle gene nodes as categorical data embeddings
             self.embedding = torch.nn.Embedding(len(dataset.x), node_embedding_dim)
-            log.debug(dataset.x)
+            #log.debug(dataset.x)
         else:
             # handle gene nodes as numerical data embeddings
             self.embedding = torch.nn.Linear(1, node_embedding_dim)
@@ -137,7 +137,7 @@ class AlternateGCN(torch.nn.Module):
             nodes = self.conv_out(nodes, graph.union_edge_index)
             nodes = self.activation_fct(nodes)
 
-            log.debug(f"Outputting nodes to decode function of shape: {nodes.shape}\n{nodes}")
+            #log.debug(f"Outputting nodes to decode function of shape: {nodes.shape}\n{nodes}")
 
         else:
 
@@ -166,7 +166,7 @@ class AlternateGCN(torch.nn.Module):
             nodes = self.conv_out(nodes, graph.union_edge_index)
             nodes = self.activation_fct(nodes)
 
-            log.debug(f"Outputting nodes to decode function of shape: {nodes.shape}\n{nodes}")
+            #log.debug(f"Outputting nodes to decode function of shape: {nodes.shape}\n{nodes}")
 
 
         if 'mlp' in args.decoder: 
