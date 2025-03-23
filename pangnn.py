@@ -142,10 +142,6 @@ elif args.train:
 
         for epoch in range(args.epochs):
 
-            if oom_count > (args.epochs * 0.1):
-                log.error(f'Training repeatedly failed because GPU went out of memory. Try with smaller batch size or smaller -n.')
-                quit()
-
             if 'cuda' in device.type:
                 
                 torch.cuda.reset_peak_memory_stats()
@@ -160,6 +156,10 @@ elif args.train:
             for batch_num, batch in enumerate(train_data_loader):
             #for batch_num, batch in enumerate(dataset.train):
             #for batch_num in range(args.num_batches):
+
+                if oom_count > (args.epochs * len(train_data_loader) * 0.1):
+                    log.error(f'Training repeatedly failed because GPU went out of memory. Try with smaller batch size or smaller -n.')
+                    quit()
                 
                 model.train()
 
