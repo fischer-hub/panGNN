@@ -95,6 +95,7 @@ f1_train_lst = []
 precision_lst = []
 recall_lst = []
 binary_th = args.binary_threshold
+oom_count = 0
 
 start = time.time()
 
