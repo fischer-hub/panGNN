@@ -199,7 +199,7 @@ class AlternateGCN(torch.nn.Module):
     
     def decode(self, z, edge_index):
         # calculate dot product between pairs of node embeddings to predict links
-        return (z[edge_index[0]] * z[edge_index[1]]).sum(dim=1)
+        return z[edge_index[0]] @ z[edge_index[1]]
     
     def cosine_sim(self, z, edge_index):
         return F.cosine_similarity(z[edge_index[0]], z[edge_index[1]], dim = 1)

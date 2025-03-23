@@ -7,7 +7,7 @@ from sklearn.metrics import confusion_matrix, PrecisionRecallDisplay
 import torch.nn.functional as F
 
 
-def predict_homolog_genes(model, train_dataset = None, test_dataset = None, binary_th = 0.72, device = 'cpu'):
+def predict_homolog_genes(model, train_dataset = None, test_dataset = None, binary_th = 0.72, base_labels = None):
     """Infer the GNN with given trained model and predict homolog genes from
     input similarity graph.
 
@@ -68,7 +68,7 @@ def predict_homolog_genes(model, train_dataset = None, test_dataset = None, bina
 
             random_pred = torch.randint(0,2,(len(binary_prediction),))
 
-            AP = plot_pr_curve(test_labels, probablilities)
+            AP = plot_pr_curve(test_labels, probablilities, base_labels)
             stats['average_precision'] = AP
 
             accuracy_test = ((binary_prediction == test_labels).sum().item()) / len(test_labels)

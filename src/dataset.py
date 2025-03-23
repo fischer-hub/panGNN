@@ -1,6 +1,6 @@
 from src.preprocessing import load_gff, load_similarity_score, load_ribap_groups, build_edge_index, map_edge_weights, map_labels_to_edge_index, construct_neighbour_lst, generate_neighbour_edge_features, build_adjacency_vectors, normalize_sim_scores
 from src.setup import log, args
-from src.helper import concat_graph_data, simulate_dataset, generate_minimal_dataset, sub_sample_graph_edges, get_connected_nodes, get_neighbour_graph
+from src.helper import concat_graph_data, simulate_dataset, generate_minimal_dataset, calculate_baseline_labels, get_connected_nodes, get_neighbour_graph, remove_duplicate_edges_tuple
 import torch, os, pickle, random
 from torch_geometric.data import Dataset, Data
 from rich.progress import track, Console, Progress
@@ -10,7 +10,6 @@ from torch_geometric.utils.convert import to_scipy_sparse_matrix
 from torch_geometric.transforms import RemoveDuplicatedEdges
 from src.plot import plot_violin_distributions, plot_homolog_positions
 from multiprocessing import Pool, current_process
-from src.helper import remove_duplicate_edges_tuple
 
 class HomogenousDataset(Dataset):
     """Class holding the input graph datastructures.
@@ -240,7 +239,7 @@ class UnionGraphDataset(Dataset):
 
     Split the data points into train, test and validation sets using split_data().
     """
-    def __init__(self, gff_files = [], similarity_score_file = '', ribap_groups_file = None, split = (0.7, 0.15, 0.15), categorical_nodes = False):
+    def __init__(self, gff_files = [], similarity_score_file = '', ribap_groups_file = None, split = (0.7, 0.15, 0.15), categorical_nodes = False, calculate_baseline = False):
         super().__init__(root = None, transform = None, pre_transform = None, pre_filter = None)
 
         genome_annotation_df_lst = []
@@ -251,6 +250,7 @@ class UnionGraphDataset(Dataset):
         self.gene_id_position_dict = {}
 
         self.data_lst = []
+        self.base_labels = []
 
         self.categorical_nodes = categorical_nodes
         self.num_genes = 0
@@ -261,6 +261,10 @@ class UnionGraphDataset(Dataset):
         self.class_balance = None
 
         self.gff_is_subset = False
+        self.calculate_baseline = calculate_baseline
+
+        if calculate_baseline:
+            log.info('Baseline calculation is set to True, note that this can slow down preprocessing and metric calculation!')
 
         
         if not gff_files:
@@ -340,6 +344,7 @@ class UnionGraphDataset(Dataset):
         with Console().status("Generating sub-graphs (this might take some time)..") as status, Pool(processes = args.cpus) as pool:
             results  = pool.map(self.generate_sub_graphs, ribap_groups_chunked)
             self.data_lst = [sublist for tup in results for sublist in tup[0]]
+            if self.calculate_baseline: self.base_labels = [sublist for tup in results for sublist in tup[2]]
             class_balance_lst = [result[1] for result in results]
             self.class_balance = sum(class_balance_lst) / len(class_balance_lst)
         
@@ -379,12 +384,20 @@ class UnionGraphDataset(Dataset):
         num_val_data = int(len(self.data_lst) * split[1])
         num_test_data = int(len(self.data_lst) * split[2])
 
-        random.shuffle(self.data_lst)
+        
+        if self.base_labels:
+            tmp = list(zip(self.data_lst, self.base_labels))
+            random.shuffle(tmp)
+            self.data_lst, self.base_labels = zip(*tmp)
+        else:
+            random.shuffle(self.data_lst)
 
         log.info(f"Splitting data ({len(self.data_lst)}) into sets of train: {num_train_data}, test: {num_test_data}, val: {num_val_data} graphs.")
         self.train = self.data_lst[:num_train_data]
-        self.val  = self.data_lst[num_train_data:num_train_data + num_val_data]
-        self.test   = self.data_lst[-num_test_data:]
+        self.val   = self.data_lst[num_train_data:num_train_data + num_val_data]
+        self.test  = self.data_lst[-num_test_data:]
+        
+        if self.calculate_baseline: self.base_labels = torch.cat((self.base_labels[-num_test_data:]))
 
         #self.train = self.data_lst[:num_train_data]
         #self.train = [concat_graph_data(self.train[i:i + batch_size]) for i in range(0, len(self.train), batch_size)]
@@ -396,7 +409,7 @@ class UnionGraphDataset(Dataset):
 
         pos = 0
         neg = 0
-        data_lst = []
+        data_lst, base_labels_lst = [], []
 
         for group in ribap_groups_lst:
 
@@ -428,8 +441,15 @@ class UnionGraphDataset(Dataset):
                 pos += labels_ts.sum().item()
                 neg += len(labels_ts) - labels_ts.sum().item()
 
-            else:
+                if self.calculate_baseline:
+                    base_labels_ts = calculate_baseline_labels(sim_edge_index, gene_lst, self.ribap_groups_dict, sub_sim_score_dict)
+                    assert len(base_labels_ts) == len(labels_ts), f"List of baseline labels ({len(base_labels_ts)}) is not the same size as list of 'ground truth' labels ({len(labels_ts)})."
+                else:
+                    base_labels_ts = None
 
+            else:
+                
+                base_labels_ts = None
                 labels_ts = None
 
 
@@ -458,10 +478,12 @@ class UnionGraphDataset(Dataset):
             graph.union_edge_index = union_edge_index.long()
 
             data_lst.append(graph)
+            base_labels_lst.append(base_labels_ts)
+
 
         local_class_balance = neg / pos
         log.debug(f'{current_process().name} finished.')
-        return (data_lst, local_class_balance)
+        return (data_lst, local_class_balance, base_labels_lst)
         return 
         #log.info(f'{pos / (neg + pos) * 100} % edges in positive class.')
 

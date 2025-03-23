@@ -423,3 +423,28 @@ def remove_duplicate_edges_tuple(edge_index):
     src_clean, dst_clean = zip(*unique_edges)
     
     return list(src_clean), list(dst_clean)
+
+
+
+def calculate_baseline_labels(edge_index, gene_ids_lst, ribap_groups_dict, sub_sim_score_dict):
+
+    num_genes = len(edge_index[0])
+    label_lst = [0] * num_genes
+
+    for edge in range(num_genes):
+
+        source_gene_int_id = edge_index[0][edge]
+        destination_gene_int_id = edge_index[1][edge]
+        source_gene_str_id = gene_ids_lst[source_gene_int_id]
+        destination_gene_str_id = gene_ids_lst[destination_gene_int_id]
+        
+        if (source_gene_str_id in ribap_groups_dict and destination_gene_str_id in ribap_groups_dict[source_gene_str_id]) or (destination_gene_str_id in ribap_groups_dict and source_gene_str_id in ribap_groups_dict[destination_gene_str_id]):
+
+            if source_gene_str_id in sub_sim_score_dict and destination_gene_str_id in sub_sim_score_dict[source_gene_str_id]:
+                score = sub_sim_score_dict[source_gene_str_id][destination_gene_str_id]
+                max_candidate_score = max(sub_sim_score_dict[source_gene_str_id].values())
+                
+                if score >= max_candidate_score:
+                    label_lst[edge] = 1
+
+    return torch.tensor(label_lst)

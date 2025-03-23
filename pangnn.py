@@ -15,8 +15,8 @@ from accelerate import Accelerator
 from torchmetrics.classification import BinaryConfusionMatrix, BinaryAveragePrecision, BinaryAUROC
 from rich.progress import Console, Progress
 
-""" profiler = cProfile.Profile()
-profiler.enable() """
+profiler = cProfile.Profile()
+profiler.enable()
 
 accelerator = Accelerator(mixed_precision = args.mixed_precision)
 
@@ -39,7 +39,7 @@ if not args.simulate_dataset:
         num_genomes = 'number of genomes not available since dataset was loaded from disk'
     else:
         num_genomes = len(args.annotation)
-        dataset = UnionGraphDataset(args.annotation, args.similarity, args.ribap_groups, split=(0.7, 0.15, 0.01), categorical_nodes = args.categorical_node) if args.train else HomogenousDataset(args.annotation, args.similarity)
+        dataset = UnionGraphDataset(args.annotation, args.similarity, args.ribap_groups, split=(0.7, 0.15, 0.01), categorical_nodes = args.categorical_node, calculate_baseline=True) if args.train else HomogenousDataset(args.annotation, args.similarity)
     #dataset.generate_graph_data()
 else:
     log.info('Simulating dataset.')
@@ -141,6 +141,10 @@ elif args.train:
 
         for epoch in range(args.epochs):
 
+            if oom_count > (args.epochs * 0.1):
+                log.error(f'Training repeatedly failed because GPU went out of memory. Try with smaller batch size or smaller -n.')
+                quit()
+
             if 'cuda' in device.type:
                 
                 torch.cuda.reset_peak_memory_stats()
@@ -167,14 +171,22 @@ elif args.train:
                 # this calls the models forward function since model is callable
                 log.debug('Calling forward step on current batch..')
 
-                output = model(batch)
-                #print(f"logits after decoding:\n{output}")
-                log.debug('Calling loss function on current batch..')
-                log.debug(batch)
-                loss = criterion(output, labels)
-                log.debug('Calling backward step on current batch..')
-                #loss.backward()
-                accelerator.backward(loss)
+                try:
+                    output = model(batch)
+                    log.debug('Calling loss function on current batch..')
+                    log.debug(batch)
+                    loss = criterion(output, labels)
+                    log.debug('Calling backward step on current batch..')
+
+
+                    accelerator.backward(loss)
+
+                except torch.OutOfMemoryError:
+                    log.warning(f'OOM error during forward or backward pass on batch {batch_num}, skipping batch...')
+                    if 'cuda' in device.type: torch.cuda.empty_cache()
+                    oom_count += 1
+                    continue
+
                 log.debug('Calling optimizer step on current batch..')
                 optimizer.step()
                 
@@ -206,7 +218,16 @@ elif args.train:
                 for num_batch, batch in enumerate(val_data_loader):
 
                     model.eval()
-                    output = model(batch)
+
+                    try:
+
+                        output = model(batch)
+
+                    except torch.OutOfMemoryError:
+                        log.warning(f'OOM error during forward pass on evaluation batch {batch_num}, skipping batch...')
+                        if 'cuda' in device.type: torch.cuda.empty_cache()
+                        oom_count +=1
+                        continue
 
                     val_labels = batch.y
 
@@ -298,7 +319,7 @@ elif args.train:
     with Console().status("Finished model training, plotting metrics..") as status:
         # get metrics on test dataset
         for batch in test_data_loader:
-            prediction_bin, prediction_scores, stats = predict_homolog_genes(model, None, batch, binary_th=binary_th)
+            prediction_bin, prediction_scores, stats = predict_homolog_genes(model, None, batch, binary_th=binary_th, base_labels = dataset.base_labels)
             writer.add_pr_curve('PR/test', batch.y.cpu(), torch.sigmoid(prediction_scores))
 
     writer.add_hparams(hparams, stats)
@@ -335,9 +356,9 @@ shutil.move(os.path.join('temp', run_id), 'runs')
 # improvement?
 
 # Stop cProfile for time profiling
-""" profiler.disable()
+profiler.disable()
 
 # Process and print time stats
 stats = pstats.Stats(profiler)
 stats.strip_dirs()
-stats.sort_stats("cumulative").print_stats(20) """
+stats.sort_stats("cumulative").print_stats(20)
