@@ -15,8 +15,8 @@ from accelerate import Accelerator
 from torchmetrics.classification import BinaryConfusionMatrix, BinaryAveragePrecision, BinaryAUROC
 from rich.progress import Console, Progress
 
-profiler = cProfile.Profile()
-profiler.enable()
+""" profiler = cProfile.Profile()
+profiler.enable() """
 
 accelerator = Accelerator(mixed_precision = args.mixed_precision)
 
@@ -356,9 +356,9 @@ shutil.move(os.path.join('temp', run_id), 'runs')
 # improvement?
 
 # Stop cProfile for time profiling
-profiler.disable()
+""" profiler.disable()
 
 # Process and print time stats
 stats = pstats.Stats(profiler)
 stats.strip_dirs()
-stats.sort_stats("cumulative").print_stats(20)
+stats.sort_stats("cumulative").print_stats(20) """
