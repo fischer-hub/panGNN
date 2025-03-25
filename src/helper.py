@@ -448,3 +448,33 @@ def calculate_baseline_labels(edge_index, gene_ids_lst, ribap_groups_dict, sub_s
                     label_lst[edge] = 1
 
     return torch.tensor(label_lst)
+
+def reciprocal_best_hits_refined(graph_lst, sim_score_dict, logits):
+    
+    logits = list(logits)
+    label_lst = [0] * len(logits)
+    logit_offset = 0
+
+    for graph in graph_lst:
+        
+        gene_lst, origin_edge_index = graph.gene_lst, graph.edge_index[0].tolist()
+        gene_pos_dict = {id: pos for pos, id in enumerate(gene_lst)}
+        sub_logits = logits[logit_offset : logit_offset + graph.num_edges]
+        logit_offset += graph.num_edges
+
+        for idx, origin_idx in enumerate(origin_edge_index):
+
+            origin_str_id = gene_lst[origin_idx]
+            #target_str_id = gene_lst[target_idx]
+
+            candidates = sim_score_dict[origin_str_id].keys()
+            candidate_logits = [sub_logits[gene_pos_dict[candidate]] for candidate in candidates if candidate in gene_pos_dict]
+            max_logit = max(candidate_logits) if candidate_logits else 0
+            
+            if sub_logits[idx] >= max_logit:
+                label_lst[logit_offset - graph.num_edges + idx] = 1
+
+    return label_lst
+
+
+

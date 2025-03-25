@@ -14,7 +14,7 @@ from torch.utils.tensorboard import SummaryWriter
 from accelerate import Accelerator
 from torchmetrics.classification import BinaryConfusionMatrix, BinaryAveragePrecision, BinaryAUROC
 from rich.progress import Console, Progress
-
+from src.helper import reciprocal_best_hits_refined
 """ profiler = cProfile.Profile()
 profiler.enable() """
 
@@ -321,6 +321,8 @@ elif args.train:
         # get metrics on test dataset
         for batch in test_data_loader:
             prediction_bin, prediction_scores, stats = predict_homolog_genes(model, None, batch, binary_th=binary_th, base_labels = dataset.base_labels)
+            brh_refined = reciprocal_best_hits_refined(batch.to_data_list(), dataset.sim_score_dict, prediction_scores)
+            prediction_bin, prediction_scores, stats = predict_homolog_genes(model, None, batch, binary_th=binary_th, base_labels = dataset.base_labels, refined_base_labels = brh_refined)
             writer.add_pr_curve('PR/test', batch.y.cpu(), torch.sigmoid(prediction_scores))
 
     writer.add_hparams(hparams, stats)

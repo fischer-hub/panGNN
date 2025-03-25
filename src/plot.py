@@ -122,17 +122,19 @@ def plot_roc(labels, probabilities, path = os.path.join('plots', 'roc.png')):
 
 
 
-def plot_pr_curve(labels, probabilities, base_labels, path = os.path.join('plots', 'pr_curve.png')):
+def plot_pr_curve(labels, probabilities, base_labels, refined_base_labels, path = os.path.join('plots', 'pr_curve.png')):
 
-
+    labels = labels.tolist()
     AP = average_precision_score(labels, probabilities)
     plt.figure(figsize=(12, 5))
-    display = PrecisionRecallDisplay.from_predictions(labels, probabilities, name="PR", plot_chance_level=True)
+    display = PrecisionRecallDisplay.from_predictions(labels, probabilities, name="PR", plot_chance_level=True, pos_label = 1)
     _ = display.ax_.set_title("Binary Precision-Recall Curve")
 
     if base_labels is not None:
         baseline_precision, baseline_recall, _ = precision_recall_curve(labels, base_labels)
-        plt.plot(baseline_recall, baseline_precision, linestyle='--', label='Baseline', color='red')
+        if refined_base_labels is not None: refined_baseline_precision, refined_baseline_recall, _ = precision_recall_curve(labels, refined_base_labels)
+        plt.plot(baseline_recall, baseline_precision, linestyle='--', label='naiv RBH', color='red')
+        if refined_base_labels is not None: plt.plot(refined_baseline_recall, refined_baseline_precision, linestyle='--', label='refined RBH', color='green')
         plt.legend()
     
     if not os.path.exists(os.path.dirname(path)):

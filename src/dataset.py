@@ -255,9 +255,9 @@ class UnionGraphDataset(Dataset):
         self.categorical_nodes = categorical_nodes
         self.num_genes = 0
         self.split = split
-        self.val = torch.tensor([])
-        self.train = torch.tensor([])
-        self.test = torch.tensor([])
+        self.val = []
+        self.train = []
+        self.test = []
         self.class_balance = None
 
         self.gff_is_subset = False
@@ -393,11 +393,24 @@ class UnionGraphDataset(Dataset):
             random.shuffle(self.data_lst)
 
         log.info(f"Splitting data ({len(self.data_lst)}) into sets of train: {num_train_data}, test: {num_test_data}, val: {num_val_data} graphs.")
-        self.train = self.data_lst[:num_train_data]
-        self.val   = self.data_lst[num_train_data:num_train_data + num_val_data]
-        self.test  = self.data_lst[-num_test_data:]
         
-        if self.calculate_baseline: self.base_labels = torch.cat((self.base_labels[-num_test_data:]))
+        if self.calculate_baseline:
+
+            for graph in self.data_lst[:num_train_data]:
+                del graph.gene_lst
+                self.train.append(graph)
+
+            for graph in self.data_lst[num_train_data:num_train_data + num_val_data]:
+                del graph.gene_lst
+                self.val.append(graph)
+            
+            self.test  = self.data_lst[-num_test_data:]
+            self.base_labels = torch.cat((self.base_labels[-num_test_data:]))
+        else:
+            self.train = self.data_lst[:num_train_data]
+            self.val   = self.data_lst[num_train_data:num_train_data + num_val_data]
+            self.test  = self.data_lst[-num_test_data:]
+        
 
         #self.train = self.data_lst[:num_train_data]
         #self.train = [concat_graph_data(self.train[i:i + batch_size]) for i in range(0, len(self.train), batch_size)]
@@ -476,6 +489,9 @@ class UnionGraphDataset(Dataset):
             graph = Data(x, sim_edge_index, union_edge_weights, labels_ts)
             
             graph.union_edge_index = union_edge_index.long()
+
+            if self.calculate_baseline:
+                graph.gene_lst = gene_lst
 
             data_lst.append(graph)
             base_labels_lst.append(base_labels_ts)

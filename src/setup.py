@@ -27,7 +27,7 @@ parser.add_argument('--simulate_dataset', help = 'simulate input data instead of
 parser.add_argument('--union_edge_weights', help = 'unite edge weights from sim and neighbour graph and only convolute over one', action = 'store_true')
 parser.add_argument('--categorical_node', help = 'embed node features as categorical feature embeddings using embedding layer, where category referes to the position of each gene in its genome', action = 'store_true')
 parser.add_argument('--no_q_score_transform', help = 'dont transform normalized edge probabilities between homolog candidates to Q-score like values before training [default: True]', action = 'store_false')
-parser.add_argument('--normalization_temp', help = 'temperature value for similarity score normalization, turns of normalization if set to 0', default = 0.8, type = float)
+parser.add_argument('--normalization_temp', help = 'temperature value for similarity score normalization, turns off normalization if set to 0', default = 0.8, type = float)
 parser.add_argument('--tb_comment',         help = 'comment to append to current run for evaluation with tensorboard', default = '')
 parser.add_argument('--from_pickle',        help = 'path to pickle file to load saved dataset from', default = '')
 parser.add_argument('--node_dim',           help = 'dimension of node embedding and input of first convolution layer', default = 64, type = int)
