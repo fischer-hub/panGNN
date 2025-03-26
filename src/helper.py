@@ -467,7 +467,11 @@ def reciprocal_best_hits_refined(graph_lst, sim_score_dict, logits):
             origin_str_id = gene_lst[origin_idx]
             #target_str_id = gene_lst[target_idx]
 
-            candidates = sim_score_dict[origin_str_id].keys()
+            if origin_str_id in sim_score_dict:
+                candidates = sim_score_dict[origin_str_id].keys()
+            else:
+                continue
+                
             candidate_logits = [sub_logits[gene_pos_dict[candidate]] for candidate in candidates if candidate in gene_pos_dict]
             max_logit = max(candidate_logits) if candidate_logits else 0
             
