@@ -25,7 +25,6 @@ binary_confusion_matrix_val = BinaryConfusionMatrix().to(accelerator.device)
 binary_auroc = BinaryAUROC().to(accelerator.device)
 binary_average_precision = BinaryAveragePrecision().to(accelerator.device)
 
-
 # if limit is too low it can crash the multithreading in preprocessing sadly
 soft_limit, hard_limit = resource.getrlimit(resource.RLIMIT_NOFILE)
 if soft_limit < 50000: resource.setrlimit(resource.RLIMIT_NOFILE, (hard_limit-10, hard_limit))

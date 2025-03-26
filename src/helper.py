@@ -460,6 +460,7 @@ def reciprocal_best_hits_refined(graph_lst, sim_score_dict, logits):
         gene_lst, origin_edge_index = graph.gene_lst, graph.edge_index[0].tolist()
         gene_pos_dict = {id: pos for pos, id in enumerate(gene_lst)}
         sub_logits = logits[logit_offset : logit_offset + graph.num_edges]
+        assert len(sub_logits) == graph.num_edges, f'Number of logits ({len(sub_logits)}) does not match number of edges ({graph.num_edges}) of the graph.'
         logit_offset += graph.num_edges
 
         for idx, origin_idx in enumerate(origin_edge_index):
@@ -471,11 +472,17 @@ def reciprocal_best_hits_refined(graph_lst, sim_score_dict, logits):
                 candidates = sim_score_dict[origin_str_id].keys()
             else:
                 continue
-                
-            candidate_logits = [sub_logits[gene_pos_dict[candidate]] for candidate in candidates if candidate in gene_pos_dict]
-            max_logit = max(candidate_logits) if candidate_logits else 0
+
+            candidate_idxs = [gene_pos_dict[candidate] for candidate in candidates if candidate in gene_pos_dict]
+
+            candidate_ids = torch.tensor(candidate_idxs)
+
+            all_matches = torch.isin(graph.edge_index[0], candidate_ids) | torch.isin(graph.edge_index[1], candidate_ids)
+            all_matching_positions = torch.nonzero(all_matches, as_tuple=True)[0].tolist()
+
+            candidate_logits = [sub_logits[pos] for pos in all_matching_positions]
             
-            if sub_logits[idx] >= max_logit:
+            if sub_logits[idx] >= max(candidate_logits):
                 label_lst[logit_offset - graph.num_edges + idx] = 1
 
     return label_lst
