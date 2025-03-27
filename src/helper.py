@@ -426,10 +426,11 @@ def remove_duplicate_edges_tuple(edge_index):
 
 
 
-def calculate_baseline_labels(edge_index, gene_ids_lst, ribap_groups_dict, sub_sim_score_dict):
+def calculate_baseline_labels(edge_index, gene_ids_lst, ribap_groups_dict, sub_sim_score_dict, sim_score_dict_raw):
 
     num_genes = len(edge_index[0])
     label_lst = [0] * num_genes
+    label_raw_lst = [0] * num_genes
 
     for edge in range(num_genes):
 
@@ -442,13 +443,20 @@ def calculate_baseline_labels(edge_index, gene_ids_lst, ribap_groups_dict, sub_s
 
             if source_gene_str_id in sub_sim_score_dict and destination_gene_str_id in sub_sim_score_dict[source_gene_str_id]:
                 score = sub_sim_score_dict[source_gene_str_id][destination_gene_str_id]
+                score_raw = sim_score_dict_raw[source_gene_str_id][destination_gene_str_id]
                 max_candidate_score = max(sub_sim_score_dict[source_gene_str_id].values())
+                max_candidate_score_raw = max(sim_score_dict_raw[source_gene_str_id].values())
                 
                 if score >= max_candidate_score:
                     label_lst[edge] = 1
+                
+                if score_raw >= max_candidate_score_raw:
+                    label_raw_lst[edge] = 1
 
-    return torch.tensor(label_lst)
+    return label_lst, label_raw_lst
 
+
+# this is slow as flip
 def reciprocal_best_hits_refined(graph_lst, sim_score_dict, logits):
     
     logits = list(logits)

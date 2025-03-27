@@ -299,7 +299,7 @@ class UnionGraphDataset(Dataset):
         
         self.gene_id_position_dict = {gene: idx for idx, gene in enumerate(self.gene_str_ids_lst)}
 
-        self.sim_score_dict = load_similarity_score(similarity_score_file, self.gene_id_position_dict)
+        self.sim_score_dict_raw = load_similarity_score(similarity_score_file, self.gene_id_position_dict)
 
         prob_lst = []
         qscore_lst = []
@@ -311,7 +311,7 @@ class UnionGraphDataset(Dataset):
 
 
         if args.normalization_temp != 0:
-            self.sim_score_dict = normalize_sim_scores(self.sim_score_dict, t = args.normalization_temp, pseudo_count = 1, q_score_norm=args.no_q_score_transform)
+            self.sim_score_dict = normalize_sim_scores(self.sim_score_dict_raw, t = args.normalization_temp, pseudo_count = 1, q_score_norm=args.no_q_score_transform)
         else:
             log.warning("Similarity score normalization temp set to 0, skipping normalization. This can decrease model performance.")
 
@@ -344,7 +344,9 @@ class UnionGraphDataset(Dataset):
         with Console().status("Generating sub-graphs (this might take some time)..") as status, Pool(processes = args.cpus) as pool:
             results  = pool.map(self.generate_sub_graphs, ribap_groups_chunked)
             self.data_lst = [sublist for tup in results for sublist in tup[0]]
-            if self.calculate_baseline: self.base_labels = [sublist for tup in results for sublist in tup[2]]
+            if self.calculate_baseline: 
+                self.base_labels = [sublist for tup in results for sublist in tup[2]]
+                self.base_labels_raw = [sublist for tup in results for sublist in tup[3]]
             class_balance_lst = [result[1] for result in results]
             self.class_balance = sum(class_balance_lst) / len(class_balance_lst)
         
@@ -386,9 +388,9 @@ class UnionGraphDataset(Dataset):
 
         
         if self.base_labels:
-            tmp = list(zip(self.data_lst, self.base_labels))
+            tmp = list(zip(self.data_lst, self.base_labels, self.base_labels_raw))
             random.shuffle(tmp)
-            self.data_lst, self.base_labels = zip(*tmp)
+            self.data_lst, self.base_labels, self.base_labels_raw = zip(*tmp)
         else:
             random.shuffle(self.data_lst)
 
@@ -405,7 +407,8 @@ class UnionGraphDataset(Dataset):
                 self.val.append(graph)
             
             self.test  = self.data_lst[-num_test_data:]
-            self.base_labels = torch.cat((self.base_labels[-num_test_data:]))
+            self.base_labels = [elem for sublist in self.base_labels[-num_test_data:] for elem in sublist]
+            self.base_labels_raw = [elem for sublist in self.base_labels_raw[-num_test_data:] for elem in sublist]
         else:
             self.train = self.data_lst[:num_train_data]
             self.val   = self.data_lst[num_train_data:num_train_data + num_val_data]
@@ -422,7 +425,7 @@ class UnionGraphDataset(Dataset):
 
         pos = 0
         neg = 0
-        data_lst, base_labels_lst = [], []
+        data_lst, base_labels_lst, base_labels_raw_lst = [], [], []
 
         for group in ribap_groups_lst:
 
@@ -455,14 +458,17 @@ class UnionGraphDataset(Dataset):
                 neg += len(labels_ts) - labels_ts.sum().item()
 
                 if self.calculate_baseline:
-                    base_labels_ts = calculate_baseline_labels(sim_edge_index, gene_lst, self.ribap_groups_dict, sub_sim_score_dict)
-                    assert len(base_labels_ts) == len(labels_ts), f"List of baseline labels ({len(base_labels_ts)}) is not the same size as list of 'ground truth' labels ({len(labels_ts)})."
+                    base_labels, base_labels_raw = calculate_baseline_labels(sim_edge_index, gene_lst, self.ribap_groups_dict, sub_sim_score_dict, self.sim_score_dict_raw)
+                    assert len(base_labels) == len(labels_ts), f"List of normalized baseline labels ({len(base_labels)}) is not the same size as list of 'ground truth' labels ({len(labels_ts)})."
+                    assert len(base_labels_raw) == len(labels_ts), f"List of raw baseline labels ({len(base_labels)}) is not the same size as list of 'ground truth' labels ({len(labels_ts)})."
                 else:
-                    base_labels_ts = None
+                    base_labels = None
+                    base_labels_raw = None
 
             else:
                 
-                base_labels_ts = None
+                base_labels_raw = None
+                base_labels = None
                 labels_ts = None
 
 
@@ -492,15 +498,16 @@ class UnionGraphDataset(Dataset):
 
             if self.calculate_baseline:
                 graph.gene_lst = gene_lst
-
+            
+            base_labels_lst.append(base_labels)
+            base_labels_raw_lst.append(base_labels_raw)
             data_lst.append(graph)
-            base_labels_lst.append(base_labels_ts)
 
 
         local_class_balance = neg / pos
         log.debug(f'{current_process().name} finished.')
-        return (data_lst, local_class_balance, base_labels_lst)
-        return 
+        
+        return (data_lst, local_class_balance, base_labels_lst, base_labels_raw_lst)
         #log.info(f'{pos / (neg + pos) * 100} % edges in positive class.')
 
 
