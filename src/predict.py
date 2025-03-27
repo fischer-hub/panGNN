@@ -1,4 +1,4 @@
-import torch
+import torch, time
 from rich.console import Console
 from src.setup import log
 from src.plot import plot_roc, plot_logit_distribution, plot_pr_curve
@@ -28,7 +28,10 @@ def predict_homolog_genes(model, train_dataset = None, test_dataset = None, bina
     with torch.no_grad():
         with Console().status("Infering model on test data..") as status:
             #test_dataset.to(device)
+            inference_start_time = time.time()
             edge_scores = model(test_dataset)
+            log.info(f"Time elapsed during inference on test datset: {time.time() - inference_start_time:.4f} seconds")
+
 
             if isinstance(test_dataset, tuple): test_dataset = test_dataset[0]
 
