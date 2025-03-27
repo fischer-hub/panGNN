@@ -135,8 +135,8 @@ def plot_pr_curve(labels, probabilities, base_labels, refined_base_labels, path 
     if base_labels is not None:
         baseline_precision, baseline_recall, _ = precision_recall_curve(labels, base_labels)
         baseline_precision_raw, baseline_recall_raw, _ = precision_recall_curve(labels, base_labels_raw)
-        plt.plot(baseline_recall, baseline_precision, linestyle='--', label='Max Raw Score Candidate', color='red')
-        plt.plot(baseline_recall_raw, baseline_precision_raw, linestyle='--', label='Max Q-Score Candidate', color='green')
+        plt.plot(baseline_recall, baseline_precision, linestyle='--', label='Max Q-Score Candidate', color='red')
+        plt.plot(baseline_recall_raw, baseline_precision_raw, linestyle='--', label='Max Raw Score Candidate', color='green')
         if refined_base_labels is not None: refined_baseline_precision, refined_baseline_recall, _ = precision_recall_curve(labels, refined_base_labels)
         if refined_base_labels is not None: plt.plot(refined_baseline_recall, refined_baseline_precision, linestyle='--', label='refined RBH', color='yellow')
         plt.legend()
