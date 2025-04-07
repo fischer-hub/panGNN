@@ -1,7 +1,7 @@
 from src.preprocessing import load_gff, load_similarity_score, load_ribap_groups, build_edge_index, map_edge_weights, map_labels_to_edge_index, construct_neighbour_lst, generate_neighbour_edge_features, build_adjacency_vectors, normalize_sim_scores
 from src.setup import log, args
 from src.helper import concat_graph_data, simulate_dataset, generate_minimal_dataset, calculate_baseline_labels, get_connected_nodes, get_neighbour_graph, remove_duplicate_edges_tuple
-import torch, os, pickle, random
+import torch, os, pickle, random, time
 from torch_geometric.data import Dataset, Data
 from rich.progress import track, Console, Progress
 from scipy.sparse import csr_array
@@ -301,9 +301,6 @@ class UnionGraphDataset(Dataset):
 
         self.sim_score_dict_raw = load_similarity_score(similarity_score_file, self.gene_id_position_dict)
 
-        prob_lst = []
-        qscore_lst = []
-
         #for temp in [0.00001, 0.0001, 0.001, 0.01, 0.1, 0.2, 0.4, 0.6, 0.8, 1, 1.5, 2, 5, 10]:
         #    prob_lst.append((temp, normalize_sim_scores(self.sim_score_dict, t = temp, pseudo_count = 1, q_score_norm= False)))
         #    qscore_lst.append((temp, normalize_sim_scores(self.sim_score_dict, t = temp, pseudo_count = 1, q_score_norm=True)))
@@ -335,31 +332,31 @@ class UnionGraphDataset(Dataset):
         del self.ribap_groups_lst
         del genome_annotation_df_lst
 
-        import time
-        mstart = time.time()
 
-        # Console().status("Generating sub-graphs (this might take some time)..") as status, 
-        #log.info("Generating sub-graphs (this might take some time)..")
-        
-        with Console().status("Generating sub-graphs (this might take some time)..") as status, Pool(processes = args.cpus) as pool:
-            results  = pool.map(self.generate_sub_graphs, ribap_groups_chunked)
-            self.data_lst = [sublist for tup in results for sublist in tup[0]]
-            if self.calculate_baseline: 
-                self.base_labels = [sublist for tup in results for sublist in tup[2]]
-                self.base_labels_raw = [sublist for tup in results for sublist in tup[3]]
-            class_balance_lst = [result[1] for result in results]
-            self.class_balance = sum(class_balance_lst) / len(class_balance_lst)
-        
-        mend = time.time()
-        log.info(f'Generated sub-graphs successfully, elapsed time: {mend-mstart} s.')
+        if args.train:
+            mstart = time.time()
 
-        del results
-        del class_balance_lst
-        
-        self.split_data(split, args.batch_size)
+            with Console().status("Generating sub-graphs (this might take some time)..") as status, Pool(processes = args.cpus) as pool:
+                results  = pool.map(self.generate_sub_graphs, ribap_groups_chunked)
+                self.data_lst = [sublist for tup in results for sublist in tup[0]]
+                if self.calculate_baseline: 
+                    self.base_labels = [sublist for tup in results for sublist in tup[2]]
+                    self.base_labels_raw = [sublist for tup in results for sublist in tup[3]]
+                class_balance_lst = [result[1] for result in results]
+                self.class_balance = sum(class_balance_lst) / len(class_balance_lst)
+            
+            mend = time.time()
+            log.info(f'Generated sub-graphs successfully, elapsed time: {mend-mstart} s.')
 
-        #self.train = self.generate_graphs(self.gene_str_ids_lst_train, self.gene_str_int_lst_train)
-        #self.test = self.generate_graphs(self.gene_str_ids_lst_val, self.gene_str_int_lst_val)
+            del results
+            del class_balance_lst
+            
+            self.split_data(split, args.batch_size)
+        
+        else:
+            log.info("PanGNN not in training mode, skipping graph batching because 'ground truth' labels necessary for splitting are unknown in inference mode.")
+
+            self.test = [self.generate_graphs()]
 
     def len(self):
         return len(self.train.x) + len(self.test.x)
@@ -375,12 +372,6 @@ class UnionGraphDataset(Dataset):
         if not self.data_lst:
             log.error("Data object list of this dataset is empty. What have you done..")
 
-        #if args.batch_size == 1:
-        #    log.info('Batch size set to 1, train and test datasets are the same.')
-        #    self.train = self.data_lst
-        #    self.test = self.data_lst[0]
-        #    return
-        
         # calculate train, test, val split and batches for train data
         num_train_data = int(len(self.data_lst) * split[0])
         num_val_data = int(len(self.data_lst) * split[1])
@@ -508,34 +499,33 @@ class UnionGraphDataset(Dataset):
         log.debug(f'{current_process().name} finished.')
         
         return (data_lst, local_class_balance, base_labels_lst, base_labels_raw_lst)
-        #log.info(f'{pos / (neg + pos) * 100} % edges in positive class.')
 
 
-
-    def generate_graphs(self, gene_str_ids_lst):
+    def generate_graphs(self):
         # total number of genes found in all annotation files
-        gene_id_integer_dict = {gene: idx for idx, gene in enumerate(gene_str_ids_lst)}
+        gene_id_integer_dict = {gene: idx for idx, gene in enumerate(self.gene_str_ids_lst)}
         gene_ids_ts = torch.tensor(list(gene_id_integer_dict.values()))
         normalized_gene_positions_ts = torch.tensor([1 for pos in gene_ids_ts]).float()#.unsqueeze(1)
         node_features_ts = normalized_gene_positions_ts.unsqueeze(1)
 
-
-        # load similarity bit scores from MMSeqs2 output CSV file to pandas dataframe
-
         with Console().status("Building edge index..") as status:
             edge_index_ts = build_edge_index(self.sim_score_dict, gene_id_integer_dict, fully_connected = False)
+            edge_index_ts = remove_duplicate_edges_tuple(edge_index_ts)
+            
         log.info('Successfully built edge index')
 
         with Console().status("Mapping edge weights to respective edge index positions..") as status:
-            edge_weight_ts = map_edge_weights(edge_index_ts, self.sim_score_dict, gene_str_ids_lst, use_cache=False) #torch.randn((num_genes/2, edge_feature_dim))  # Edge
+            edge_weight_ts = map_edge_weights(edge_index_ts, self.sim_score_dict, self.gene_str_ids_lst, use_cache=False) #torch.randn((num_genes/2, edge_feature_dim))  # Edge
         log.info('Successfully mapped weights to the edge index')
 
         # construct list of labels from ribap groups and format to match edge_index
         with Console().status("Mapping labels to gene pairs in edge index.") as status:
-            labels_ts = map_labels_to_edge_index(edge_index_ts, gene_str_ids_lst, self.ribap_groups_dict, use_cache=False) if self.ribap_groups_dict else None
+            labels_ts = map_labels_to_edge_index(edge_index_ts, self.gene_str_ids_lst, self.ribap_groups_dict, use_cache=False) if self.ribap_groups_dict else None
         log.info(f"{labels_ts.sum().item() / len(labels_ts) * 100} % of labels are in positive class.")
         self.class_balance = (labels_ts == 0.).sum()/labels_ts.sum()
         log.info('Successfully mapped labels to gene pairs in edge index')
+        
+        edge_index_ts = torch.stack((torch.tensor(edge_index_ts[0]), torch.tensor(edge_index_ts[1])))
         
 
         origin_idx, target_idx = [], []
@@ -549,18 +539,17 @@ class UnionGraphDataset(Dataset):
                     #target_idx.append(gene_id)
                     target_idx.append(neighbour_id)
 
+
         union_edge_index_ts = torch.stack((torch.cat((edge_index_ts[0], torch.tensor(origin_idx))), torch.cat((edge_index_ts[1], torch.tensor(target_idx)))))
 
-        transform = RemoveDuplicatedEdges()
-        union_edge_index_ts = transform(Data(x = normalized_gene_positions_ts, edge_index = union_edge_index_ts, edge_attr = None, y = None)).edge_index
-
         if args.union_edge_weights:
-            print('creating union graph edge weights', (len(union_edge_index_ts[0]) - len(edge_index_ts[0])))
+            assert (len(union_edge_index_ts[0]) - len(edge_index_ts[0])) > 0, f'Union edge index ({len(union_edge_index_ts[0])}) is smaller than similarity edge index ({len(edge_index_ts[0])}) but was built based on similarity edge index, something broke!'
             edge_weight_ts = torch.cat((edge_weight_ts, torch.tensor([1] * (len(union_edge_index_ts[0]) - len(edge_index_ts[0])))))
+            assert len(edge_weight_ts) == len(union_edge_index_ts[0]), f'Number of edge weights ({len(edge_weight_ts)}) is different from number of edges in union edge index ({len(union_edge_index_ts[0])}).'
             #labels_ts      = torch.cat((labels_ts, torch.tensor([1] * (len(union_edge_index_ts[0]) - len(labels_ts)))))
         
         if self.categorical_nodes:
-            x = torch.tensor([1] * len(gene_str_ids_lst))
+            x = torch.tensor([1] * len(self.gene_str_ids_lst))
         else:
             x = normalized_gene_positions_ts.unsqueeze(1)
 

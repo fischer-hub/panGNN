@@ -38,7 +38,7 @@ if not args.simulate_dataset:
         num_genomes = 'number of genomes not available since dataset was loaded from disk'
     else:
         num_genomes = len(args.annotation)
-        dataset = UnionGraphDataset(args.annotation, args.similarity, args.ribap_groups, split=(0.7, 0.15, 0.01), categorical_nodes = args.categorical_node, calculate_baseline=True) if args.train else HomogenousDataset(args.annotation, args.similarity)
+        dataset = UnionGraphDataset(args.annotation, args.similarity, args.ribap_groups, split=(0.7, 0.15, 0.01), categorical_nodes = args.categorical_node, calculate_baseline=True)
     #dataset.generate_graph_data()
 else:
     log.info('Simulating dataset.')
@@ -107,11 +107,8 @@ else:
 
 if not os.path.exists('runs'): os.mkdir('runs')
 
-train_data_loader = DataLoader(dataset.train, batch_size=args.batch_size, shuffle=True, pin_memory = True)
-val_data_loader = DataLoader(dataset.val, batch_size=args.batch_size, shuffle=True, pin_memory = True)
 test_data_loader = DataLoader(dataset.test, batch_size=len(dataset.test), shuffle=False, pin_memory = True)
-
-model, optimizer, train_data_loader, scheduler, val_data_loader, test_data_loader = accelerator.prepare(model, optimizer, train_data_loader, scheduler, val_data_loader, test_data_loader)
+model, optimizer, test_data_loader = accelerator.prepare(model, optimizer, test_data_loader)
 
 run_id = datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + args.tb_comment
 writer = SummaryWriter(log_dir = os.path.join('temp', run_id), comment = args.tb_comment)
@@ -120,7 +117,10 @@ if not args.train or os.path.exists(args.model_args):
     if os.path.exists(args.model_args):
         log.info(f"Found model file '{args.model_args}' with trained parameter, restoring model state for inference..")
         model.load_state_dict(torch.load(args.model_args))
-        prediction_bin, prediction_scores, stats = predict_homolog_genes(model, dataset.train, dataset.test, binary_th = binary_th)
+
+        for batch in test_data_loader:
+            prediction_bin, prediction_scores, stats = predict_homolog_genes(model, None, batch, binary_th=binary_th)
+            
         stats['mode'] = 'test'
 
     else:
@@ -129,6 +129,11 @@ if not args.train or os.path.exists(args.model_args):
 
 elif args.train:
     # Training loop
+    train_data_loader = DataLoader(dataset.train, batch_size=args.batch_size, shuffle=True, pin_memory = True)
+    val_data_loader = DataLoader(dataset.val, batch_size=args.batch_size, shuffle=True, pin_memory = True)
+
+    model, optimizer, train_data_loader, scheduler, val_data_loader, test_data_loader = accelerator.prepare(model, optimizer, train_data_loader, scheduler, val_data_loader, test_data_loader)
+
     log.info(f"Training on device: {device}")
 
     log.info(f"Entering training loop with batch size: {args.batch_size}, class balance: {dataset.class_balance}, {len(train_data_loader)} batches.")#{dataset.class_balance}.")
