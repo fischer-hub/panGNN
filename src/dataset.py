@@ -615,6 +615,7 @@ class UnionGraphDataset(Dataset):
 
         return graph
     
+    # TODO: adjust this to new dataset form! implement synteny block shuffle of some kind and batching as we do on real data based around ortholog group
     def simulate_dataset(self, num_genes, num_genomes, class_balance = 0.2):
         num_train_genes = int(num_genes)
         num_test_genes = int(num_genes * self.split[1])
