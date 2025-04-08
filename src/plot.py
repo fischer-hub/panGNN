@@ -122,13 +122,19 @@ def plot_roc(labels, probabilities, path = os.path.join('plots', 'roc.png')):
 
 
 
-def plot_pr_curve(labels, probabilities, base_labels, refined_base_labels, path = os.path.join('plots', 'pr_curve.png')):
+def plot_pr_curve(labels, probabilities, base_labels, refined_base_labels, max_candidate_logit_labels = None, path = os.path.join('plots', 'pr_curve.png')):
 
     labels = labels.tolist()
     AP = average_precision_score(labels, probabilities)
     plt.figure(figsize=(12, 5))
     display = PrecisionRecallDisplay.from_predictions(labels, probabilities, name="PR", plot_chance_level=True, pos_label = 1)
     _ = display.ax_.set_title("Binary Precision-Recall Curve")
+
+    if max_candidate_logit_labels is not None:
+        logit_precision, logit_recall, _ = precision_recall_curve(labels, max_candidate_logit_labels)
+        plt.plot(logit_recall, logit_precision, linestyle='--', label='Max Logit Candidate', color='purple')
+
+
 
     if base_labels is not None:
         base_labels, base_labels_raw = base_labels

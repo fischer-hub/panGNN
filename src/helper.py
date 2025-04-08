@@ -1,4 +1,5 @@
 import torch, random
+from collections import defaultdict
 from src.setup import log, args
 from rich.progress import track
 import numpy as np
@@ -462,18 +463,16 @@ def calculate_logit_baseline_labels(graph, sim_score_dict, logits, gene_lst):
     logits = logits.cpu()
     graph = graph.cpu()
     #logits = list(logits)
+    logit_dict = defaultdict(dict)
     label_lst = [0] * len(logits)
         
     origin_edge_index = graph.edge_index[0].tolist()
     gene_pos_dict = {id: pos for pos, id in enumerate(gene_lst)}
 
-    from collections import defaultdict
 
     # for each node id save the indices of the edges that the node appears in 
-    edges_per_node = defaultdict(list)
     for i, (src, tgt) in enumerate(zip(graph.edge_index[0].tolist(), graph.edge_index[1].tolist())):
-        edges_per_node[src].append(i)
-        edges_per_node[tgt].append(i)
+        logit_dict[src][tgt] = i
 
     for idx, origin_idx in enumerate(origin_edge_index):
 
@@ -487,12 +486,12 @@ def calculate_logit_baseline_labels(graph, sim_score_dict, logits, gene_lst):
 
         candidate_idxs = [gene_pos_dict[candidate] for candidate in candidates if candidate in gene_pos_dict]
 
-        candidate_ids = torch.tensor(candidate_idxs)
+        #candidate_ids = torch.tensor(candidate_idxs)
 
-        all_matches = torch.isin(graph.edge_index[0], candidate_ids) | torch.isin(graph.edge_index[1], candidate_ids)
-        all_matching_positions = torch.nonzero(all_matches, as_tuple=True)[0].tolist()
+        #all_matches = torch.isin(graph.edge_index[0], candidate_ids) | torch.isin(graph.edge_index[1], candidate_ids)
+        #all_matching_positions = torch.nonzero(all_matches, as_tuple=True)[0].tolist()
 
-        candidate_logits = [logits[pos] for pos in all_matching_positions]
+        candidate_logits = [logits[logit_dict[origin_idx][candidate_idx]] for candidate_idx in candidate_idxs]
         
         if logits[idx] >= max(candidate_logits):
             label_lst[idx] = 1

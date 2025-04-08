@@ -1,13 +1,13 @@
 import torch, time
 from rich.console import Console
-from src.setup import log
+from src.setup import log, args
 from src.plot import plot_roc, plot_logit_distribution, plot_pr_curve
-from src.helper import concat_graph_data
+from src.helper import concat_graph_data, calculate_logit_baseline_labels
 from sklearn.metrics import confusion_matrix, PrecisionRecallDisplay
 import torch.nn.functional as F
 
 
-def predict_homolog_genes(model, train_dataset = None, test_dataset = None, binary_th = 0.72, base_labels = None, refined_base_labels = None):
+def predict_homolog_genes(model, train_dataset = None, test_dataset = None, binary_th = 0.72, base_labels = None, refined_base_labels = None, dataset = None):
     """Infer the GNN with given trained model and predict homolog genes from
     input similarity graph.
 
@@ -31,7 +31,6 @@ def predict_homolog_genes(model, train_dataset = None, test_dataset = None, bina
             inference_start_time = time.time()
             edge_scores = model(test_dataset)
             log.info(f"Time elapsed during inference on test datset: {time.time() - inference_start_time:.4f} seconds")
-
 
             if isinstance(test_dataset, tuple): test_dataset = test_dataset[0]
 
@@ -71,7 +70,12 @@ def predict_homolog_genes(model, train_dataset = None, test_dataset = None, bina
 
             random_pred = torch.randint(0,2,(len(binary_prediction),))
 
-            AP = plot_pr_curve(test_labels, probablilities, base_labels, refined_base_labels)
+            if not args.train:
+                max_candidate_logit_labels = calculate_logit_baseline_labels(test_dataset, dataset.sim_score_dict, edge_scores, dataset.gene_str_ids_lst)
+                AP = plot_pr_curve(test_labels, probablilities, base_labels, refined_base_labels, max_candidate_logit_labels = max_candidate_logit_labels)
+            else:
+                AP = plot_pr_curve(test_labels, probablilities, base_labels, refined_base_labels)
+
             stats['average_precision'] = AP
 
             accuracy_test = ((binary_prediction == test_labels).sum().item()) / len(test_labels)

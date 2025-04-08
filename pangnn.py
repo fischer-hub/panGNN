@@ -119,8 +119,7 @@ if not args.train or os.path.exists(args.model_args):
         model.load_state_dict(torch.load(args.model_args))
 
         for batch in test_data_loader:
-            prediction_bin, logits, stats = predict_homolog_genes(model, None, batch, binary_th=binary_th)
-            calculate_logit_baseline_labels(batch, dataset.sim_score_dict, logits, dataset.gene_str_ids_lst)
+            prediction_bin, logits, stats = predict_homolog_genes(model, None, batch, binary_th=binary_th, dataset = dataset, base_labels = (dataset.base_labels, dataset.base_labels_raw))
 
         
             

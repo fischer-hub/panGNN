@@ -555,6 +555,10 @@ class UnionGraphDataset(Dataset):
 
         graph_data = Data(x, edge_index_ts, edge_weight_ts, labels_ts)
         graph_data.union_edge_index = union_edge_index_ts
+
+        # since the sub graph in inference mode is the whole graph we pass the whole sim score dict instread of the sub sim score dict here
+        self.base_labels, self.base_labels_raw = calculate_baseline_labels(edge_index_ts, self.gene_str_ids_lst, self.ribap_groups_dict, self.sim_score_dict, self.sim_score_dict_raw)
+
         # this makes the Data object class crash on print??
         #graph_data.subsample_graph_edges = sub_sample_graph_edges.__get__(graph_data, Data)
 
