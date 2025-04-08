@@ -14,7 +14,8 @@ from torch.utils.tensorboard import SummaryWriter
 from accelerate import Accelerator
 from torchmetrics.classification import BinaryConfusionMatrix, BinaryAveragePrecision, BinaryAUROC
 from rich.progress import Console, Progress
-from src.helper import reciprocal_best_hits_refined
+from src.helper import calculate_logit_baseline_labels
+
 """ profiler = cProfile.Profile()
 profiler.enable() """
 
@@ -25,7 +26,7 @@ binary_confusion_matrix_val = BinaryConfusionMatrix().to(accelerator.device)
 binary_auroc = BinaryAUROC().to(accelerator.device)
 binary_average_precision = BinaryAveragePrecision().to(accelerator.device)
 
-# if limit is too low it can crash the multithreading in preprocessing sadly
+# if limit is too low this can crash the multithreading in preprocessing sadly
 soft_limit, hard_limit = resource.getrlimit(resource.RLIMIT_NOFILE)
 if soft_limit < 50000: resource.setrlimit(resource.RLIMIT_NOFILE, (hard_limit-10, hard_limit))
 
@@ -39,7 +40,6 @@ if not args.simulate_dataset:
     else:
         num_genomes = len(args.annotation)
         dataset = UnionGraphDataset(args.annotation, args.similarity, args.ribap_groups, split=(0.7, 0.15, 0.01), categorical_nodes = args.categorical_node, calculate_baseline=True)
-    #dataset.generate_graph_data()
 else:
     log.info('Simulating dataset.')
     num_genomes = 3
@@ -115,11 +115,14 @@ writer = SummaryWriter(log_dir = os.path.join('temp', run_id), comment = args.tb
 
 if not args.train or os.path.exists(args.model_args):
     if os.path.exists(args.model_args):
-        log.info(f"Found model file '{args.model_args}' with trained parameter, restoring model state for inference..")
+        log.info(f"Found model file '{args.model_args}' with trained parameters, restoring model state for inference..")
         model.load_state_dict(torch.load(args.model_args))
 
         for batch in test_data_loader:
-            prediction_bin, prediction_scores, stats = predict_homolog_genes(model, None, batch, binary_th=binary_th)
+            prediction_bin, logits, stats = predict_homolog_genes(model, None, batch, binary_th=binary_th)
+            calculate_logit_baseline_labels(batch, dataset.sim_score_dict, logits, dataset.gene_str_ids_lst)
+
+        
             
         stats['mode'] = 'test'
 
