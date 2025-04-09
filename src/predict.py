@@ -72,7 +72,7 @@ def predict_homolog_genes(model, train_dataset = None, test_dataset = None, bina
 
             if not args.train:
                 log.info('Calculating max logit candidate baseline..')
-                max_candidate_logit_labels = calculate_logit_baseline_labels(test_dataset, dataset.sim_score_dict, edge_scores, dataset.gene_str_ids_lst)
+                max_candidate_logit_labels = calculate_logit_baseline_labels(test_dataset, dataset.sim_score_dict, edge_scores, dataset.gene_str_ids_lst, dataset.gene_id_position_dict)
                 AP = plot_pr_curve(test_labels, probablilities, base_labels, refined_base_labels, max_candidate_logit_labels = max_candidate_logit_labels)
             else:
                 AP = plot_pr_curve(test_labels, probablilities, base_labels, refined_base_labels)

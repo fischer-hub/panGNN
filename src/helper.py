@@ -1,7 +1,8 @@
 import torch, random
 from collections import defaultdict
 from src.setup import log, args
-from rich.progress import track
+from rich.progress import Console
+from multiprocessing import Pool
 import numpy as np
 from torch_geometric.data import Data
 from torch_geometric.utils.convert import to_scipy_sparse_matrix
@@ -458,48 +459,70 @@ def calculate_baseline_labels(edge_index, gene_ids_lst, ribap_groups_dict, sub_s
     return label_lst, label_raw_lst
 
 
-def find_max_logit():
+def find_max_logit(origin_edge_index):
+
+    label_lst = [0] * len(origin_edge_index)
 
     for idx, origin_idx in enumerate(origin_edge_index):
 
-    origin_str_id = gene_lst[origin_idx]
+        origin_str_id = shared_gene_lst[origin_idx]
+        current_logit = shared_logits[idx]
+        is_max = True
 
-    if origin_str_id in sim_score_dict:
-        candidates = sim_score_dict[origin_str_id].keys()
-    else:
-        continue
+        if origin_str_id in shared_sim_score_dict:
+            candidates = shared_sim_score_dict[origin_str_id].keys()
+        else:
+            continue
 
-    candidate_idxs = [gene_pos_dict[candidate] for candidate in candidates if candidate in gene_pos_dict]
-    candidate_logits = [logits[logit_dict[(origin_idx, candidate_idx)]] for candidate_idx in candidate_idxs]
-    
-    if logits[idx] >= max(candidate_logits):
-        label_lst[idx] = 1
+        candidate_idxs = [shared_gene_pos_dict[candidate] for candidate in candidates if candidate in shared_gene_pos_dict]
+        #candidate_logits = [shared_logits[shared_logit_dict[(origin_idx, candidate_idx)]] for candidate_idx in candidate_idxs]
+
+        for candidate_idx in candidate_idxs:
+
+            # current logit is not max, exit early and skip some comparisons ideally
+            if current_logit < shared_logits[shared_logit_dict[(origin_idx, candidate_idx)]]:
+                is_max = False
+                break
+
+        
+        if is_max:
+            label_lst[idx] = 1
+
+    return label_lst
+
+
+def init_worker(origin_edge_index, gene_lst, sim_score_dict, gene_pos_dict, logits, logit_dict):
+    global shared_origin_edge_index, shared_gene_lst, shared_sim_score_dict, shared_gene_pos_dict, shared_logits, shared_logit_dict
+    shared_origin_edge_index, shared_gene_lst, shared_sim_score_dict, shared_gene_pos_dict, shared_logits, shared_logit_dict = origin_edge_index, gene_lst, sim_score_dict, gene_pos_dict, logits, logit_dict
 
 
 # this is slow as flip
-def calculate_logit_baseline_labels(graph, sim_score_dict, logits, gene_lst):
+def calculate_logit_baseline_labels(graph, sim_score_dict, logits, gene_lst, gene_pos_dict):
     
     print('copying logits and graph from gpu')
     logits = logits.tolist()
     graph = graph.cpu()
     #logits = list(logits)
-    logit_dict = defaultdict(dict)
-    label_lst = [0] * len(logits)
+    #logit_dict = defaultdict(dict)
 
     print('convertingtensoirs to lists')
     origin_edge_index, target_edge_index = graph.edge_index[0].tolist(), graph.edge_index[1].tolist()
-    gene_pos_dict = {id: pos for pos, id in enumerate(gene_lst)}
+    #gene_pos_dict = {id: pos for pos, id in enumerate(gene_lst)}
 
     # for each node id save the indices of the edges that the node appears in
-    print('mapping edge indices to connected nodes') 
-    for i, (src, tgt) in enumerate(zip(origin_edge_index, target_edge_index)):
-        logit_dict[(src, tgt)] = i
+    print('mapping edge indices to connected nodes')
+    logit_dict = { (src, tgt): i for i, (src, tgt) in enumerate(zip(origin_edge_index, target_edge_index)) }
+    #for i, (src, tgt) in enumerate(zip(origin_edge_index, target_edge_index)):
+    #    logit_dict[(src, tgt)] = i
+    
 
-    with  Console().status("Comparing candidate logits..") as status, Pool(processes = args.cpus) as pool:
-        results  = pool.map(self.generate_sub_graphs, ribap_groups_chunked)
+    # chunk origin index up for parallel processing
+    origin_edge_index_chunked = [origin_edge_index[i::args.cpus] for i in range(args.cpus) if origin_edge_index[i::args.cpus]]
+    
 
-
-
+    with  Console().status("Comparing candidate logits..") as status, Pool(initializer=init_worker, initargs=(origin_edge_index, gene_lst, sim_score_dict, gene_pos_dict, logits, logit_dict)) as pool:
+        results  = pool.map(find_max_logit, origin_edge_index_chunked)
+        label_lst = [inner for outer in results for inner in outer]
 
     return label_lst
 
