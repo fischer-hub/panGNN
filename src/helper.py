@@ -7,6 +7,7 @@ from torch_geometric.data import Data
 from torch_geometric.utils.convert import to_scipy_sparse_matrix
 from scipy.sparse import csr_array
 from scipy.sparse.csgraph import connected_components
+from rich.progress import Progress
 
 
 
@@ -457,44 +458,48 @@ def calculate_baseline_labels(edge_index, gene_ids_lst, ribap_groups_dict, sub_s
     return label_lst, label_raw_lst
 
 
+def find_max_logit():
+
+    for idx, origin_idx in enumerate(origin_edge_index):
+
+    origin_str_id = gene_lst[origin_idx]
+
+    if origin_str_id in sim_score_dict:
+        candidates = sim_score_dict[origin_str_id].keys()
+    else:
+        continue
+
+    candidate_idxs = [gene_pos_dict[candidate] for candidate in candidates if candidate in gene_pos_dict]
+    candidate_logits = [logits[logit_dict[(origin_idx, candidate_idx)]] for candidate_idx in candidate_idxs]
+    
+    if logits[idx] >= max(candidate_logits):
+        label_lst[idx] = 1
+
+
 # this is slow as flip
 def calculate_logit_baseline_labels(graph, sim_score_dict, logits, gene_lst):
     
-    logits = logits.cpu()
+    print('copying logits and graph from gpu')
+    logits = logits.tolist()
     graph = graph.cpu()
     #logits = list(logits)
     logit_dict = defaultdict(dict)
     label_lst = [0] * len(logits)
-        
-    origin_edge_index = graph.edge_index[0].tolist()
+
+    print('convertingtensoirs to lists')
+    origin_edge_index, target_edge_index = graph.edge_index[0].tolist(), graph.edge_index[1].tolist()
     gene_pos_dict = {id: pos for pos, id in enumerate(gene_lst)}
 
+    # for each node id save the indices of the edges that the node appears in
+    print('mapping edge indices to connected nodes') 
+    for i, (src, tgt) in enumerate(zip(origin_edge_index, target_edge_index)):
+        logit_dict[(src, tgt)] = i
 
-    # for each node id save the indices of the edges that the node appears in 
-    for i, (src, tgt) in enumerate(zip(graph.edge_index[0].tolist(), graph.edge_index[1].tolist())):
-        logit_dict[src][tgt] = i
+    with  Console().status("Comparing candidate logits..") as status, Pool(processes = args.cpus) as pool:
+        results  = pool.map(self.generate_sub_graphs, ribap_groups_chunked)
 
-    for idx, origin_idx in enumerate(origin_edge_index):
 
-        origin_str_id = gene_lst[origin_idx]
-        #target_str_id = gene_lst[target_idx]
 
-        if origin_str_id in sim_score_dict:
-            candidates = sim_score_dict[origin_str_id].keys()
-        else:
-            continue
-
-        candidate_idxs = [gene_pos_dict[candidate] for candidate in candidates if candidate in gene_pos_dict]
-
-        #candidate_ids = torch.tensor(candidate_idxs)
-
-        #all_matches = torch.isin(graph.edge_index[0], candidate_ids) | torch.isin(graph.edge_index[1], candidate_ids)
-        #all_matching_positions = torch.nonzero(all_matches, as_tuple=True)[0].tolist()
-
-        candidate_logits = [logits[logit_dict[origin_idx][candidate_idx]] for candidate_idx in candidate_idxs]
-        
-        if logits[idx] >= max(candidate_logits):
-            label_lst[idx] = 1
 
     return label_lst
 

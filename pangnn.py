@@ -110,8 +110,6 @@ if not os.path.exists('runs'): os.mkdir('runs')
 test_data_loader = DataLoader(dataset.test, batch_size=len(dataset.test), shuffle=False, pin_memory = True)
 model, optimizer, test_data_loader = accelerator.prepare(model, optimizer, test_data_loader)
 
-run_id = datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + args.tb_comment
-writer = SummaryWriter(log_dir = os.path.join('temp', run_id), comment = args.tb_comment)
 
 if not args.train or os.path.exists(args.model_args):
     if os.path.exists(args.model_args):
@@ -131,6 +129,10 @@ if not args.train or os.path.exists(args.model_args):
 
 elif args.train:
     # Training loop
+
+    run_id = datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + args.tb_comment
+    writer = SummaryWriter(log_dir = os.path.join('temp', run_id), comment = args.tb_comment)
+    
     train_data_loader = DataLoader(dataset.train, batch_size=args.batch_size, shuffle=True, pin_memory = True)
     val_data_loader = DataLoader(dataset.val, batch_size=args.batch_size, shuffle=True, pin_memory = True)
 
@@ -324,16 +326,13 @@ elif args.train:
     torch.save(model.state_dict(), os.path.join('temp', run_id, args.model_args))
 
     with Console().status("Finished model training, plotting metrics..") as status:
+
         # get metrics on test dataset
         for batch in test_data_loader:
             prediction_bin, prediction_scores, stats = predict_homolog_genes(model, None, batch, binary_th=binary_th, base_labels = (dataset.base_labels, dataset.base_labels_raw))
-            #data_lst = batch.detach().clone().cpu().to_data_list()
-            #brh_refined = reciprocal_best_hits_refined(data_lst, dataset.sim_score_dict, prediction_scores)
-            #prediction_bin, prediction_scores, stats = predict_homolog_genes(model, None, batch, binary_th=binary_th, base_labels = dataset.base_labels, refined_base_labels = brh_refined)
             writer.add_pr_curve('PR/test', batch.y.cpu(), torch.sigmoid(prediction_scores))
 
     writer.add_hparams(hparams, stats)
-    #log.debug(prediction_bin)
     log.info(f"Time elapsed: {time.time() - start:.4f} seconds")
 
     stats['binary_threshold'] = binary_th
@@ -352,11 +351,10 @@ elif args.train:
     write_stats_csv(stats)
     writer.flush()
     
+    shutil.move(os.path.join('plots', 'pr_curve.png'), os.path.join('temp', run_id, run_id + 'pr_curve.png'))
+    shutil.move(os.path.join('temp', run_id), 'runs')
+    writer.close()
 
-writer.close()
-shutil.move(os.path.join('plots', 'pr_curve.png'), os.path.join('temp', run_id, run_id + 'pr_curve.png'))
-#dataset.save(os.path.join('temp', run_id, run_id + '_dataset.pickle'))
-shutil.move(os.path.join('temp', run_id), 'runs')
 #write_groups_file(dataset.test, prediction_bin)
 # map quality Q score transform
 # test different architectures / scores on sim data, then introduce hard cases in sim data and 

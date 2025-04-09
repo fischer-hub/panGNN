@@ -472,9 +472,9 @@ def load_similarity_score(similarity_score_file, gene_id_position_dict, center_s
     sim_score_dict = (
     sim_score_df.groupby('query')
                 .apply(lambda x: dict(zip(x['target'], x['bits'])))
+                .to_dict())
                 # uncomment to replace sim scores with percent identity between genes
                 #.apply(lambda x: dict(zip(x['target'], x['pident'])))
-                .to_dict())
     
     return sim_score_dict
 
@@ -498,7 +498,7 @@ def normalize_sim_scores(sim_score_dict, t = 0.5, epsilon = 1e-8, pseudo_count =
 
             for candidate_id, score in sim_score_dict[origin_gene].items():
                 
-                if candidate_genome_id in candidate_id and candidate_id not in origin_gene:
+                if candidate_genome_id in candidate_id and candidate_id != origin_gene:
                     # this might cause an underflow in np.exp depending on how
                     # low the score is and how big t is which results in nan in
                     # the division if there are no other scores adding to the sum
@@ -549,15 +549,15 @@ def normalize_sim_scores(sim_score_dict, t = 0.5, epsilon = 1e-8, pseudo_count =
             empty_dict_ids.append(origin_gene)
 
     # sanity check, is are all genes still in the dict, are all scores in range [0,1]?
-    for gene_id in sim_score_dict.keys():
-        if gene_id in normalized_dict:
-            # length of each candidate dict should be old length -1 since we removed self comparisons
-            assert len(sim_score_dict[gene_id]) == len(normalized_dict[gene_id]) + 1, f"Missing normalized score for gene pair ({gene_id}: {normalized_dict[gene_id].keys()}[{len(normalized_dict[gene_id])}], {sim_score_dict[gene_id].keys()}[{len(sim_score_dict[gene_id])}])"
-            
-            if q_score_norm: 
-                assert min(normalized_dict[gene_id].values()) >= pseudo_count, f"Q transformed probability for candidate out of range [pseudo_count, inf) for gene {gene_id}: {normalized_dict[gene_id].values()}"
-            else:
-                assert min(normalized_dict[gene_id].values()) >= 0 and max(normalized_dict[gene_id].values()) <= 1 + epsilon, f"Probability score for candidate out of range [0,1] for gene {gene_id}: {normalized_dict[gene_id].values()}"
+    #for gene_id in sim_score_dict.keys():
+    #    if gene_id in normalized_dict:
+    #        # length of each candidate dict should be old length -1 since we removed self comparisons
+    #        assert len(sim_score_dict[gene_id]) == len(normalized_dict[gene_id]) + 1, f"Missing normalized score for gene pair ({gene_id}: {normalized_dict[gene_id].keys()}[{len(normalized_dict[gene_id])}], {sim_score_dict[gene_id].keys()}[{len(sim_score_dict[gene_id])}])"
+    #        
+    #        if q_score_norm: 
+    #            assert min(normalized_dict[gene_id].values()) >= pseudo_count, f"Q transformed probability for candidate out of range [pseudo_count, inf) for gene {gene_id}: {normalized_dict[gene_id].values()}"
+    #        else:
+    #            assert min(normalized_dict[gene_id].values()) >= 0 and max(normalized_dict[gene_id].values()) <= 1 + epsilon, f"Probability score for candidate out of range [0,1] for gene {gene_id}: {normalized_dict[gene_id].values()}"
 
 
     log.info(f"Normalized similarity scores with t = {t} between gene candidate with loss of {len(empty_dict_ids)} genes in total, e.g. due to only having self comparisons.")

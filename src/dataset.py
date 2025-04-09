@@ -503,13 +503,11 @@ class UnionGraphDataset(Dataset):
 
     def generate_graphs(self):
         # total number of genes found in all annotation files
-        gene_id_integer_dict = {gene: idx for idx, gene in enumerate(self.gene_str_ids_lst)}
-        gene_ids_ts = torch.tensor(list(gene_id_integer_dict.values()))
-        normalized_gene_positions_ts = torch.tensor([1 for pos in gene_ids_ts]).float()#.unsqueeze(1)
-        node_features_ts = normalized_gene_positions_ts.unsqueeze(1)
+        log.info('Allocating node feature tensor..')
+        node_features_ts = torch.ones(self.num_genes, dtype = torch.float, device = torch.device('cpu')).unsqueeze(1)
 
         with Console().status("Building edge index..") as status:
-            edge_index_ts = build_edge_index(self.sim_score_dict, gene_id_integer_dict, fully_connected = False)
+            edge_index_ts = build_edge_index(self.sim_score_dict, self.gene_id_position_dict, fully_connected = False)
             edge_index_ts = remove_duplicate_edges_tuple(edge_index_ts)
             
         log.info('Successfully built edge index')
@@ -527,18 +525,19 @@ class UnionGraphDataset(Dataset):
         
         edge_index_ts = torch.stack((torch.tensor(edge_index_ts[0]), torch.tensor(edge_index_ts[1])))
         
+        origin_idx, target_idx = [None] * (self.num_genes * (args.neighbours + 1) * 2), [None] * (self.num_genes * (args.neighbours + 1) * 2)
+        edge_count = 0
 
-        origin_idx, target_idx = [], []
         # add edges to n nearest neighbour nodes
-        for gene_id in track(gene_id_integer_dict.values(), description = 'Adding edges to neighbouring nodes..', transient = True):
+        for gene_id in track(range(self.num_genes), description = 'Adding edges to neighbouring nodes..', transient = True):
             for neighbour_id in range(gene_id - args.neighbours, gene_id + args.neighbours + 1):
-                if neighbour_id in gene_id_integer_dict.values():
-                    origin_idx.append(gene_id)
-                    # we anyway add the neighbour edges in both directions when iterating over both nodes
-                    #origin_idx.append(neighbour_id)
-                    #target_idx.append(gene_id)
-                    target_idx.append(neighbour_id)
+                if neighbour_id >= 0 and neighbour_id < len(self.gene_str_ids_lst):
+                    origin_idx[edge_count] = gene_id
+                    target_idx[edge_count] = neighbour_id
+                    edge_count += 1
 
+        origin_idx = origin_idx[:edge_count]
+        target_idx = target_idx[:edge_count]
 
         union_edge_index_ts = torch.stack((torch.cat((edge_index_ts[0], torch.tensor(origin_idx))), torch.cat((edge_index_ts[1], torch.tensor(target_idx)))))
 
@@ -549,14 +548,15 @@ class UnionGraphDataset(Dataset):
             #labels_ts      = torch.cat((labels_ts, torch.tensor([1] * (len(union_edge_index_ts[0]) - len(labels_ts)))))
         
         if self.categorical_nodes:
-            x = torch.tensor([1] * len(self.gene_str_ids_lst))
+            x = torch.ones(len(self.gene_str_ids_lst))
         else:
-            x = normalized_gene_positions_ts.unsqueeze(1)
+            x = node_features_ts
 
         graph_data = Data(x, edge_index_ts, edge_weight_ts, labels_ts)
         graph_data.union_edge_index = union_edge_index_ts
 
         # since the sub graph in inference mode is the whole graph we pass the whole sim score dict instread of the sub sim score dict here
+        log.info('Calculating baseline labels for max score candidates..')
         self.base_labels, self.base_labels_raw = calculate_baseline_labels(edge_index_ts, self.gene_str_ids_lst, self.ribap_groups_dict, self.sim_score_dict, self.sim_score_dict_raw)
 
         # this makes the Data object class crash on print??
