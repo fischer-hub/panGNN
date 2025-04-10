@@ -65,81 +65,6 @@ def generate_neighbour_edge_features(neighbour_lst, edge_index, sim_score_dict, 
         neighbour_edge_weights.append(score)
 
     return torch.tensor(neighbour_edge_weights)
-
-
-def map_edge_weights(edge_index, bit_score_dict, gene_ids_lst):
-
-    """Returns a tensor that for each node pair in the edge index defines the
-    edges weight, that being the similarity bit score of the genes in the two
-    nodes connected by the edge. So maps weights to the respective position of 
-    its edge in the edge index.
-
-    Args:
-
-        edge_index (tensor): The edge index defining the nodes that are connected by each edge.
-        bit_score_dict (dict): The dictionary that holds for every pair of genes the according similarity bit score.
-        gene_ids_lst (list): The list holding all gene IDs as strings, where the index of an ID in the list is its integer index.
-    
-    Returns:
-        edge_weight_ts (tensor): tensor that defines for each node pair the 
-                                 similarity score of the nodes connected (edges weight)
-    """
-
-    if os.path.isfile('data/edge_features.pkl') and args.cache:
-        with open('data/edge_features.pkl', 'rb') as f:
-            #log.info(f"Found pickled edge features, loading file..")
-            edge_weight_lst = pickle.load(f)
-    else:
-
-        edge_weight_lst = []
-
-
-        with Progress(transient = True) as progress:
-            edge_weight_bar = progress.add_task("Mapping edge weights to respective edge index positions..\n", total=len(edge_index[1]))
-            #with Console().status("Mapping edge weights to respective edge index positions..") as status:
-            for source_int_ID, target_int_ID in zip(edge_index[0], edge_index[1]):
-
-                # add pseudo weight 1000 if we have a self loop
-                if source_int_ID == target_int_ID:
-                    edge_weight_lst.append(1000)
-                    continue
-                # retrieve str IDs from integer IDs in the edge index
-                source_str_ID = gene_ids_lst[source_int_ID]
-                target_str_ID = gene_ids_lst[target_int_ID]
-
-                # look up bit score for string IDs of the two genes and save to list
-                #print(f"Starting lookup for source node: ({source_str_ID}, {source_int_ID}); Target node: ({target_str_ID}, {target_int_ID})")
-
-                try:
-                    edge_weight = bit_score_dict[source_str_ID][target_str_ID]
-                    edge_weight_lst.append(edge_weight)
-                    #print(f"Bit score: {edge_weight}")
-                
-                except KeyError:
-                    try:
-                        edge_weight = bit_score_dict[target_str_ID][source_str_ID]
-                        edge_weight_lst.append(edge_weight)
-                        #print(f"Bit score: {edge_weight}")
-                    except KeyError:
-                        # do we want 0 as no similarity score? does this 'kill' neurons and prevent from learning?
-                        edge_weight_lst.append(0)
-                        #print(f"Could not find gene pair in similarity score dataframe, assigning score 0.")
-                
-                progress.update(edge_weight_bar, advance = 1)
-            
-    
-    # pickle test data edge features for testing (mapping takes a while otherwise)
-    if not os.path.isfile('data/edge_features.pkl') and args.cache:
-        log.info(f"Dumping edge feature list to pickle file..")
-        with open('data/edge_features.pkl', 'wb') as f:
-            pickle.dump(edge_weight_lst, f)
-    
-    
-    # cast to float since edge weights have to be floats?
-    edge_weight_ts = torch.tensor(edge_weight_lst).float()
-
-    log.info(f"Successfully created edge feature tensor with elem type: {edge_weight_ts.dtype}")
-    return edge_weight_ts
     
 
 def build_edge_index(sim_score_dict, gene_id_integer_dict, fully_connected = False, self_loops = False):
@@ -183,11 +108,11 @@ def build_edge_index(sim_score_dict, gene_id_integer_dict, fully_connected = Fal
         #edge_index_ts = torch.stack((torch.tensor(origin_idx), torch.tensor(target_idx)), dim=0)
         origin_idx = origin_idx[:edge_counter]
         target_idx = target_idx[:edge_counter]
-        undirected_origin_idx = origin_idx + target_idx
-        undirected_target_idx = target_idx + origin_idx
+        #undirected_origin_idx = origin_idx + target_idx
+        #undirected_target_idx = target_idx + origin_idx
 
 
-    return (undirected_origin_idx, undirected_target_idx)
+    return (origin_idx, target_idx)
 
 
 # TODO: slow
@@ -351,47 +276,30 @@ def map_edge_weights(edge_index, bit_score_dict, gene_ids_lst, use_cache = False
                                  similarity score of the nodes connected (edges weight)
     """
 
-    if os.path.isfile('data/edge_features.pkl') and args.cache and use_cache:
+    if not use_cache and os.path.isfile('data/edge_features.pkl') and args.cache:
         with open('data/edge_features.pkl', 'rb') as f:
             log.info(f"Found pickled edge features, loading file..")
             edge_weight_lst = pickle.load(f)
     else:
 
-        edge_weight_lst = []
+        edge_weight_lst = [None] * len(edge_index[0])
 
 
-        for source_int_ID, target_int_ID in zip(edge_index[0], edge_index[1]):
+        for idx, (source_int_ID, target_int_ID) in enumerate(zip(edge_index[0], edge_index[1])):
 
             # add pseudo weight 1000 if we have a self loop
             if source_int_ID == target_int_ID:
-                edge_weight_lst.append(1000)
+                edge_weight_lst[idx] = 1000
                 continue
             # retrieve str IDs from integer IDs in the edge index
             source_str_ID = gene_ids_lst[source_int_ID]
             target_str_ID = gene_ids_lst[target_int_ID]
 
-            # look up bit score for string IDs of the two genes and save to list
-            #print(f"Starting lookup for source node: ({source_str_ID}, {source_int_ID}); Target node: ({target_str_ID}, {target_int_ID})")
-
-            try:
-                edge_weight = bit_score_dict[source_str_ID][target_str_ID]
-                edge_weight_lst.append(edge_weight)
-                #print(f"Bit score: {edge_weight}")
-            
-            except KeyError:
-                try:
-                    edge_weight = bit_score_dict[target_str_ID][source_str_ID]
-                    edge_weight_lst.append(edge_weight)
-                    #print(f"Bit score: {edge_weight}")
-                except KeyError:
-                    # do we want 0 as no similarity score? does this 'kill' neurons and preevent from learning?
-                    edge_weight_lst.append(0)
-                    #print(f"Could not find gene pair in similarity score dataframe, assigning score 0.")
-            
+            edge_weight_lst[idx] = bit_score_dict[source_str_ID][target_str_ID]
             
     
     # pickle test data edge features for testing (mapping takes a while otherwise)
-    if not os.path.isfile('data/edge_features.pkl') and args.cache and use_cache:
+    if not use_cache and os.path.isfile('data/edge_features.pkl') and args.cache:
         log.info(f"Dumping edge feature list to pickle file..")
         with open('data/edge_features.pkl', 'wb') as f:
             pickle.dump(edge_weight_lst, f)
