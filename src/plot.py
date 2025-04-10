@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import networkx as nx
 from torch_geometric.utils import to_networkx
 import os, umap
-from sklearn.metrics import roc_curve, auc, PrecisionRecallDisplay, average_precision_score, precision_recall_curve
+from sklearn.metrics import roc_curve, auc, PrecisionRecallDisplay, average_precision_score, precision_recall_curve, precision_score
 import numpy as np
 from sklearn.decomposition import PCA
 import seaborn as sns
@@ -131,20 +131,26 @@ def plot_pr_curve(labels, probabilities, base_labels, refined_base_labels, max_c
     _ = display.ax_.set_title("Binary Precision-Recall Curve")
 
     if max_candidate_logit_labels is not None:
-        logit_precision, logit_recall, _ = precision_recall_curve(labels, max_candidate_logit_labels)
-        plt.plot(logit_recall, logit_precision, linestyle='--', label='Max Logit Candidate', color='purple')
-
-
+        #logit_precision, logit_recall, _ = precision_recall_curve(labels, max_candidate_logit_labels)
+        logit_precision = precision_score(labels, max_candidate_logit_labels)
+        #plt.plot(logit_recall, logit_precision, linestyle='--', label='Max Logit Candidate', color='purple')
+        plt.hlines(logit_precision, 0, 1, linestyle='--', label='Max Logit Candidate', color='purple')
 
     if base_labels is not None:
         base_labels, base_labels_raw = base_labels
-        baseline_precision, baseline_recall, _ = precision_recall_curve(labels, base_labels)
-        baseline_precision_raw, baseline_recall_raw, _ = precision_recall_curve(labels, base_labels_raw)
-        plt.plot(baseline_recall, baseline_precision, linestyle='--', label='Max Q-Score Candidate', color='red')
-        plt.plot(baseline_recall_raw, baseline_precision_raw, linestyle='--', label='Max Raw Score Candidate', color='green')
+        #baseline_precision, baseline_recall, _ = precision_recall_curve(labels, base_labels)
+        baseline_precision = precision_score(labels, base_labels)
+        #baseline_precision_raw, baseline_recall_raw, _ = precision_recall_curve(labels, base_labels_raw)
+        baseline_precision_raw = precision_score(labels, base_labels_raw)
+        #plt.plot(baseline_recall, baseline_precision, linestyle='--', label='Max Q-Score Candidate', color='red')
+        plt.hlines(baseline_precision, 0, 1, linestyle='--', label='Max Q-Score Candidate', color='red')
+        #plt.plot(baseline_recall_raw, baseline_precision_raw, linestyle='--', label='Max Raw Score Candidate', color='green')
+        plt.hlines(baseline_precision_raw, 0, 1, linestyle='--', label='Max Raw Score Candidate', color='green')
         if refined_base_labels is not None: refined_baseline_precision, refined_baseline_recall, _ = precision_recall_curve(labels, refined_base_labels)
         if refined_base_labels is not None: plt.plot(refined_baseline_recall, refined_baseline_precision, linestyle='--', label='refined RBH', color='yellow')
         plt.legend()
+        print(logit_precision, baseline_precision, baseline_precision_raw)
+
     
     if not os.path.exists(os.path.dirname(path)):
         os.mkdir(os.path.dirname(path))

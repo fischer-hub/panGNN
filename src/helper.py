@@ -447,6 +447,8 @@ def calculate_baseline_labels(edge_index, gene_ids_lst, ribap_groups_dict, sub_s
             if source_gene_str_id in sub_sim_score_dict and destination_gene_str_id in sub_sim_score_dict[source_gene_str_id]:
                 score = sub_sim_score_dict[source_gene_str_id][destination_gene_str_id]
                 score_raw = sim_score_dict_raw[source_gene_str_id][destination_gene_str_id]
+
+                # can we do the early comparison escape trick here too?
                 max_candidate_score = max(sub_sim_score_dict[source_gene_str_id].values())
                 max_candidate_score_raw = max(sim_score_dict_raw[source_gene_str_id].values())
                 
@@ -459,14 +461,15 @@ def calculate_baseline_labels(edge_index, gene_ids_lst, ribap_groups_dict, sub_s
     return label_lst, label_raw_lst
 
 
-def find_max_logit(origin_edge_index):
+def find_max_logit(origin_edge_index, logits):
 
     label_lst = [0] * len(origin_edge_index)
+    assert len(origin_edge_index) == len(logits), f'Number of edges ({len(origin_edge_index)}) is different from number of logits ({len(logits)}).'
 
     for idx, origin_idx in enumerate(origin_edge_index):
 
         origin_str_id = shared_gene_lst[origin_idx]
-        current_logit = shared_logits[idx]
+        current_logit = logits[idx]
         is_max = True
 
         if origin_str_id in shared_sim_score_dict:
@@ -474,13 +477,13 @@ def find_max_logit(origin_edge_index):
         else:
             continue
 
-        candidate_idxs = [shared_gene_pos_dict[candidate] for candidate in candidates if candidate in shared_gene_pos_dict]
+        candidate_idxs = [shared_gene_pos_dict[candidate] for candidate in candidates]
         #candidate_logits = [shared_logits[shared_logit_dict[(origin_idx, candidate_idx)]] for candidate_idx in candidate_idxs]
 
         for candidate_idx in candidate_idxs:
 
             # current logit is not max, exit early and skip some comparisons ideally
-            if current_logit < shared_logits[shared_logit_dict[(origin_idx, candidate_idx)]]:
+            if current_logit < shared_logit_dict[(origin_idx, candidate_idx)]:
                 is_max = False
                 break
 
@@ -491,9 +494,9 @@ def find_max_logit(origin_edge_index):
     return label_lst
 
 
-def init_worker(origin_edge_index, gene_lst, sim_score_dict, gene_pos_dict, logits, logit_dict):
-    global shared_origin_edge_index, shared_gene_lst, shared_sim_score_dict, shared_gene_pos_dict, shared_logits, shared_logit_dict
-    shared_origin_edge_index, shared_gene_lst, shared_sim_score_dict, shared_gene_pos_dict, shared_logits, shared_logit_dict = origin_edge_index, gene_lst, sim_score_dict, gene_pos_dict, logits, logit_dict
+def init_worker(origin_edge_index, gene_lst, sim_score_dict, gene_pos_dict, logit_dict):
+    global shared_origin_edge_index, shared_gene_lst, shared_sim_score_dict, shared_gene_pos_dict, shared_logit_dict
+    shared_origin_edge_index, shared_gene_lst, shared_sim_score_dict, shared_gene_pos_dict, shared_logit_dict = origin_edge_index, gene_lst, sim_score_dict, gene_pos_dict, logit_dict
 
 
 # this is slow as flip
@@ -501,7 +504,7 @@ def calculate_logit_baseline_labels(graph, sim_score_dict, logits, gene_lst, gen
     
     print('copying logits and graph from gpu')
     logits = logits.tolist()
-    graph = graph.cpu()
+    #graph = graph.cpu()
     #logits = list(logits)
     #logit_dict = defaultdict(dict)
 
@@ -510,18 +513,19 @@ def calculate_logit_baseline_labels(graph, sim_score_dict, logits, gene_lst, gen
     #gene_pos_dict = {id: pos for pos, id in enumerate(gene_lst)}
 
     # for each node id save the indices of the edges that the node appears in
-    print('mapping edge indices to connected nodes')
-    logit_dict = { (src, tgt): i for i, (src, tgt) in enumerate(zip(origin_edge_index, target_edge_index)) }
+    print('mapping logits to connected nodes')
+    logit_dict = { (src, tgt): logits[i] for i, (src, tgt) in enumerate(zip(origin_edge_index, target_edge_index)) }
     #for i, (src, tgt) in enumerate(zip(origin_edge_index, target_edge_index)):
     #    logit_dict[(src, tgt)] = i
     
 
     # chunk origin index up for parallel processing
     origin_edge_index_chunked = [origin_edge_index[i::args.cpus] for i in range(args.cpus) if origin_edge_index[i::args.cpus]]
+    logits_chunked = [logits[i::args.cpus] for i in range(args.cpus) if logits[i::args.cpus]]
     
 
-    with  Console().status("Comparing candidate logits..") as status, Pool(initializer=init_worker, initargs=(origin_edge_index, gene_lst, sim_score_dict, gene_pos_dict, logits, logit_dict)) as pool:
-        results  = pool.map(find_max_logit, origin_edge_index_chunked)
+    with  Console().status("Comparing candidate logits..") as status, Pool(initializer=init_worker, initargs=(origin_edge_index, gene_lst, sim_score_dict, gene_pos_dict,  logit_dict)) as pool:
+        results  = pool.starmap(find_max_logit, zip(origin_edge_index_chunked, logits_chunked))
         label_lst = [inner for outer in results for inner in outer]
 
     return label_lst

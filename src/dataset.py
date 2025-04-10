@@ -519,6 +519,7 @@ class UnionGraphDataset(Dataset):
         # construct list of labels from ribap groups and format to match edge_index
         with Console().status("Mapping labels to gene pairs in edge index.") as status:
             labels_ts = map_labels_to_edge_index(edge_index_ts, self.gene_str_ids_lst, self.ribap_groups_dict, use_cache=False) if self.ribap_groups_dict else None
+            
         log.info(f"{labels_ts.sum().item() / len(labels_ts) * 100} % of labels are in positive class.")
         self.class_balance = (labels_ts == 0.).sum()/labels_ts.sum()
         log.info('Successfully mapped labels to gene pairs in edge index')
