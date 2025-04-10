@@ -504,7 +504,7 @@ class UnionGraphDataset(Dataset):
     def generate_graphs(self):
         # total number of genes found in all annotation files
         log.info('Allocating node feature tensor..')
-        node_features_ts = torch.ones(self.num_genes, dtype = torch.float, device = torch.device('cpu')).unsqueeze(1)
+        node_features_ts = torch.ones((self.num_genes,1 ), dtype = torch.float)
 
         with Console().status("Building edge index..") as status:
             edge_index_ts = build_edge_index(self.sim_score_dict, self.gene_id_position_dict, fully_connected = False)
