@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import networkx as nx
 from torch_geometric.utils import to_networkx
 import os, umap
-from sklearn.metrics import roc_curve, auc, PrecisionRecallDisplay, average_precision_score, precision_recall_curve, precision_score, recall_score
+from sklearn.metrics import roc_curve, auc, PrecisionRecallDisplay, average_precision_score, precision_recall_curve, precision_score, recall_score, f1_score
 import numpy as np
 from sklearn.decomposition import PCA
 import seaborn as sns
@@ -133,6 +133,8 @@ def plot_pr_curve(labels, probabilities, base_labels, refined_base_labels, max_c
     if max_candidate_logit_labels is not None:
         #logit_precision, logit_recall, _ = precision_recall_curve(labels, max_candidate_logit_labels)
         logit_precision = precision_score(labels, max_candidate_logit_labels, pos_label = 1)
+        print(f'f1 base logits: {f1_score(labels, max_candidate_logit_labels)}')
+
         logit_recall = recall_score(labels, max_candidate_logit_labels, pos_label = 1)
         #plt.plot(logit_recall, logit_precision, linestyle='--', label='Max Logit Candidate', color='purple')
         plt.hlines(logit_precision, 0, 1, linestyle='--', label='Max Logit Candidate', color='purple')
@@ -145,9 +147,11 @@ def plot_pr_curve(labels, probabilities, base_labels, refined_base_labels, max_c
         baseline_precision = precision_score(labels, base_labels, pos_label = 1)
         baseline_recall = recall_score(labels, base_labels, pos_label = 1)
         print(baseline_precision, baseline_recall)
+        print(f'f1 base qscore: {f1_score(labels, base_labels)}')
         plt.plot(baseline_recall, baseline_precision, 'o', color = 'red')
 
         baseline_precision_raw, baseline_recall_raw, _ = precision_recall_curve(labels, base_labels_raw)
+        print(f'f1 base raw: {f1_score(labels, base_labels_raw)}')
         baseline_precision_raw = precision_score(labels, base_labels_raw, pos_label = 1)
         baseline_recall_raw = recall_score(labels, base_labels_raw, pos_label = 1)
         print(baseline_precision_raw, baseline_recall_raw)
