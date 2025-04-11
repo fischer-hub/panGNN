@@ -406,7 +406,7 @@ def normalize_sim_scores(sim_score_dict, t = 0.5, epsilon = 1e-8, pseudo_count =
 
             for candidate_id, score in sim_score_dict[origin_gene].items():
                 
-                if candidate_genome_id in candidate_id and candidate_id != origin_gene:
+                if candidate_id.startswith(candidate_genome_id) and candidate_id != origin_gene:
                     # this might cause an underflow in np.exp depending on how
                     # low the score is and how big t is which results in nan in
                     # the division if there are no other scores adding to the sum

@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import networkx as nx
 from torch_geometric.utils import to_networkx
 import os, umap
-from sklearn.metrics import roc_curve, auc, PrecisionRecallDisplay, average_precision_score, precision_recall_curve, precision_score, recall_score, f1_score
+from sklearn.metrics import roc_curve, auc, PrecisionRecallDisplay, average_precision_score, precision_recall_curve, precision_score, recall_score, f1_score, confusion_matrix, ConfusionMatrixDisplay
 import numpy as np
 from sklearn.decomposition import PCA
 import seaborn as sns
@@ -402,6 +402,32 @@ def plot_homolog_positions(ribap_dict, gene_str_int_dict, path = os.path.join('p
     plt.ylabel('Frequency')
     plt.title('Distribution of Average Distances Between Homolog Gene Positions')
     
+    
+    if not os.path.exists(os.path.dirname(path)):
+        os.mkdir(os.path.dirname(path))
+        
+    plt.savefig(path, dpi = 300)
+
+
+def plot_confusion_matrix(true_labels, predicted_labels, labels=[0, 1], normalize=None, title="Confusion Matrix", path =  os.path.join('plots', 'conf_matrix.png')):
+    """
+    Plot a confusion matrix using true and predicted labels.
+    
+    Args:
+        true_labels (list or array): Ground truth labels.
+        predicted_labels (list or array): Model predicted labels.
+        labels (list): Class labels to display in the matrix.
+        normalize (str or None): {'true', 'pred', 'all'}, optional normalization.
+        title (str): Title of the plot.
+    """
+    cm = confusion_matrix(true_labels, predicted_labels, labels=labels, normalize=normalize)
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=labels)
+    
+    fig, ax = plt.subplots(figsize=(6, 6))
+    disp.plot(ax=ax, cmap=plt.cm.Blues, colorbar=True)
+    ax.set_title(title)
+    plt.tight_layout()
+
     
     if not os.path.exists(os.path.dirname(path)):
         os.mkdir(os.path.dirname(path))
