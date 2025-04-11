@@ -441,6 +441,9 @@ def calculate_baseline_labels(edge_index, gene_ids_lst, ribap_groups_dict, sub_s
         destination_gene_int_id = edge_index[1][edge]
         source_gene_str_id = gene_ids_lst[source_gene_int_id]
         destination_gene_str_id = gene_ids_lst[destination_gene_int_id]
+        destination_genome_str_id = destination_gene_str_id.split('_')[0]
+        is_max = True
+        is_max_raw = True
         
         if (source_gene_str_id in ribap_groups_dict and destination_gene_str_id in ribap_groups_dict[source_gene_str_id]) or (destination_gene_str_id in ribap_groups_dict and source_gene_str_id in ribap_groups_dict[destination_gene_str_id]):
 
@@ -449,26 +452,44 @@ def calculate_baseline_labels(edge_index, gene_ids_lst, ribap_groups_dict, sub_s
                 score_raw = sim_score_dict_raw[source_gene_str_id][destination_gene_str_id]
 
                 # can we do the early comparison escape trick here too?
-                max_candidate_score = max(sub_sim_score_dict[source_gene_str_id].values())
-                max_candidate_score_raw = max(sim_score_dict_raw[source_gene_str_id].values())
+
+                for candidate_gene_id, candidate_score in sub_sim_score_dict[source_gene_str_id].items():
+
+                    if True:#destination_genome_str_id in candidate_gene_id:
+                        if score < candidate_score:
+                            is_max = False
+                            break
+
+
+                for candidate_gene_id, candidate_score in sim_score_dict_raw[source_gene_str_id].items():
+
+                    if True:#destination_genome_str_id in candidate_gene_id:
+                        if score_raw < candidate_score:
+                            is_max_raw = False
+                            break
+
+                #max_candidate_score = max(sub_sim_score_dict[source_gene_str_id].values())
+                #max_candidate_score_raw = max(sim_score_dict_raw[source_gene_str_id].values())
                 
-                if score >= max_candidate_score:
+                if is_max:
                     label_lst[edge] = 1
                 
-                if score_raw >= max_candidate_score_raw:
+                if is_max_raw:
                     label_raw_lst[edge] = 1
 
     return label_lst, label_raw_lst
 
 
-def find_max_logit(origin_edge_index, logits):
+def find_max_logit(origin_edge_index, target_edge_index, logits):
 
     label_lst = [0] * len(origin_edge_index)
     assert len(origin_edge_index) == len(logits), f'Number of edges ({len(origin_edge_index)}) is different from number of logits ({len(logits)}).'
 
-    for idx, origin_idx in enumerate(origin_edge_index):
+    for idx, (origin_idx, target_idx) in enumerate(zip(origin_edge_index, target_edge_index)):
 
         origin_str_id = shared_gene_lst[origin_idx]
+        target_str_id = shared_gene_lst[target_idx]
+        target_genome_str_id = target_str_id.split('_')[0]
         current_logit = logits[idx]
         is_max = True
 
@@ -477,8 +498,7 @@ def find_max_logit(origin_edge_index, logits):
         else:
             continue
 
-        candidate_idxs = [shared_gene_pos_dict[candidate] for candidate in candidates]
-        #candidate_logits = [shared_logits[shared_logit_dict[(origin_idx, candidate_idx)]] for candidate_idx in candidate_idxs]
+        candidate_idxs = [shared_gene_pos_dict[candidate] for candidate in candidates if target_genome_str_id in candidate]
 
         for candidate_idx in candidate_idxs:
 
@@ -521,11 +541,12 @@ def calculate_logit_baseline_labels(graph, sim_score_dict, logits, gene_lst, gen
 
     # chunk origin index up for parallel processing
     origin_edge_index_chunked = [origin_edge_index[i::args.cpus] for i in range(args.cpus) if origin_edge_index[i::args.cpus]]
+    target_edge_index_chunked = [target_edge_index[i::args.cpus] for i in range(args.cpus) if target_edge_index[i::args.cpus]]
     logits_chunked = [logits[i::args.cpus] for i in range(args.cpus) if logits[i::args.cpus]]
     
 
     with  Console().status("Comparing candidate logits..") as status, Pool(initializer=init_worker, initargs=(origin_edge_index, gene_lst, sim_score_dict, gene_pos_dict,  logit_dict)) as pool:
-        results  = pool.starmap(find_max_logit, zip(origin_edge_index_chunked, logits_chunked))
+        results  = pool.starmap(find_max_logit, zip(origin_edge_index_chunked, target_edge_index_chunked, logits_chunked))
         label_lst = [inner for outer in results for inner in outer]
 
     return label_lst

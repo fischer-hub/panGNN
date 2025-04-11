@@ -137,6 +137,7 @@ def plot_pr_curve(labels, probabilities, base_labels, refined_base_labels, max_c
         #plt.plot(logit_recall, logit_precision, linestyle='--', label='Max Logit Candidate', color='purple')
         plt.hlines(logit_precision, 0, 1, linestyle='--', label='Max Logit Candidate', color='purple')
         print(logit_precision, logit_recall)
+        plt.plot(logit_recall, logit_precision, 'o', color = 'purple')
 
     if base_labels is not None:
         base_labels, base_labels_raw = base_labels
@@ -144,11 +145,13 @@ def plot_pr_curve(labels, probabilities, base_labels, refined_base_labels, max_c
         baseline_precision = precision_score(labels, base_labels, pos_label = 1)
         baseline_recall = recall_score(labels, base_labels, pos_label = 1)
         print(baseline_precision, baseline_recall)
+        plt.plot(baseline_recall, baseline_precision, 'o', color = 'red')
 
         baseline_precision_raw, baseline_recall_raw, _ = precision_recall_curve(labels, base_labels_raw)
         baseline_precision_raw = precision_score(labels, base_labels_raw, pos_label = 1)
         baseline_recall_raw = recall_score(labels, base_labels_raw, pos_label = 1)
         print(baseline_precision_raw, baseline_recall_raw)
+        plt.plot(baseline_recall_raw, baseline_precision_raw, 'o', color = 'green')
 
         #plt.plot(baseline_recall, baseline_precision, linestyle='--', label='Max Q-Score Candidate', color='red')
         plt.hlines(baseline_precision, 0, 1, linestyle='--', label='Max Q-Score Candidate', color='red')
