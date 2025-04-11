@@ -1,4 +1,4 @@
-import torch, random
+import torch, random, itertools
 from collections import defaultdict
 from src.setup import log, args
 from rich.progress import Console
@@ -455,7 +455,7 @@ def calculate_baseline_labels(edge_index, gene_ids_lst, ribap_groups_dict, sub_s
 
                 for candidate_gene_id, candidate_score in sub_sim_score_dict[source_gene_str_id].items():
 
-                    if destination_genome_str_id in candidate_gene_id:
+                    if candidate_gene_id.startswith(destination_genome_str_id):
                         if score < candidate_score:
                             is_max = False
                             break
@@ -463,7 +463,7 @@ def calculate_baseline_labels(edge_index, gene_ids_lst, ribap_groups_dict, sub_s
 
                 for candidate_gene_id, candidate_score in sim_score_dict_raw[source_gene_str_id].items():
 
-                    if destination_genome_str_id in candidate_gene_id:
+                    if candidate_gene_id.startswith(destination_genome_str_id):
                         if score_raw < candidate_score:
                             is_max_raw = False
                             break
@@ -478,6 +478,12 @@ def calculate_baseline_labels(edge_index, gene_ids_lst, ribap_groups_dict, sub_s
                     label_raw_lst[edge] = 1
 
     return label_lst, label_raw_lst
+
+
+def chunks(lst, n):
+    """Yield successive n-sized chunks from lst."""
+    for i in range(0, len(lst), n):
+        yield lst[i:i + n]
 
 
 def find_max_logit(origin_edge_index, target_edge_index, logits):
@@ -498,7 +504,7 @@ def find_max_logit(origin_edge_index, target_edge_index, logits):
         else:
             continue
 
-        candidate_idxs = [shared_gene_pos_dict[candidate] for candidate in candidates if target_genome_str_id in candidate]
+        candidate_idxs = [shared_gene_pos_dict[candidate] for candidate in candidates if candidate.startswith(target_genome_str_id) ]
 
         for candidate_idx in candidate_idxs:
 
@@ -540,9 +546,13 @@ def calculate_logit_baseline_labels(graph, sim_score_dict, logits, gene_lst, gen
     
 
     # chunk origin index up for parallel processing
-    origin_edge_index_chunked = [origin_edge_index[i::args.cpus] for i in range(args.cpus) if origin_edge_index[i::args.cpus]]
-    target_edge_index_chunked = [target_edge_index[i::args.cpus] for i in range(args.cpus) if target_edge_index[i::args.cpus]]
-    logits_chunked = [logits[i::args.cpus] for i in range(args.cpus) if logits[i::args.cpus]]
+    chunksize = int(len(origin_edge_index) / args.cpus)
+    origin_edge_index_chunked = chunks(origin_edge_index, chunksize)
+    target_edge_index_chunked = chunks(target_edge_index, chunksize)
+    logits_chunked = chunks(logits, chunksize)
+    #origin_edge_index_chunked = [origin_edge_index[i::args.cpus] for i in range(args.cpus) if origin_edge_index[i::args.cpus]]
+    #target_edge_index_chunked = [target_edge_index[i::args.cpus] for i in range(args.cpus) if target_edge_index[i::args.cpus]]
+    #logits_chunked = [logits[i::args.cpus] for i in range(args.cpus) if logits[i::args.cpus]]
     
 
     with  Console().status("Comparing candidate logits..") as status, Pool(initializer=init_worker, initargs=(origin_edge_index, gene_lst, sim_score_dict, gene_pos_dict,  logit_dict)) as pool:
