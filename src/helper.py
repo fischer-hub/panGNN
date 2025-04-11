@@ -455,7 +455,7 @@ def calculate_baseline_labels(edge_index, gene_ids_lst, ribap_groups_dict, sub_s
 
                 for candidate_gene_id, candidate_score in sub_sim_score_dict[source_gene_str_id].items():
 
-                    if True:#destination_genome_str_id in candidate_gene_id:
+                    if destination_genome_str_id in candidate_gene_id:
                         if score < candidate_score:
                             is_max = False
                             break
@@ -463,7 +463,7 @@ def calculate_baseline_labels(edge_index, gene_ids_lst, ribap_groups_dict, sub_s
 
                 for candidate_gene_id, candidate_score in sim_score_dict_raw[source_gene_str_id].items():
 
-                    if True:#destination_genome_str_id in candidate_gene_id:
+                    if destination_genome_str_id in candidate_gene_id:
                         if score_raw < candidate_score:
                             is_max_raw = False
                             break
