@@ -433,3 +433,19 @@ def plot_confusion_matrix(true_labels, predicted_labels, labels=[0, 1], normaliz
         os.mkdir(os.path.dirname(path))
         
     plt.savefig(path, dpi = 300)
+
+
+def plot_sim_score_vs_logit(labels, edge_weights, logits, path =  os.path.join('plots', 'sim_score_vs_logit.png')):
+
+    plt.figure(figsize=(8, 6))
+    scatter = plt.scatter(edge_weights.tolist()[:len(logits)], logits.tolist(), c = labels.tolist())
+
+    plt.xlabel('Input Similarity Scores')
+    plt.ylabel('Output Logits')
+    plt.title('Input Similarity Scores vs. Output Logits')
+    plt.legend(*scatter.legend_elements())
+    
+    if not os.path.exists(os.path.dirname(path)):
+        os.mkdir(os.path.dirname(path))
+        
+    plt.savefig(path, dpi = 300)

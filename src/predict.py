@@ -1,7 +1,7 @@
 import torch, time
 from rich.console import Console
 from src.setup import log, args
-from src.plot import plot_roc, plot_logit_distribution, plot_pr_curve, plot_confusion_matrix
+from src.plot import plot_roc, plot_logit_distribution, plot_pr_curve, plot_confusion_matrix, plot_sim_score_vs_logit
 from src.helper import concat_graph_data, calculate_logit_baseline_labels
 from sklearn.metrics import confusion_matrix, PrecisionRecallDisplay
 import torch.nn.functional as F
@@ -77,6 +77,7 @@ def predict_homolog_genes(model, train_dataset = None, test_dataset = None, bina
                 plot_confusion_matrix(test_labels, base_labels[0], title='Q-Score Max Candidate', path = 'plots/q_score_conf_matrix.png')
                 plot_confusion_matrix(test_labels, base_labels[1], title='Raw Score Max Candidate', path = 'plots/raw_score_conf_matrix.png')
                 plot_confusion_matrix(test_labels, max_candidate_logit_labels, title='Max Logit Candidate', path = 'plots/logit_conf_matrix.png')
+                plot_sim_score_vs_logit(test_labels, test_dataset.edge_attr, edge_scores)
             else:
                 AP = plot_pr_curve(test_labels, probablilities, base_labels, refined_base_labels)
 
