@@ -23,7 +23,7 @@ parser.add_argument('-a', '--annotation', help = 'path to the two annotation fil
 parser.add_argument('-s', '--similarity', help = 'path to the similarity score file (e.g tab seperated output of MMSeqs2)', default = os.path.join('data', 'dummy_dataset', 'dummy_mmseqs2.csv'), type = str)
 parser.add_argument('--binary_threshold', help = 'binary threshold to classify output probabilities to the label class', default = 0.5, type = float)
 parser.add_argument('--dynamic_binary_threshold', help = 'dynamically calculate the binary threshold that separates the predictions best based on yuden index', action = 'store_true')
-parser.add_argument('--simulate_dataset', help = 'simulate input data instead of constructing dataset from input files', action = 'store_true')
+parser.add_argument('--simulate_dataset', help = 'parameters to generate simulated input data with seperated by whitespace [num_genes, num_genomes, fraction_pos_edges]', nargs=3, type=str, default = None)
 parser.add_argument('--union_edge_weights', help = 'unite edge weights from sim and neighbour graph and only convolute over one', action = 'store_true')
 parser.add_argument('--categorical_node', help = 'embed node features as categorical feature embeddings using embedding layer, where category referes to the position of each gene in its genome', action = 'store_true')
 parser.add_argument('--no_q_score_transform', help = 'dont transform normalized edge probabilities between homolog candidates to Q-score like values before training [default: True]', action = 'store_false')
@@ -44,6 +44,7 @@ parser.add_argument('--mixed_precision',    help = "mixed precision setting to u
 
 # parse args
 args = parser.parse_args()
+if args.simulate_dataset is not None: args.simulate_dataset = [int(args.simulate_dataset[0]), int(args.simulate_dataset[1]), float(args.simulate_dataset[2])]
 
 # setup logger
 FORMAT = "%(message)s"

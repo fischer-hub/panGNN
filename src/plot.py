@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import pandas as pd
 import networkx as nx
 from torch_geometric.utils import to_networkx
 import os, umap
@@ -341,7 +342,6 @@ def plot_union_graph(dataset, path):
 
 def plot_violin_distributions(violin_dict_lst, ribap_dict, prob, path = os.path.join('plots', 'normalized_score_violin.png')):
 
-    import pandas as pd
     print('plotting violins')
     data = pd.DataFrame(columns=['temp', 'score', 'homolog'])
     data = data.astype(dtype={'temp': 'str', 'score': 'float64', 'homolog': 'int64'})
@@ -435,10 +435,11 @@ def plot_confusion_matrix(true_labels, predicted_labels, labels=[0, 1], normaliz
     plt.savefig(path, dpi = 300)
 
 
-def plot_sim_score_vs_logit(labels, edge_weights, logits, path =  os.path.join('plots', 'sim_score_vs_logit.png')):
+def plot_sim_score_vs_logit(labels, edge_weights, logits, edge_index, path =  os.path.join('plots', 'sim_score_vs_logit.png')):
 
     plt.figure(figsize=(8, 6))
-    scatter = plt.scatter(edge_weights.tolist()[:len(logits)], logits.tolist(), c = labels.tolist())
+    edge_weights = edge_weights.tolist()[:len(logits)]
+    scatter = plt.scatter(edge_weights, logits.tolist(), c = labels.tolist())
 
     plt.xlabel('Input Similarity Scores')
     plt.ylabel('Output Logits')
@@ -449,3 +450,28 @@ def plot_sim_score_vs_logit(labels, edge_weights, logits, path =  os.path.join('
         os.mkdir(os.path.dirname(path))
         
     plt.savefig(path, dpi = 300)
+
+    data = pd.DataFrame({'score': edge_weights, 'logit': logits, 'homolog': labels})
+    data['score_binned'] = pd.cut(data.score, 8)
+    data = data.astype(dtype={'score': 'float64', 'logit': 'float64', 'homolog': 'int64'})
+
+
+    plt.figure(figsize=(10, 7))
+    sns.set_theme(style="whitegrid")
+    sns.violinplot(data=data, x="score_binned", y="logit", hue="homolog", split=True, inner="quart", cut = 0)
+    plt.xlabel('Input Similarity Score Interval')
+    plt.ylabel("Output Logit")
+    plt.title('Input Similarity Scores vs. Output Logits')
+
+    path = os.path.splitext(path)[0] + '_violin.png'
+
+    if not os.path.exists(os.path.dirname(path)):
+        os.mkdir(os.path.dirname(path))
+        
+    plt.savefig(path, dpi = 300)
+
+    data['source_id'] = edge_index[0].tolist()
+    data['target_id'] = edge_index[1].tolist()
+    data = data[['source_id', 'target_id', 'score', 'logit', 'homolog']]
+    
+    data.to_csv('q_score_vs_logit.csv', index = False)

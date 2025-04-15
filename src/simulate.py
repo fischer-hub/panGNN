@@ -2,8 +2,8 @@ import random, torch, os
 from src.setup import log
 import numpy as np
 from src.plot import plot_logit_distribution, plot_simscore_class
-from src.dataset import HomogenousDataset
 from src.preprocessing import construct_neighbour_lst, generate_neighbour_edge_features
+from src.helper import char_id_generator, pairwise
 
 
 def simulate_bit_scores(expectation_value, dispersion, bit_scores_lst, indices = None):
@@ -26,7 +26,7 @@ def simulate_bit_scores(expectation_value, dispersion, bit_scores_lst, indices =
     
         return scores
 
-
+"""
 def generate_data(num_genes_per_genome, num_gene_families1, num_gene_families2, fraction_orthologs, fraction_paralogs_same_species, fraction_paralogs_diff_species):
 
     # generate integer node IDs
@@ -88,3 +88,37 @@ def generate_data(num_genes_per_genome, num_gene_families1, num_gene_families2, 
 
 
     return dataset
+"""
+
+def simulate_gene_ids(num_genes, num_genomes):
+
+    genome_ids = [ None ] * num_genomes
+    num_genes_per_genome = int(num_genes / num_genomes)
+    
+    for idx, genome_id in enumerate(char_id_generator()):
+        
+        if idx == num_genomes:
+            break
+
+        genome_ids[idx] = genome_id
+
+    
+    genome_ids_flat = [ f'{genome_id}_{gene_number:06}' for genome_id in genome_ids for gene_number in range(num_genes_per_genome) ]
+    genome_ids_by_genome = [[ f'{genome_id}_{gene_number:06}' for gene_number in range(num_genes_per_genome)] for genome_id in genome_ids]
+    return genome_ids_flat, genome_ids_by_genome
+
+
+def simulate_similarity_scores_dict(gene_lsts):
+
+    similarity_dict = {}
+    scores = np.random.gamma(shape, scale, size = len(bit_scores_lst))
+
+
+    for row in zip(*gene_lsts):
+
+        for source, target in pairwise(row):
+
+            print(source, target)
+
+    quit()
+    

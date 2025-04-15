@@ -42,9 +42,10 @@ if not args.simulate_dataset:
         dataset = UnionGraphDataset(args.annotation, args.similarity, args.ribap_groups, split=(0.7, 0.15, 0.01), categorical_nodes = args.categorical_node, calculate_baseline=True)
 else:
     log.info('Simulating dataset.')
-    num_genomes = 3
-    dataset  = UnionGraphDataset()
-    dataset.simulate_dataset(2000, num_genomes, 0.15)
+    dataset = UnionGraphDataset()
+    #num_genomes = 3
+    #dataset  = UnionGraphDataset()
+    #dataset.simulate_dataset(2000, num_genomes, 0.15)
 
 hparams['num_genomes'] = num_genomes
 hparams['num_genes'] = dataset.num_genes
@@ -114,7 +115,7 @@ model, optimizer, test_data_loader = accelerator.prepare(model, optimizer, test_
 if not args.train or os.path.exists(args.model_args):
     if os.path.exists(args.model_args):
         log.info(f"Found model file '{args.model_args}' with trained parameters, restoring model state for inference..")
-        model.load_state_dict(torch.load(args.model_args))
+        model.load_state_dict(torch.load(args.model_args, map_location = device))
 
         for batch in test_data_loader:
             prediction_bin, logits, stats = predict_homolog_genes(model, None, batch, binary_th=binary_th, dataset = dataset, base_labels = (dataset.base_labels, dataset.base_labels_raw))

@@ -9,6 +9,7 @@ from torch_geometric.utils.convert import to_scipy_sparse_matrix
 from scipy.sparse import csr_array
 from scipy.sparse.csgraph import connected_components
 from rich.progress import Progress
+from string import ascii_uppercase
 
 
 
@@ -562,4 +563,13 @@ def calculate_logit_baseline_labels(graph, sim_score_dict, logits, gene_lst, gen
     return label_lst
 
 
+def char_id_generator():
+    for size in itertools.count(3):
+        for s in itertools.product(ascii_uppercase, repeat=size):
+            yield "".join(s)
 
+
+def pairwise(iterable):
+    "s -> (s0, s1), (s2, s3), (s4, s5), ..."
+    a = iter(iterable)
+    return zip(a, a)

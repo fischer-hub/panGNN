@@ -1,6 +1,6 @@
 from src.preprocessing import load_gff, load_similarity_score, load_ribap_groups, build_edge_index, map_edge_weights, map_labels_to_edge_index, construct_neighbour_lst, generate_neighbour_edge_features, build_adjacency_vectors, normalize_sim_scores
 from src.setup import log, args
-from src.helper import concat_graph_data, simulate_dataset, generate_minimal_dataset, calculate_baseline_labels, get_connected_nodes, get_neighbour_graph, remove_duplicate_edges_tuple
+from src.helper import concat_graph_data, simulate_dataset, generate_minimal_dataset, calculate_baseline_labels, get_connected_nodes, get_neighbour_graph, remove_duplicate_edges_tuple, char_id_generator
 import torch, os, pickle, random, time
 from torch_geometric.data import Dataset, Data
 from rich.progress import track, Console, Progress
@@ -10,6 +10,7 @@ from torch_geometric.utils.convert import to_scipy_sparse_matrix
 from torch_geometric.transforms import RemoveDuplicatedEdges
 from src.plot import plot_violin_distributions, plot_homolog_positions
 from multiprocessing import Pool, current_process
+from src.simulate import simulate_gene_ids, simulate_similarity_scores_dict
 
 class HomogenousDataset(Dataset):
     """Class holding the input graph datastructures.
@@ -270,36 +271,43 @@ class UnionGraphDataset(Dataset):
         if not gff_files:
             if not args.simulate_dataset:
                 log.info("No annotation files provided, use generate_minimal_dataset() or simulate_dataset() to generate graph data for this object.")
-            return
+                return
+            else:
+                # [num_genes, num_genomes, fraction_pos_edges]
+                self.num_genes = args.simulate_dataset[0]
+                self.gene_str_ids_lst, gene_id_by_genome_lst = simulate_gene_ids(self.num_genes, args.simulate_dataset[1])
+                self.gene_id_position_dict = {gene: idx for idx, gene in enumerate(self.gene_str_ids_lst)}
+                self.sim_score_dict_raw = simulate_similarity_scores_dict(gene_id_by_genome_lst)
+        else:
         
-        # load annotations from gff files and format to pandas dataframe
-        for file_counter, gff_file in track(enumerate(gff_files), description='Loading annotation files..', transient=True):
-            genome_annotation_df = load_gff(gff_file)
+            # load annotations from gff files and format to pandas dataframe
+            for file_counter, gff_file in track(enumerate(gff_files), description='Loading annotation files..', transient=True):
+                genome_annotation_df = load_gff(gff_file)
 
-            if 'hemB' not in genome_annotation_df.iloc[0].values[-1]:
-                log.error('Annotation data does not start with start gene, uncentered gene data will lead to falsy gene positions.')
-                log.error(f"Annotation data starts with '{genome_annotation_df.iloc[0].values}'")
+                if 'hemB' not in genome_annotation_df.iloc[0].values[-1]:
+                    log.error('Annotation data does not start with start gene, uncentered gene data will lead to falsy gene positions.')
+                    log.error(f"Annotation data starts with '{genome_annotation_df.iloc[0].values}'")
 
-            log.info(f"Loaded annotation file of genome number {file_counter + 1}: {gff_file}")
-            log.debug(f"Genome 1 annotation dataframe:\n {genome_annotation_df}")
-            self.num_genes += len(genome_annotation_df.index)
+                log.info(f"Loaded annotation file of genome number {file_counter + 1}: {gff_file}")
+                log.debug(f"Genome 1 annotation dataframe:\n {genome_annotation_df}")
+                self.num_genes += len(genome_annotation_df.index)
+                
+                #self.gene_str_ids_lst_train += list(genome_annotation_df.index)[:int(len(genome_annotation_df.index) * split[0])]
+                #self.gene_str_ids_lst_val   += list(genome_annotation_df.index)[int(len(genome_annotation_df.index) * split[0]):]
+                self.gene_str_ids_lst       += list(genome_annotation_df.index)
+
+                #self.gene_str_ids_lst_test  += list(genome_annotation_df.index)[]
+                
+                # for each string gene ID save its position in the gff file into the dictionary
+
+                genome_name_lst.append(os.path.basename(gff_file).rsplit('.', 1)[0].replace('_RENAMED', ''))
+
+            log.info(f"Total number of genes found in annotation files: {self.num_genes}")
+            #self.neighbour_lst = construct_neighbour_lst(num_genes, self.num_neighbours)
             
-            #self.gene_str_ids_lst_train += list(genome_annotation_df.index)[:int(len(genome_annotation_df.index) * split[0])]
-            #self.gene_str_ids_lst_val   += list(genome_annotation_df.index)[int(len(genome_annotation_df.index) * split[0]):]
-            self.gene_str_ids_lst       += list(genome_annotation_df.index)
+            self.gene_id_position_dict = {gene: idx for idx, gene in enumerate(self.gene_str_ids_lst)}
 
-            #self.gene_str_ids_lst_test  += list(genome_annotation_df.index)[]
-            
-            # for each string gene ID save its position in the gff file into the dictionary
-
-            genome_name_lst.append(os.path.basename(gff_file).rsplit('.', 1)[0].replace('_RENAMED', ''))
-
-        log.info(f"Total number of genes found in annotation files: {self.num_genes}")
-        #self.neighbour_lst = construct_neighbour_lst(num_genes, self.num_neighbours)
-        
-        self.gene_id_position_dict = {gene: idx for idx, gene in enumerate(self.gene_str_ids_lst)}
-
-        self.sim_score_dict_raw = load_similarity_score(similarity_score_file, self.gene_id_position_dict)
+            self.sim_score_dict_raw = load_similarity_score(similarity_score_file, self.gene_id_position_dict)
 
         #for temp in [0.00001, 0.0001, 0.001, 0.01, 0.1, 0.2, 0.4, 0.6, 0.8, 1, 1.5, 2, 5, 10]:
         #    prob_lst.append((temp, normalize_sim_scores(self.sim_score_dict, t = temp, pseudo_count = 1, q_score_norm= False)))
