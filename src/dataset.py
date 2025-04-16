@@ -274,10 +274,11 @@ class UnionGraphDataset(Dataset):
                 return
             else:
                 # [num_genes, num_genomes, fraction_pos_edges]
-                self.num_genes = args.simulate_dataset[0]
-                self.gene_str_ids_lst, gene_id_by_genome_lst = simulate_gene_ids(self.num_genes, args.simulate_dataset[1])
+                num_genes, num_genomes, frac_pos_edges = args.simulate_dataset
+                self.num_genes = num_genes
+                self.gene_str_ids_lst, gene_id_by_genome_lst = simulate_gene_ids(self.num_genes, num_genomes)
                 self.gene_id_position_dict = {gene: idx for idx, gene in enumerate(self.gene_str_ids_lst)}
-                self.sim_score_dict_raw = simulate_similarity_scores_dict(gene_id_by_genome_lst)
+                self.sim_score_dict_raw = simulate_similarity_scores_dict(gene_id_by_genome_lst, frac_pos_edges)
         else:
         
             # load annotations from gff files and format to pandas dataframe
