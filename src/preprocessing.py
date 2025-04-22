@@ -392,6 +392,8 @@ def normalize_sim_scores(sim_score_dict, t = 0.5, epsilon = 1e-8, pseudo_count =
     
     normalized_dict = {}
     empty_dict_ids = []
+    one_count = 0
+    all_count = 0
 
     for origin_gene in track(sim_score_dict.keys(), description = 'Normalizing similarity scores...', transient = True):
         
@@ -423,7 +425,7 @@ def normalize_sim_scores(sim_score_dict, t = 0.5, epsilon = 1e-8, pseudo_count =
                     genome_pair_dict.update({candidate_id: exp_score})
             
             # all candidates with the current genome id are in the genome_pair_dict
-            # add epsilon for numeric stability            
+            # add epsilon for numeric stability
             for candidate_id, exp_score in genome_pair_dict.items():
                 if q_score_norm: 
                     softmax_prob = (exp_score / denominator)
@@ -435,10 +437,14 @@ def normalize_sim_scores(sim_score_dict, t = 0.5, epsilon = 1e-8, pseudo_count =
                     softmax_prob = epsilon
                 # Q score transform
                 if q_score_norm:
-                    normalized_sim_score = -10 * np.log10(max(1-softmax_prob, epsilon)) if not np.isnan(softmax_prob) and softmax_prob != 1 else -10 * np.log10(1-epsilon)
+                    normalized_sim_score = -10 * np.log10(np.clip(1-softmax_prob, epsilon, 1 - epsilon)) if not np.isnan(softmax_prob) else -10 * np.log10(1-epsilon)
+                    #normalized_sim_score = -10 * np.log10(max(1-softmax_prob, epsilon)) if not np.isnan(softmax_prob) else -10 * np.log10(1-epsilon)
                     assert not np.isnan(normalized_sim_score), f"Found nan after Q score transformation for probability: {1-softmax_prob}, affected Q score: {normalized_sim_score}"
                     assert np.isfinite(normalized_sim_score), f"Found infinite Q score transformation for probability: {1-softmax_prob}, affected Q score: {normalized_sim_score}"
+                    assert normalized_sim_score != 0, f'Normalized similarity score should never be exactly 0: score: {normalized_sim_score}, num candidates: {genome_pair_dict[candidate_id]}, prob: {softmax_prob}'
                     genome_pair_dict[candidate_id] = normalized_sim_score + pseudo_count
+                    if genome_pair_dict[candidate_id] == 1.0: one_count +=1
+                    all_count += 1
                 else:
                     genome_pair_dict[candidate_id] = softmax_prob if not np.isnan(softmax_prob) else epsilon
 
@@ -469,4 +475,5 @@ def normalize_sim_scores(sim_score_dict, t = 0.5, epsilon = 1e-8, pseudo_count =
 
 
     log.info(f"Normalized similarity scores with t = {t} between gene candidate with loss of {len(empty_dict_ids)} genes in total, e.g. due to only having self comparisons.")
+    log.warn(f'one_count: {one_count/all_count *100} %')
     return normalized_dict

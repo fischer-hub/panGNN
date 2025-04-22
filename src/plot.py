@@ -435,10 +435,11 @@ def plot_confusion_matrix(true_labels, predicted_labels, labels=[0, 1], normaliz
     plt.savefig(path, dpi = 300)
 
 
-def plot_sim_score_vs_logit(labels, edge_weights, logits, edge_index, path =  os.path.join('plots', 'sim_score_vs_logit.png')):
+def plot_sim_score_vs_logit(labels, edge_weights, logits, edge_index, gene_lst, path =  os.path.join('plots', 'sim_score_vs_logit.png')):
 
     plt.figure(figsize=(8, 6))
     edge_weights = edge_weights.tolist()[:len(logits)]
+    one_count = edge_weights.count(1.0) / len(edge_weights)
     scatter = plt.scatter(edge_weights, logits.tolist(), c = labels.tolist())
 
     plt.xlabel('Input Similarity Scores')
@@ -470,8 +471,14 @@ def plot_sim_score_vs_logit(labels, edge_weights, logits, edge_index, path =  os
         
     plt.savefig(path, dpi = 300)
 
-    data['source_id'] = edge_index[0].tolist()
-    data['target_id'] = edge_index[1].tolist()
-    data = data[['source_id', 'target_id', 'score', 'logit', 'homolog']]
+    data['source_int_id'] = edge_index[0].tolist()
+    data['target_int_id'] = edge_index[1].tolist()
+    data['source_str_id'] = [ gene_lst[i] for i in edge_index[0].tolist() ]
+    data['target_str_id'] = [ gene_lst[i] for i in edge_index[1].tolist() ]
+    data = data[['source_int_id', 'target_int_id', 'source_str_id', 'target_str_id', 'score', 'logit', 'homolog']]
+
+    print('one count ',one_count)
+    print('1 count', data.score.value_counts()[1.0] / len(data.index))
+
     
     data.to_csv('q_score_vs_logit.csv', index = False)
