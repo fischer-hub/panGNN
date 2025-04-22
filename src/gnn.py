@@ -176,24 +176,23 @@ class AlternateGCN(torch.nn.Module):
         if 'cosine' in args.decoder: link_predictions = self.cosine_sim(nodes, graph.edge_index)
         if 'dot' in args.decoder: link_predictions = self.decode(nodes, graph.edge_index)
 
-        if not True:
-            import numpy as np
-            import umap
-            import matplotlib.pyplot as plt
-            umap_reducer = umap.UMAP(n_components=2, random_state=42)
-            embeddings_2d = umap_reducer.fit_transform(nodes)
-
-            # Plot UMAP
-            plt.figure(figsize=(10, 8))
-            plt.scatter(embeddings_2d[:, 0], embeddings_2d[:, 1], s=10, cmap='Spectral')
-            plt.title("UMAP of Node Embeddings", fontsize=14)
-            plt.xlabel("UMAP Dimension 1")
-            plt.ylabel("UMAP Dimension 2")
-            plt.colorbar(label="Node IDs")
-            plt.savefig(f'umap_frames/{self.epoch}.png')
-            self.epoch += 1
-            plt.close()        
-            log.debug(f"Outputting link prediction tensor of shape: {link_predictions.shape}\ntype:{link_predictions.dtype}\n{link_predictions}")
+            #import numpy as np
+            #import umap
+            #import matplotlib.pyplot as plt
+            #umap_reducer = umap.UMAP(n_components=2, random_state=42)
+            #embeddings_2d = umap_reducer.fit_transform(nodes)
+#
+            ## Plot UMAP
+            #plt.figure(figsize=(10, 8))
+            #plt.scatter(embeddings_2d[:, 0], embeddings_2d[:, 1], s=10, cmap='Spectral')
+            #plt.title("UMAP of Node Embeddings", fontsize=14)
+            #plt.xlabel("UMAP Dimension 1")
+            #plt.ylabel("UMAP Dimension 2")
+            #plt.colorbar(label="Node IDs")
+            #plt.savefig(f'umap_frames/{self.epoch}.png')
+            #self.epoch += 1
+            #plt.close()        
+            #log.debug(f"Outputting link prediction tensor of shape: {link_predictions.shape}\ntype:{link_predictions.dtype}\n{link_predictions}")
 
         return  link_predictions
     

@@ -52,6 +52,12 @@ logging.basicConfig(level=args.log_level if not args.debug else 'DEBUG', format=
 log = logging.getLogger("rich")
 
 logging.getLogger('sklearn').setLevel(logging.WARNING)
+logging.getLogger('matplotlib').setLevel(logging.WARNING)
+
+logfile_handler = logging.FileHandler("pangnn.log", mode="w")
+logfile_handler.setLevel(args.log_level)
+
+log.addHandler(logfile_handler)
 
 # basic sanity checks
 if not args.traceback: install(show_locals=True)

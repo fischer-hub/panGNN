@@ -2,13 +2,14 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import networkx as nx
 from torch_geometric.utils import to_networkx
-import os, umap
+import os
 from sklearn.metrics import roc_curve, auc, PrecisionRecallDisplay, average_precision_score, precision_recall_curve, precision_score, recall_score, f1_score, confusion_matrix, ConfusionMatrixDisplay
 import numpy as np
 from sklearn.decomposition import PCA
 import seaborn as sns
 import torch
 
+"""
 def plot_umap_pca(dataset, path = os.path.join('plots', 'umap.png')):
 
     umap_model = umap.UMAP(n_components=3, random_state=42)
@@ -16,7 +17,6 @@ def plot_umap_pca(dataset, path = os.path.join('plots', 'umap.png')):
     for origin_node, target_node in zip(dataset.test.edge_index[0], dataset.test.edge_index[1]):
         dist.append(abs(dataset.test.x[origin_node] - dataset.test.x[target_node]))
 
-    """
     plt.figure()
     plt.scatter(list(dataset.test.edge_attr), dist, alpha=0.7, c=dataset.test.y, cmap='coolwarm', edgecolor='k')
 
@@ -26,7 +26,7 @@ def plot_umap_pca(dataset, path = os.path.join('plots', 'umap.png')):
     plt.title("similarty score by gene position difference")
     plt.legend()
 
-    plt.show()   """  
+    plt.show()
 
     #log.info(len(dataset.test.edge_attr), len(dist))
     edge_features = np.column_stack((dataset.test.edge_attr, dist))  # Shape: [num_edges, 2]
@@ -48,6 +48,7 @@ def plot_umap_pca(dataset, path = os.path.join('plots', 'umap.png')):
         os.mkdir(os.path.dirname(path))
 
     plt.savefig(path)
+"""
 
 
 def plot_simscore_class(dataset, path = os.path.join('plots', 'score_class.png')):
@@ -439,8 +440,10 @@ def plot_sim_score_vs_logit(labels, edge_weights, logits, edge_index, gene_lst, 
 
     plt.figure(figsize=(8, 6))
     edge_weights = edge_weights.tolist()[:len(logits)]
+    logits = logits.tolist()
+    labels = labels.tolist()
     one_count = edge_weights.count(1.0) / len(edge_weights)
-    scatter = plt.scatter(edge_weights, logits.tolist(), c = labels.tolist())
+    scatter = plt.scatter(edge_weights, logits, c = labels)
 
     plt.xlabel('Input Similarity Scores')
     plt.ylabel('Output Logits')

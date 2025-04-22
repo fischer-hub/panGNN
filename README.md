@@ -35,16 +35,28 @@ The first layer of the GNN is a linear (embedding) layer, putting the one dimens
 However, its not performing very well right now.
 
 # get started
+To run the pipeline you will need a working [`Conda`](https://github.com/conda-forge/miniforge) package manager on your machine. A miniforge `Conda` installation is sufficient for this project:
+
+```
+wget https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-$(uname)-$(uname -m).sh
+bash Mambaforge-$(uname)-$(uname -m).sh
+```
+
 Install the dependencies first using e.g. the conda environment file in the project directory and activate conda environment:
 
 ```
-mamba env  create -f pangnn.yaml
+conda env create -f pangnn.yaml
 conda activate panGNN
 ```
 
-Then run pangnn.py:
+Then run pangnn.py in training mode:
 ```
-python pangnn.py
+accelerate launch pangnn.py --train -m model.pkl  -a data/C*gff* -s data/mmseq2_result.csv  -r data/holy_python_ribap_95.csv -e 2 -b 32 -t -n 2 --binary_threshold 0.5 --union_edge_weights -@2
 ```
 
-But dont expect too much, currently there is only some preprocessing happening on the test data in `/data` (although very slow).
+or in inference mode (ideally n is unchanged between training and inference):
+```
+accelerate launch pangnn.py -m model.pkl  -a data/C*gff* -s data/mmseq2_result.csv -n 2 --union_edge_weights -@2
+```
+
+To be continued..
