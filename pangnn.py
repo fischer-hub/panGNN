@@ -30,7 +30,7 @@ binary_average_precision = BinaryAveragePrecision().to(accelerator.device)
 soft_limit, hard_limit = resource.getrlimit(resource.RLIMIT_NOFILE)
 if soft_limit < 50000: resource.setrlimit(resource.RLIMIT_NOFILE, (hard_limit-10, hard_limit))
 
-print(' '.join(sys.argv))
+log.info(f"Launched panGNN with command: {' '.join(sys.argv)}")
 
 #dataset = HomogenousDataset(args.annotation, args.similarity, args.ribap_groups, args.neighbours) if args.train else HomogenousDataset(args.annotation, args.similarity, args.neighbours)
 if not args.simulate_dataset:
