@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 #from src.plot import plot_loss_accuracy, plot_graph, plot_simscore_class, plot_logit_distribution, plot_union_graph, plot_simscore_distribution_by_class, plot_umap_pca
 from src.setup import log, args, hparams
-import torch, os, datetime, time, shutil, resource, cProfile, pstats
+import torch, os, datetime, time, shutil, resource, cProfile, pstats, sys
 from torch_geometric.loader import DataLoader
 from src.predict import predict_homolog_genes
 from rich.progress import Progress
@@ -30,6 +30,7 @@ binary_average_precision = BinaryAveragePrecision().to(accelerator.device)
 soft_limit, hard_limit = resource.getrlimit(resource.RLIMIT_NOFILE)
 if soft_limit < 50000: resource.setrlimit(resource.RLIMIT_NOFILE, (hard_limit-10, hard_limit))
 
+print(' '.join(sys.argv))
 
 #dataset = HomogenousDataset(args.annotation, args.similarity, args.ribap_groups, args.neighbours) if args.train else HomogenousDataset(args.annotation, args.similarity, args.neighbours)
 if not args.simulate_dataset:
