@@ -77,7 +77,7 @@ def predict_homolog_genes(model, train_dataset = None, test_dataset = None, bina
                 plot_confusion_matrix(test_labels, base_labels[0], title='Q-Score Max Candidate', path = 'plots/q_score_conf_matrix.png')
                 plot_confusion_matrix(test_labels, base_labels[1], title='Raw Score Max Candidate', path = 'plots/raw_score_conf_matrix.png')
                 plot_confusion_matrix(test_labels, max_candidate_logit_labels, title='Max Logit Candidate', path = 'plots/logit_conf_matrix.png')
-                plot_sim_score_vs_logit(test_labels, test_dataset.edge_attr, edge_scores, test_dataset.edge_index, dataset.gene_str_ids_lst)
+                plot_sim_score_vs_logit(test_labels, test_dataset.edge_attr, edge_scores, test_dataset.edge_index, dataset.gene_str_ids_lst, base_labels, max_candidate_logit_labels)
             else:
                 AP = plot_pr_curve(test_labels, probablilities, base_labels, refined_base_labels)
 

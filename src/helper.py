@@ -527,7 +527,7 @@ def init_worker(origin_edge_index, gene_lst, sim_score_dict, gene_pos_dict, logi
 
 
 # this is slow as flip
-def calculate_logit_baseline_labels(graph, sim_score_dict, logits, gene_lst, gene_pos_dict):
+def calculate_logit_baseline_labels(graph, sim_score_dict, logits, gene_lst, gene_pos_dict, basti = False):
     
     print('copying logits and graph from gpu')
     logits = logits.tolist()
@@ -559,6 +559,15 @@ def calculate_logit_baseline_labels(graph, sim_score_dict, logits, gene_lst, gen
     with  Console().status("Comparing candidate logits..") as status, Pool(initializer=init_worker, initargs=(origin_edge_index, gene_lst, sim_score_dict, gene_pos_dict,  logit_dict)) as pool:
         results  = pool.starmap(find_max_logit, zip(origin_edge_index_chunked, target_edge_index_chunked, logits_chunked))
         label_lst = [inner for outer in results for inner in outer]
+
+    print('logit frac 1 labels: ', sum(label_lst) / len(label_lst))
+    
+    if basti:
+        print("Hallo Welt.") 
+        results_true = 1
+        for i in range(1,100):
+            results_true += 1
+
 
     return label_lst
 

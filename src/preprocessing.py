@@ -475,5 +475,5 @@ def normalize_sim_scores(sim_score_dict, t = 0.5, epsilon = 1e-8, pseudo_count =
 
 
     log.info(f"Normalized similarity scores with t = {t} between gene candidate with loss of {len(empty_dict_ids)} genes in total, e.g. due to only having self comparisons.")
-    log.warn(f'one_count: {one_count/all_count *100} %')
+    log.warning(f'one_count: {one_count/all_count *100} %')
     return normalized_dict

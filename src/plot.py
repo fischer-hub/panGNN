@@ -436,8 +436,9 @@ def plot_confusion_matrix(true_labels, predicted_labels, labels=[0, 1], normaliz
     plt.savefig(path, dpi = 300)
 
 
-def plot_sim_score_vs_logit(labels, edge_weights, logits, edge_index, gene_lst, path =  os.path.join('plots', 'sim_score_vs_logit.png')):
+def plot_sim_score_vs_logit(labels, edge_weights, logits, edge_index, gene_lst, base_labels, max_logit_labels, path =  os.path.join('plots', 'sim_score_vs_logit.png')):
 
+    base_labels, base_labels_raw = base_labels
     plt.figure(figsize=(8, 6))
     edge_weights = edge_weights.tolist()[:len(logits)]
     logits = logits.tolist()
@@ -476,6 +477,9 @@ def plot_sim_score_vs_logit(labels, edge_weights, logits, edge_index, gene_lst, 
 
     data['source_int_id'] = edge_index[0].tolist()
     data['target_int_id'] = edge_index[1].tolist()
+    data['q_score_baseline'] = base_labels
+    data['raw_baseline'] = base_labels_raw
+    data['logit_baseline'] = max_logit_labels
     data['source_str_id'] = [ gene_lst[i] for i in edge_index[0].tolist() ]
     data['target_str_id'] = [ gene_lst[i] for i in edge_index[1].tolist() ]
     data = data[['source_int_id', 'target_int_id', 'source_str_id', 'target_str_id', 'score', 'logit', 'homolog']]
