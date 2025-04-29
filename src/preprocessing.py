@@ -405,6 +405,13 @@ def softmax_with_temperature(x, t = 0.65):
     return np.exp(x - log_denom)
 
 
+def stable_q_score(p):
+    score = -10 * np.log10(np.expm1(np.log1p(-p)))
+    if np.isnan(score):
+        return 0
+    else:
+        return score
+
 
 def normalize_sim_scores(sim_score_dict, t = 0.5, epsilon = 1e-8, pseudo_count = 1, q_score_norm = True):
     
@@ -446,6 +453,7 @@ def normalize_sim_scores(sim_score_dict, t = 0.5, epsilon = 1e-8, pseudo_count =
             
             score_lst = softmax_with_temperature(list(genome_pair_dict.values()), t) if len(genome_pair_dict) > 1 else [1]
             score_lst = [-10 * np.log10(np.clip(1-prob, epsilon, 1 - epsilon)) if not np.isnan(prob) else -10 * np.log10(1-epsilon) for prob in score_lst]
+            #score_lst = [stable_q_score(prob) if not np.isnan(prob) else stable_q_score(epsilon) for prob in score_lst]
             genome_pair_dict = { id: score_lst[i] + pseudo_count for i, id in enumerate(genome_pair_dict) }
             
             # all candidates with the current genome id are in the genome_pair_dict
