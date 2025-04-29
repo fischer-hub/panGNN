@@ -444,8 +444,8 @@ def normalize_sim_scores(sim_score_dict, t = 0.5, epsilon = 1e-8, pseudo_count =
 
                     genome_pair_dict.update({candidate_id: score})
             
-            score_lst = softmax_with_temperature(list(genome_pair_dict.values()), t)
-            score_lst = [ -10 * np.log10(np.clip(1-prob, epsilon, 1 - epsilon)) if not np.isnan(prob) else -10 * np.log10(1-epsilon) for prob in score_lst]
+            score_lst = softmax_with_temperature(list(genome_pair_dict.values()), t) if len(genome_pair_dict) > 1 else [1]
+            score_lst = [-10 * np.log10(np.clip(1-prob, epsilon, 1 - epsilon)) if not np.isnan(prob) else -10 * np.log10(1-epsilon) for prob in score_lst]
             genome_pair_dict = { id: score_lst[i] + pseudo_count for i, id in enumerate(genome_pair_dict) }
             
             # all candidates with the current genome id are in the genome_pair_dict
