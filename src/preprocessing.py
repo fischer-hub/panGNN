@@ -3,6 +3,7 @@ import pandas as pd
 from rich.progress import track, Progress, Console
 from src.setup import log, args
 import numpy as np
+from scipy.special import logsumexp
 
 def build_adjacency_vectors(num_neighbours, gene_id_lst):
 
@@ -388,6 +389,23 @@ def load_similarity_score(similarity_score_file, gene_id_position_dict, center_s
 
 
 
+def softmax_with_temperature(x, t = 0.65):
+    """
+    Numerically stable softmax using scipy's logsumexp and temperature.
+    
+    Args:
+        x (np.ndarray): Input scores (1D or 2D).
+        temperature (float): Temperature parameter.
+        
+    Returns:
+        np.ndarray: Softmax probabilities.
+    """
+    x = np.asarray(x) / t
+    log_denom = logsumexp(x, axis=-1, keepdims=True)
+    return np.exp(x - log_denom)
+
+
+
 def normalize_sim_scores(sim_score_dict, t = 0.5, epsilon = 1e-8, pseudo_count = 1, q_score_norm = True):
     
     normalized_dict = {}
@@ -408,45 +426,51 @@ def normalize_sim_scores(sim_score_dict, t = 0.5, epsilon = 1e-8, pseudo_count =
 
             for candidate_id, score in sim_score_dict[origin_gene].items():
                 
+                
                 if candidate_id.startswith(candidate_genome_id) and candidate_id != origin_gene:
                     # this might cause an underflow in np.exp depending on how
                     # low the score is and how big t is which results in nan in
                     # the division if there are no other scores adding to the sum
                     # in which case the normalized score will be set to 1
                     # this can also overflow when score is to high so we clip it
-                    safe_score = np.clip(t * score, -708, 708)
-                    exp_score = np.exp(safe_score)
+                    #safe_score = np.clip(t * score, -708, 708)
+                    #exp_score = np.exp(safe_score)
 
-                    if exp_score > (1.7e308 - denominator):
-                        denominator = 1.7e308
-                    else:
-                        denominator += exp_score
+                    #if exp_score > (1.7e308 - denominator):
+                    #    denominator = 1.7e308
+                    #else:
+                    #    denominator += exp_score
+                    all_count += 1
 
-                    genome_pair_dict.update({candidate_id: exp_score})
+                    genome_pair_dict.update({candidate_id: score})
+            
+            score_lst = softmax_with_temperature(list(genome_pair_dict.values()), t)
+            score_lst = [ -10 * np.log10(np.clip(1-prob, epsilon, 1 - epsilon)) if not np.isnan(prob) else -10 * np.log10(1-epsilon) for prob in score_lst]
+            genome_pair_dict = { id: score_lst[i] + pseudo_count for i, id in enumerate(genome_pair_dict) }
             
             # all candidates with the current genome id are in the genome_pair_dict
             # add epsilon for numeric stability
-            for candidate_id, exp_score in genome_pair_dict.items():
-                if q_score_norm: 
-                    softmax_prob = (exp_score / denominator)
-                else:
-                    softmax_prob = max((exp_score / denominator), epsilon)
-
-                if (1-softmax_prob) < 0 and q_score_norm:
-                    print('probability below 0')
-                    softmax_prob = epsilon
-                # Q score transform
-                if q_score_norm:
-                    normalized_sim_score = -10 * np.log10(np.clip(1-softmax_prob, epsilon, 1 - epsilon)) if not np.isnan(softmax_prob) else -10 * np.log10(1-epsilon)
-                    #normalized_sim_score = -10 * np.log10(max(1-softmax_prob, epsilon)) if not np.isnan(softmax_prob) else -10 * np.log10(1-epsilon)
-                    assert not np.isnan(normalized_sim_score), f"Found nan after Q score transformation for probability: {1-softmax_prob}, affected Q score: {normalized_sim_score}"
-                    assert np.isfinite(normalized_sim_score), f"Found infinite Q score transformation for probability: {1-softmax_prob}, affected Q score: {normalized_sim_score}"
-                    assert normalized_sim_score != 0, f'Normalized similarity score should never be exactly 0: score: {normalized_sim_score}, num candidates: {genome_pair_dict[candidate_id]}, prob: {softmax_prob}'
-                    genome_pair_dict[candidate_id] = normalized_sim_score + pseudo_count
-                    if genome_pair_dict[candidate_id] == 1.0: one_count +=1
-                    all_count += 1
-                else:
-                    genome_pair_dict[candidate_id] = softmax_prob if not np.isnan(softmax_prob) else epsilon
+            #for candidate_id, exp_score in genome_pair_dict.items():
+            #    if q_score_norm: 
+            #        softmax_prob = (exp_score / denominator)
+            #    else:
+            #        softmax_prob = max((exp_score / denominator), epsilon)
+#
+            #    if (1-softmax_prob) < 0 and q_score_norm:
+            #        print('probability below 0')
+            #        softmax_prob = epsilon
+            #    # Q score transform
+            #    if q_score_norm:
+            #        normalized_sim_score = -10 * np.log10(np.clip(1-softmax_prob, epsilon, 1 - epsilon)) if not np.isnan(softmax_prob) else -10 * np.log10(1-epsilon)
+            #        #normalized_sim_score = -10 * np.log10(max(1-softmax_prob, epsilon)) if not np.isnan(softmax_prob) else -10 * np.log10(1-epsilon)
+            #        assert not np.isnan(normalized_sim_score), f"Found nan after Q score transformation for probability: {1-softmax_prob}, affected Q score: {normalized_sim_score}"
+            #        assert np.isfinite(normalized_sim_score), f"Found infinite Q score transformation for probability: {1-softmax_prob}, affected Q score: {normalized_sim_score}"
+            #        assert normalized_sim_score != 0, f'Normalized similarity score should never be exactly 0: score: {normalized_sim_score}, num candidates: {genome_pair_dict[candidate_id]}, prob: {softmax_prob}'
+            #        genome_pair_dict[candidate_id] = normalized_sim_score + pseudo_count
+            #        if genome_pair_dict[candidate_id] == 1.0: one_count +=1
+            #        all_count += 1
+            #    else:
+            #        genome_pair_dict[candidate_id] = softmax_prob if not np.isnan(softmax_prob) else epsilon
 
             
             # all scores from the current genome are normalized
@@ -463,15 +487,15 @@ def normalize_sim_scores(sim_score_dict, t = 0.5, epsilon = 1e-8, pseudo_count =
             empty_dict_ids.append(origin_gene)
 
     # sanity check, is are all genes still in the dict, are all scores in range [0,1]?
-    #for gene_id in sim_score_dict.keys():
-    #    if gene_id in normalized_dict:
-    #        # length of each candidate dict should be old length -1 since we removed self comparisons
-    #        assert len(sim_score_dict[gene_id]) == len(normalized_dict[gene_id]) + 1, f"Missing normalized score for gene pair ({gene_id}: {normalized_dict[gene_id].keys()}[{len(normalized_dict[gene_id])}], {sim_score_dict[gene_id].keys()}[{len(sim_score_dict[gene_id])}])"
-    #        
-    #        if q_score_norm: 
-    #            assert min(normalized_dict[gene_id].values()) >= pseudo_count, f"Q transformed probability for candidate out of range [pseudo_count, inf) for gene {gene_id}: {normalized_dict[gene_id].values()}"
-    #        else:
-    #            assert min(normalized_dict[gene_id].values()) >= 0 and max(normalized_dict[gene_id].values()) <= 1 + epsilon, f"Probability score for candidate out of range [0,1] for gene {gene_id}: {normalized_dict[gene_id].values()}"
+    for gene_id in sim_score_dict.keys():
+        if gene_id in normalized_dict:
+            # length of each candidate dict should be old length -1 since we removed self comparisons
+            assert len(sim_score_dict[gene_id]) == len(normalized_dict[gene_id]) + 1, f"Missing normalized score for gene pair ({gene_id}: {normalized_dict[gene_id].keys()}[{len(normalized_dict[gene_id])}], {sim_score_dict[gene_id].keys()}[{len(sim_score_dict[gene_id])}])"
+            
+            if q_score_norm: 
+                assert min(normalized_dict[gene_id].values()) >= pseudo_count, f"Q transformed probability for candidate out of range [pseudo_count, inf) for gene {gene_id}: {normalized_dict[gene_id].values()}"
+            else:
+                assert min(normalized_dict[gene_id].values()) >= 0 and max(normalized_dict[gene_id].values()) <= 1 + epsilon, f"Probability score for candidate out of range [0,1] for gene {gene_id}: {normalized_dict[gene_id].values()}"
 
 
     log.info(f"Normalized similarity scores with t = {t} between gene candidate with loss of {len(empty_dict_ids)} genes in total, e.g. due to only having self comparisons.")

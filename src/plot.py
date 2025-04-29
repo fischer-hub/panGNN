@@ -482,7 +482,7 @@ def plot_sim_score_vs_logit(labels, edge_weights, logits, edge_index, gene_lst, 
     data['logit_baseline'] = max_logit_labels
     data['source_str_id'] = [ gene_lst[i] for i in edge_index[0].tolist() ]
     data['target_str_id'] = [ gene_lst[i] for i in edge_index[1].tolist() ]
-    data = data[['source_int_id', 'target_int_id', 'source_str_id', 'target_str_id', 'score', 'logit', 'homolog']]
+    data = data[['source_int_id', 'target_int_id', 'source_str_id', 'target_str_id', 'score', 'logit', 'homolog', 'q_score_baseline', 'raw_baseline', 'logit_baseline']]
 
     print('one count ',one_count)
     print('1 count', data.score.value_counts()[1.0] / len(data.index))
