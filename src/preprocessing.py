@@ -353,7 +353,7 @@ def load_gff(annotation_file_name, start_gene = 'hemB'):
     return annotation_df
 
 
-def load_similarity_score(similarity_score_file, gene_id_position_dict, center_scores = True):
+def load_similarity_score(similarity_score_file, gene_id_position_dict, center_scores = True, exclude_trivial = True):
 
     log.info(f"Loading similarity scores file: {similarity_score_file}")
     with open(similarity_score_file) as sim_score_handle:
@@ -384,7 +384,11 @@ def load_similarity_score(similarity_score_file, gene_id_position_dict, center_s
                 .to_dict())
                 # uncomment to replace sim scores with percent identity between genes
                 #.apply(lambda x: dict(zip(x['target'], x['pident'])))
-    
+    print(len(sim_score_dict))
+    if exclude_trivial:
+        sim_score_dict = { key: val for key, val in sim_score_dict.items() if len(val) > 1 }
+    print(len(sim_score_dict))
+    quit()
     return sim_score_dict
 
 
