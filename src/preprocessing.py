@@ -89,7 +89,8 @@ def build_edge_index(sim_score_dict, gene_id_integer_dict, fully_connected = Fal
         mask = (row != col)
         edge_index_ts = torch.stack((row, col), dim=0) if self_loops else torch.stack((row[mask], col[mask]), dim=0) 
     else:
-        max_edge_number = ((len(sim_score_dict)) ** 2)
+        max_edge_number = ((len(sim_score_dict)+1) ** 2)
+        print(max_edge_number)
         origin_idx = [None] * max_edge_number
         target_idx = [None] * max_edge_number
         edge_counter = 0

@@ -441,6 +441,8 @@ class UnionGraphDataset(Dataset):
             assert len(neighbour_edge_index[0]) == len(neighbour_edge_index[1]), f'List or origin nodes ({len(neighbour_edge_index[0])}) is of different length than list of target nodes ({len(neighbour_edge_index[1])}), invalid edge index!'
 
             sub_sim_score_dict = { gene_str_id: self.sim_score_dict[gene_str_id] for gene_str_id in gene_lst if gene_str_id in self.sim_score_dict}
+            
+            if not sub_sim_score_dict: continue
 
             sim_edge_index = build_edge_index(sub_sim_score_dict, sub_gene_id_pos_dict, fully_connected = False)
             sim_edge_index = remove_duplicate_edges_tuple(sim_edge_index)

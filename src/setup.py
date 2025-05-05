@@ -26,6 +26,7 @@ parser.add_argument('--dynamic_binary_threshold', help = 'dynamically calculate 
 parser.add_argument('--simulate_dataset', help = 'parameters to generate simulated input data with seperated by whitespace [num_genes, num_genomes, fraction_pos_edges]', nargs=3, type=str, default = None)
 parser.add_argument('--union_edge_weights', help = 'unite edge weights from sim and neighbour graph and only convolute over one', action = 'store_true')
 parser.add_argument('--exclude_trivial', help = 'exclude scores from trivial cases where there is only one candidate to predict the true homolog from', action = 'store_true')
+parser.add_argument('--skip_connections', help = 'activate skip connections in model', action = 'store_true')
 parser.add_argument('--categorical_node', help = 'embed node features as categorical feature embeddings using embedding layer, where category referes to the position of each gene in its genome', action = 'store_true')
 parser.add_argument('--no_q_score_transform', help = 'dont transform normalized edge probabilities between homolog candidates to Q-score like values before training [default: True]', action = 'store_false')
 parser.add_argument('--normalization_temp', help = 'temperature value for similarity score normalization, turns off normalization if set to 0', default = 0.8, type = float)

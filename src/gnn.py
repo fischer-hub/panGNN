@@ -2,9 +2,8 @@ import torch
 import torch.nn.functional as F
 from torch_geometric.nn import GCNConv, ChebConv
 from src.preprocessing import combine_neighbour_embeddings
-from src.setup import log
+from src.setup import log, args
 from torch import nn
-from src.setup import args
 
 
 # GCN class based on the example discussed in the pytorch geometric docs
@@ -107,7 +106,7 @@ class AlternateGCN(torch.nn.Module):
         self.activation_fct = torch.nn.ELU()
 
         self.mlp = nn.Sequential(
-            nn.Linear(node_embedding_dim * 2, node_embedding_dim),
+            nn.Linear(node_embedding_dim * 2, node_embedding_dim) if not args.skip_connections else nn.Linear((node_embedding_dim * 2) + 1, node_embedding_dim),
             nn.ReLU(),
             nn.Linear(node_embedding_dim, node_embedding_dim),
             nn.ReLU(),
@@ -170,7 +169,11 @@ class AlternateGCN(torch.nn.Module):
 
 
         if 'mlp' in args.decoder: 
-            concat_node_embeddings = torch.cat((nodes[graph.edge_index[0]], nodes[graph.edge_index[1]]), dim = 1)
+            if args.skip_connections:
+                concat_node_embeddings = torch.cat((nodes[graph.edge_index[0]], nodes[graph.edge_index[1]], graph.edge_attr[:len(graph.edge_index[0])].unsqueeze(1)), dim = 1)
+            else:
+                concat_node_embeddings = torch.cat((nodes[graph.edge_index[0]], nodes[graph.edge_index[1]]), dim = 1)
+
             link_predictions = self.mlp(concat_node_embeddings).squeeze(-1)
 
         if 'cosine' in args.decoder: link_predictions = self.cosine_sim(nodes, graph.edge_index)
