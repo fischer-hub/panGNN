@@ -89,7 +89,7 @@ def build_edge_index(sim_score_dict, gene_id_integer_dict, fully_connected = Fal
         mask = (row != col)
         edge_index_ts = torch.stack((row, col), dim=0) if self_loops else torch.stack((row[mask], col[mask]), dim=0) 
     else:
-        max_edge_number = ((len(sim_score_dict)-1) ** 2)
+        max_edge_number = ((len(sim_score_dict)) ** 2)
         origin_idx = [None] * max_edge_number
         target_idx = [None] * max_edge_number
         edge_counter = 0
@@ -519,7 +519,7 @@ def normalize_sim_scores(sim_score_dict, t = 0.5, epsilon = 1e-8, pseudo_count =
     for gene_id in sim_score_dict.keys():
         if gene_id in normalized_dict:
             # length of each candidate dict should be old length -1 since we removed self comparisons
-            assert len(sim_score_dict[gene_id]) == len(normalized_dict[gene_id]) + 1, f"Missing normalized score for gene pair ({gene_id}: {normalized_dict[gene_id].keys()}[{len(normalized_dict[gene_id])}], {sim_score_dict[gene_id].keys()}[{len(sim_score_dict[gene_id])}])"
+            assert len(sim_score_dict[gene_id]) == len(normalized_dict[gene_id]) + 1 or len(sim_score_dict[gene_id]) == len(normalized_dict[gene_id]), f"Missing normalized score for gene pair ({gene_id}: {normalized_dict[gene_id].keys()}[{len(normalized_dict[gene_id])}], {sim_score_dict[gene_id].keys()}[{len(sim_score_dict[gene_id])}])"
             
             if q_score_norm: 
                 assert min(normalized_dict[gene_id].values()) >= pseudo_count, f"Q transformed probability for candidate out of range [pseudo_count, inf) for gene {gene_id}: {normalized_dict[gene_id].values()}"
