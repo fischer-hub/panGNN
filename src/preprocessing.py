@@ -4,6 +4,7 @@ from rich.progress import track, Progress, Console
 from src.setup import log, args
 import numpy as np
 from scipy.special import logsumexp
+from collections import Counter
 
 def build_adjacency_vectors(num_neighbours, gene_id_lst):
 
@@ -384,11 +385,27 @@ def load_similarity_score(similarity_score_file, gene_id_position_dict, center_s
                 .to_dict())
                 # uncomment to replace sim scores with percent identity between genes
                 #.apply(lambda x: dict(zip(x['target'], x['pident'])))
-    print(len(sim_score_dict))
-    if exclude_trivial:
-        sim_score_dict = { key: val for key, val in sim_score_dict.items() if len(val) > 1 }
-    print(len(sim_score_dict))
-    quit()
+    old_len = len(sim_score_dict)
+    
+
+    if args.exclude_trivial:
+
+        log.info('Filtering scores for trivial cases..')
+    
+        filtered_sim_score_dict = {}
+
+        for source_gene, target_genes in sim_score_dict.items():
+            target_gene_ids = target_genes.keys()
+            target_genome_ids = [ id.split('_')[0] for id in target_gene_ids ]
+            non_unique_target_genome_ids = {k for k, v in Counter(target_genome_ids).items() if v > 1}
+            filtered_candidates = { key: val for key, val in target_genes.items() if key.split('_')[0] in non_unique_target_genome_ids }
+            if filtered_candidates: filtered_sim_score_dict[source_gene] = filtered_candidates
+        
+        sim_score_dict = filtered_sim_score_dict
+
+
+        #sim_score_dict = { key: val for key, val in sim_score_dict.items() if len(val) <= 1 }
+    log.info(f'Ignoring {old_len - len(sim_score_dict)} of {old_len} scores because they were the only candidate in their candidate set.')
     return sim_score_dict
 
 
