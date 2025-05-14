@@ -10,7 +10,7 @@ from torch_geometric.utils.convert import to_scipy_sparse_matrix
 from torch_geometric.transforms import RemoveDuplicatedEdges
 from src.plot import plot_violin_distributions, plot_homolog_positions
 from multiprocessing import Pool, current_process
-from src.simulate import simulate_gene_ids, simulate_similarity_scores_dict
+from src.simulate import simulate_gene_ids, simulate_similarity_scores_and_ribap_dict
 
 class HomogenousDataset(Dataset):
     """Class holding the input graph datastructures.
@@ -278,7 +278,7 @@ class UnionGraphDataset(Dataset):
                 self.num_genes = num_genes
                 self.gene_str_ids_lst, gene_id_by_genome_lst = simulate_gene_ids(self.num_genes, num_genomes)
                 self.gene_id_position_dict = {gene: idx for idx, gene in enumerate(self.gene_str_ids_lst)}
-                self.sim_score_dict_raw = simulate_similarity_scores_dict(gene_id_by_genome_lst, frac_pos_edges)
+                self.sim_score_dict_raw, self.ribap_groups_dict, self.ribap_groups_lst = simulate_similarity_scores_and_ribap_dict(gene_id_by_genome_lst, frac_pos_edges)
         else:
         
             # load annotations from gff files and format to pandas dataframe
