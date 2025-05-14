@@ -3,7 +3,7 @@ from src.setup import log
 import numpy as np
 from src.plot import plot_logit_distribution, plot_simscore_class
 from src.preprocessing import construct_neighbour_lst, generate_neighbour_edge_features
-from src.helper import char_id_generator, pairwise
+from src.helper import char_id_generator, pairwise, chunks
 from collections import defaultdict
 
 
@@ -113,7 +113,7 @@ def simulate_similarity_scores_and_ribap_dict(gene_lsts, frac_pos_edges):
     mean_num_negative_edges_per_gene = num_negative_edges / num_pos_edges
     num_negative_edges_per_gene_lst = np.random.normal(mean_num_negative_edges_per_gene, 5, num_pos_edges)
     num_negative_edges_per_gene_lst = [int(i) for i in num_negative_edges_per_gene_lst]
-    ribap_groups_lst = [none] * num_genes_per_genome
+    ribap_groups_lst = [None] * num_genes_per_genome
     ribap_group_count = 0
     
 
@@ -152,8 +152,32 @@ def simulate_similarity_scores_and_ribap_dict(gene_lsts, frac_pos_edges):
             edge_count += 1
             target_genome_idx += 1
 
+    # this fails
     assert len(similarity_dict) == (num_total_edges * 2), f'Number of similarity scores in dictionary ({len(similarity_dict)}) is not equal to number of expected similarity edges ({num_total_edges * 2}).'
-    assert len(ribap_groups_dict) == (num_genes_per_genome * (num_genomes - 1)) , f'Number of ribap group mappings found ({len(ribap_groups_dict)}) is not equal to number of expected ribap group mappings ({(num_genes_per_genome * (num_genomes - 1)}).'
+    assert len(ribap_groups_dict) == (num_genes_per_genome * (num_genomes - 1)) , f'Number of ribap group mappings found ({len(ribap_groups_dict)}) is not equal to number of expected ribap group mappings ({num_genes_per_genome * (num_genomes - 1)}).'
     assert len(ribap_groups_lst) == num_genes_per_genome , f'Number of ribap groups ({len(ribap_groups_lst)}) is not equal to number of genes per genome ({num_genes_per_genome}), but every gene should belong to one RIBAP group.'
-
+    quit()
     return similarity_dict, ribap_groups_dict, ribap_groups_lst
+
+
+def shuffle_synteny_blocks(genomes_lst, k, n):
+    """
+    Fragment each genome into synteny blocks of size k of which n blocks are shuffled within the genome.
+    """
+
+    shuffled_genomes = [None] * len(genomes_lst)
+    genome_idx = 0
+
+    for genome in genomes_lst:
+        genome_fragments = chunks(genome, k)
+        fragments_to_shuffle_indices = random.choices(range(genome_fragments), k = n)
+
+        selected_frags = [genome_fragments[i] for i in fragments_to_shuffle_indices]
+        random.shuffle(selected_frags)
+
+        for idx, shuffled_value in zip(fragments_to_shuffle_indices, selected_frags):
+            genome_fragments[idx] = shuffled_value
+        
+        shuffled_genomes[genome_idx] = [x for xs in genome_fragments for x in xs]
+
+    return shuffled_genomes
