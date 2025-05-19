@@ -446,37 +446,37 @@ def calculate_baseline_labels(edge_index, gene_ids_lst, ribap_groups_dict, sub_s
         is_max = True
         is_max_raw = True
         
-        if (source_gene_str_id in ribap_groups_dict and destination_gene_str_id in ribap_groups_dict[source_gene_str_id]) or (destination_gene_str_id in ribap_groups_dict and source_gene_str_id in ribap_groups_dict[destination_gene_str_id]):
+        #if (source_gene_str_id in ribap_groups_dict and destination_gene_str_id in ribap_groups_dict[source_gene_str_id]) or (destination_gene_str_id in ribap_groups_dict and source_gene_str_id in ribap_groups_dict[destination_gene_str_id]):
 
-            if source_gene_str_id in sub_sim_score_dict and destination_gene_str_id in sub_sim_score_dict[source_gene_str_id]:
-                score = sub_sim_score_dict[source_gene_str_id][destination_gene_str_id]
-                score_raw = sim_score_dict_raw[source_gene_str_id][destination_gene_str_id]
+        if source_gene_str_id in sub_sim_score_dict and destination_gene_str_id in sub_sim_score_dict[source_gene_str_id]:
+            score = sub_sim_score_dict[source_gene_str_id][destination_gene_str_id]
+            score_raw = sim_score_dict_raw[source_gene_str_id][destination_gene_str_id]
 
-                # can we do the early comparison escape trick here too?
+            # can we do the early comparison escape trick here too?
 
-                for candidate_gene_id, candidate_score in sub_sim_score_dict[source_gene_str_id].items():
+            for candidate_gene_id, candidate_score in sub_sim_score_dict[source_gene_str_id].items():
 
-                    if candidate_gene_id.startswith(destination_genome_str_id):
-                        if score < candidate_score:
-                            is_max = False
-                            break
+                if candidate_gene_id.startswith(destination_genome_str_id):
+                    if score < candidate_score:
+                        is_max = False
+                        break
 
 
-                for candidate_gene_id, candidate_score in sim_score_dict_raw[source_gene_str_id].items():
+            for candidate_gene_id, candidate_score in sim_score_dict_raw[source_gene_str_id].items():
 
-                    if candidate_gene_id.startswith(destination_genome_str_id):
-                        if score_raw < candidate_score:
-                            is_max_raw = False
-                            break
+                if candidate_gene_id.startswith(destination_genome_str_id):
+                    if score_raw < candidate_score:
+                        is_max_raw = False
+                        break
 
-                #max_candidate_score = max(sub_sim_score_dict[source_gene_str_id].values())
-                #max_candidate_score_raw = max(sim_score_dict_raw[source_gene_str_id].values())
-                
-                if is_max:
-                    label_lst[edge] = 1
-                
-                if is_max_raw:
-                    label_raw_lst[edge] = 1
+            #max_candidate_score = max(sub_sim_score_dict[source_gene_str_id].values())
+            #max_candidate_score_raw = max(sim_score_dict_raw[source_gene_str_id].values())
+            
+            if is_max:
+                label_lst[edge] = 1
+            
+            if is_max_raw:
+                label_raw_lst[edge] = 1
 
     return label_lst, label_raw_lst
 
@@ -563,7 +563,7 @@ def calculate_logit_baseline_labels(graph, sim_score_dict, logits, gene_lst, gen
     print('logit frac 1 labels: ', sum(label_lst) / len(label_lst))
     
     if basti:
-        print("Hallo Welt.") 
+        print("Hallo Welt.")
         results_true = 1
         for i in range(1,100):
             results_true += 1
