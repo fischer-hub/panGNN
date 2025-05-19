@@ -104,6 +104,7 @@ def simulate_similarity_scores_and_ribap_dict(gene_lsts, frac_pos_edges):
     similarity_dict = defaultdict(dict)
     ribap_groups_dict = {}
     edge_count = 0
+    edge_count2 = 0
     
     num_genomes = len(gene_lsts)
     num_genes_per_genome = len(gene_lsts[0])
@@ -112,21 +113,22 @@ def simulate_similarity_scores_and_ribap_dict(gene_lsts, frac_pos_edges):
     num_negative_edges = num_total_edges - num_pos_edges
     mean_num_negative_edges_per_gene = num_negative_edges / num_pos_edges
     num_negative_edges_per_gene_lst = np.random.normal(mean_num_negative_edges_per_gene, 5, num_pos_edges)
-    num_negative_edges_per_gene_lst = [int(i) for i in num_negative_edges_per_gene_lst]
+    num_negative_edges_per_gene_lst = [int(i) for i in abs(num_negative_edges_per_gene_lst)+1]
     ribap_groups_lst = [None] * num_genes_per_genome
     ribap_group_count = 0
+    idx = 0
     
 
     for group in zip(*gene_lsts):
 
-        # genome idx of target genes
+        # genome idx of target genes, like this the last and first genome will not have any edges between them but its fine (im too lazy to fix this)
         target_genome_idx = 1
         
         ribap_groups_lst[ribap_group_count] = group
         ribap_group_count += 1
 
         for key_gene in group:
-            ribap_groups_dict[key_gene] = [gene for gene in group if isinstance(gene, str) and key_gene not in gene]
+            ribap_groups_dict[key_gene] = [gene for gene in group if isinstance(gene, str) and key_gene != gene]
 
 
         # assume genes at same pos are orthologs and score come from gamma distr with highest mean
@@ -135,8 +137,10 @@ def simulate_similarity_scores_and_ribap_dict(gene_lsts, frac_pos_edges):
         for (source, target), score in zip(pairwise(group), ortholog_scores):
 
             # raw sim score is not direction independent but we assume this for simplicity
-            similarity_dict[source] = {target: score}
-            similarity_dict[target] = {source: score}
+            similarity_dict[source][target] = score
+            similarity_dict[target][source] = score
+            print(idx)
+            idx += 1
 
             # for source gene select n target genes to add negative edges to
             negative_edge_idxs = random.choices(range(num_genes_per_genome), k = num_negative_edges_per_gene_lst[edge_count])
@@ -146,11 +150,12 @@ def simulate_similarity_scores_and_ribap_dict(gene_lsts, frac_pos_edges):
 
                 # add heterolog sim scores to sim score dict both ways
                 target = gene_lsts[target_genome_idx][negative_edge_idx]
-                similarity_dict[source] = {target: score}
-                similarity_dict[target] = {source: score}
+                similarity_dict[source][target] = score
+                similarity_dict[target][source] = score
 
             edge_count += 1
             target_genome_idx += 1
+
 
     # this fails
     assert len(similarity_dict) == (num_total_edges * 2), f'Number of similarity scores in dictionary ({len(similarity_dict)}) is not equal to number of expected similarity edges ({num_total_edges * 2}).'

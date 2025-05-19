@@ -355,6 +355,7 @@ elif args.train:
     
     shutil.move(os.path.join('plots', 'pr_curve.png'), os.path.join('temp', run_id, run_id + 'pr_curve.png'))
     shutil.move(os.path.join('temp', run_id), 'runs')
+    shutil.move(os.path.join('pangnn.log', run_id), 'runs')
     writer.close()
 
 #write_groups_file(dataset.test, prediction_bin)
