@@ -430,7 +430,7 @@ def remove_duplicate_edges_tuple(edge_index):
 
 
 
-def calculate_baseline_labels(edge_index, gene_ids_lst, ribap_groups_dict, sub_sim_score_dict, sim_score_dict_raw):
+def (edge_index, gene_ids_lst, sub_sim_score_dict, sim_score_dict_raw):
 
     num_genes = len(edge_index[0])
     label_lst = [0] * num_genes

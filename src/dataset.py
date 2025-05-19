@@ -463,7 +463,7 @@ class UnionGraphDataset(Dataset):
                 neg += len(labels_ts) - labels_ts.sum().item()
 
                 if self.calculate_baseline:
-                    base_labels, base_labels_raw = calculate_baseline_labels(sim_edge_index, gene_lst, self.ribap_groups_dict, sub_sim_score_dict, self.sim_score_dict_raw)
+                    base_labels, base_labels_raw = calculate_baseline_labels(sim_edge_index, gene_lst, sub_sim_score_dict, self.sim_score_dict_raw)
                     assert len(base_labels) == len(labels_ts), f"List of normalized baseline labels ({len(base_labels)}) is not the same size as list of 'ground truth' labels ({len(labels_ts)})."
                     assert len(base_labels_raw) == len(labels_ts), f"List of raw baseline labels ({len(base_labels)}) is not the same size as list of 'ground truth' labels ({len(labels_ts)})."
                 else:
@@ -572,7 +572,7 @@ class UnionGraphDataset(Dataset):
 
         # since the sub graph in inference mode is the whole graph we pass the whole sim score dict instread of the sub sim score dict here
         log.info('Calculating baseline labels for max score candidates..')
-        self.base_labels, self.base_labels_raw = calculate_baseline_labels(edge_index_ts, self.gene_str_ids_lst, self.ribap_groups_dict, self.sim_score_dict, self.sim_score_dict_raw)
+        self.base_labels, self.base_labels_raw = calculate_baseline_labels(edge_index_ts, self.gene_str_ids_lst, self.sim_score_dict, self.sim_score_dict_raw)
 
         # this makes the Data object class crash on print??
         #graph_data.subsample_graph_edges = sub_sample_graph_edges.__get__(graph_data, Data)
