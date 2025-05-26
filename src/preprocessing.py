@@ -450,7 +450,6 @@ def normalize_sim_scores(sim_score_dict, t = 0.5, epsilon = 1e-8, pseudo_count =
         for candidate_genome_id in candidate_genome_ids:
 
             genome_pair_dict = {}
-            denominator = 0
 
             for candidate_id, score in sim_score_dict[origin_gene].items():
                 

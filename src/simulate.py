@@ -99,6 +99,10 @@ def simulate_gene_ids(num_genes, num_genomes):
     return genome_ids_flat, genome_ids_by_genome
 
 
+def nested_len(d):
+    return sum([nested_len(v) if isinstance(v, dict) else 1 for v in d.values()])
+
+
 def simulate_similarity_scores_and_ribap_dict(gene_lsts, frac_pos_edges):
 
     similarity_dict = defaultdict(dict)
@@ -112,7 +116,7 @@ def simulate_similarity_scores_and_ribap_dict(gene_lsts, frac_pos_edges):
     num_total_edges = num_pos_edges / frac_pos_edges
     num_negative_edges = num_total_edges - num_pos_edges
     mean_num_negative_edges_per_gene = num_negative_edges / num_pos_edges
-    num_negative_edges_per_gene_lst = np.random.normal(mean_num_negative_edges_per_gene, 5, num_pos_edges)
+    num_negative_edges_per_gene_lst = np.random.poisson(lam = mean_num_negative_edges_per_gene, size = num_pos_edges)
     num_negative_edges_per_gene_lst = [int(i) for i in abs(num_negative_edges_per_gene_lst)+1]
     ribap_groups_lst = [None] * num_genes_per_genome
     ribap_group_count = 0
@@ -139,8 +143,9 @@ def simulate_similarity_scores_and_ribap_dict(gene_lsts, frac_pos_edges):
             # raw sim score is not direction independent but we assume this for simplicity
             similarity_dict[source][target] = score
             similarity_dict[target][source] = score
-            print(idx)
+            #print(idx)
             idx += 1
+            edge_count2 += 1
 
             # for source gene select n target genes to add negative edges to
             negative_edge_idxs = random.choices(range(num_genes_per_genome), k = num_negative_edges_per_gene_lst[edge_count])
@@ -149,19 +154,20 @@ def simulate_similarity_scores_and_ribap_dict(gene_lsts, frac_pos_edges):
             for negative_edge_idx, score in zip(negative_edge_idxs, heterolog_scores):
 
                 # add heterolog sim scores to sim score dict both ways
-                target = gene_lsts[target_genome_idx][negative_edge_idx]
-                similarity_dict[source][target] = score
-                similarity_dict[target][source] = score
+                negative_target = gene_lsts[target_genome_idx][negative_edge_idx]
+                similarity_dict[source][negative_target] = score
+                similarity_dict[negative_target][source] = score
+                edge_count2 += 1
+                print(edge_count2 *2)
 
             edge_count += 1
             target_genome_idx += 1
 
 
     # this fails
-    assert len(similarity_dict) == (num_total_edges * 2), f'Number of similarity scores in dictionary ({len(similarity_dict)}) is not equal to number of expected similarity edges ({num_total_edges * 2}).'
+    assert nested_len(similarity_dict) == (num_total_edges * 2), f'Number of similarity scores in dictionary ({nested_len(similarity_dict)}) is not equal to number of expected similarity edges ({num_total_edges * 2}).'
     assert len(ribap_groups_dict) == (num_genes_per_genome * (num_genomes - 1)) , f'Number of ribap group mappings found ({len(ribap_groups_dict)}) is not equal to number of expected ribap group mappings ({num_genes_per_genome * (num_genomes - 1)}).'
     assert len(ribap_groups_lst) == num_genes_per_genome , f'Number of ribap groups ({len(ribap_groups_lst)}) is not equal to number of genes per genome ({num_genes_per_genome}), but every gene should belong to one RIBAP group.'
-    quit()
     return similarity_dict, ribap_groups_dict, ribap_groups_lst
 
 
