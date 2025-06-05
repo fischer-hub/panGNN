@@ -1,7 +1,7 @@
+import torch, os, pickle, random, time, math
 from src.preprocessing import load_gff, load_similarity_score, load_ribap_groups, build_edge_index, map_edge_weights, map_labels_to_edge_index, construct_neighbour_lst, generate_neighbour_edge_features, build_adjacency_vectors, normalize_sim_scores
 from src.setup import log, args
 from src.helper import concat_graph_data, simulate_dataset, generate_minimal_dataset, calculate_baseline_labels, get_connected_nodes, get_neighbour_graph, remove_duplicate_edges_tuple, char_id_generator
-import torch, os, pickle, random, time
 from torch_geometric.data import Dataset, Data
 from rich.progress import track, Console, Progress
 from scipy.sparse import csr_array
@@ -273,10 +273,12 @@ class UnionGraphDataset(Dataset):
                 log.info("No annotation files provided, use generate_minimal_dataset() or simulate_dataset() to generate graph data for this object.")
                 return
             else:
-                # [num_genes, num_genomes, fraction_pos_edges]
-                num_genes, num_genomes, frac_pos_edges, frag_size, num_frags_to_shuffle = args.simulate_dataset
-                self.num_genes = num_genes
-                self.gene_str_ids_lst, gene_id_by_genome_lst = simulate_gene_ids(self.num_genes, num_genomes)
+                # num_genes_per_genome, num_genomes, fraction_pos_edges, num_fragments, num_frags_to_shuffle
+                num_genes_per_genome, num_genomes, frac_pos_edges, num_fragments, num_frags_to_shuffle = args.simulate_dataset
+                log.info(f'Simulating dataset with input parameters: {args.simulate_dataset}')
+                frag_size = math.floor(num_genes_per_genome / num_fragments)
+                self.num_genes = num_genes_per_genome * num_genomes
+                self.gene_str_ids_lst, gene_id_by_genome_lst = simulate_gene_ids(num_genes_per_genome, num_genomes)
                 self.gene_id_position_dict = {gene: idx for idx, gene in enumerate(self.gene_str_ids_lst)}
                 self.sim_score_dict_raw, self.ribap_groups_dict, self.ribap_groups_lst = simulate_similarity_scores_and_ribap_dict(gene_id_by_genome_lst, frac_pos_edges)
                 self.gene_id_by_genome_lst = shuffle_synteny_blocks(gene_id_by_genome_lst, k = frag_size, n = num_frags_to_shuffle)

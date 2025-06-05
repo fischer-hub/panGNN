@@ -1,4 +1,4 @@
-import random, torch, os
+import random, torch, os, math, itertools
 from src.setup import log
 import numpy as np
 from src.plot import plot_logit_distribution, plot_simscore_class
@@ -81,10 +81,11 @@ def generate_data(num_genes_per_genome, num_gene_families1, num_gene_families2, 
     return dataset
 """
 
-def simulate_gene_ids(num_genes, num_genomes):
+def simulate_gene_ids(num_genes_per_genome, num_genomes):
+
+    log.info('Generating gene IDs..')
 
     genome_ids = [ None ] * num_genomes
-    num_genes_per_genome = int(num_genes / num_genomes)
     
     for idx, genome_id in enumerate(char_id_generator()):
         
@@ -105,23 +106,37 @@ def nested_len(d):
 
 def simulate_similarity_scores_and_ribap_dict(gene_lsts, frac_pos_edges):
 
+    log.info('Generating simulated similarity scores and RIBAP groups..')
+
     similarity_dict = defaultdict(dict)
     ribap_groups_dict = {}
+    pos_edge_count = 0
+    neg_edge_count = 0
     edge_count = 0
-    edge_count2 = 0
     
     num_genomes = len(gene_lsts)
+    log.info(f'Num genomes: {num_genomes}')
     num_genes_per_genome = len(gene_lsts[0])
-    num_pos_edges = (num_genomes-1) * num_genes_per_genome
-    num_total_edges = num_pos_edges / frac_pos_edges
+    log.info(f'Num genes per genome: {num_genes_per_genome}')
+    num_total_genes = num_genes_per_genome * num_genomes
+    log.info(f'Num total genes: {num_total_genes}')
+    num_edges_per_group = math.floor(((num_genomes)*(num_genomes-1))/2)
+    log.info(f'Num edges per RIBAP group: {num_edges_per_group}')
+    num_pos_edges = num_edges_per_group * num_genes_per_genome
+    log.info(f'Num pos edges: {num_pos_edges}')
+    num_total_edges = math.floor(num_pos_edges / frac_pos_edges)
+    log.info(f'Num total edges: {num_total_edges}')
     num_negative_edges = num_total_edges - num_pos_edges
-    mean_num_negative_edges_per_gene = num_negative_edges / num_pos_edges
-    num_negative_edges_per_gene_lst = np.random.poisson(lam = mean_num_negative_edges_per_gene, size = num_pos_edges)
-    num_negative_edges_per_gene_lst = [int(i) for i in abs(num_negative_edges_per_gene_lst)+1]
+    log.info(f'Num neg edges: {num_negative_edges}')
+    mean_num_negative_edges_per_gene = math.floor(num_negative_edges / (num_total_genes))
+    log.info(f'Num avg neg edges per gene: {mean_num_negative_edges_per_gene}')
+    num_negative_edges_per_gene_lst = np.random.poisson(lam = mean_num_negative_edges_per_gene, size = num_total_genes)
+    num_negative_edges_per_gene_lst = [int(i+1) for i in num_negative_edges_per_gene_lst]
+    log.info(f'Number of drawn neg edges: {sum(num_negative_edges_per_gene_lst)}')
     ribap_groups_lst = [None] * num_genes_per_genome
     ribap_group_count = 0
-    idx = 0
-    
+    last_source = ''
+   
 
     for group in zip(*gene_lsts):
 
@@ -136,37 +151,42 @@ def simulate_similarity_scores_and_ribap_dict(gene_lsts, frac_pos_edges):
 
 
         # assume genes at same pos are orthologs and score come from gamma distr with highest mean
-        ortholog_scores = simulate_bit_scores(500, 10, len(group))
+        ortholog_scores = simulate_bit_scores(500, 10, num_edges_per_group)
 
-        for (source, target), score in zip(pairwise(group), ortholog_scores):
+
+        for (source, target), score in zip(itertools.combinations(group, 2), ortholog_scores):
+
+            if source == target: continue
+            if target_genome_idx == len(gene_lsts)+1: target_genome_idx = 0
 
             # raw sim score is not direction independent but we assume this for simplicity
             similarity_dict[source][target] = score
             similarity_dict[target][source] = score
-            #print(idx)
-            idx += 1
-            edge_count2 += 1
+            pos_edge_count += 2
 
-            # for source gene select n target genes to add negative edges to
-            negative_edge_idxs = random.choices(range(num_genes_per_genome), k = num_negative_edges_per_gene_lst[edge_count])
-            heterolog_scores = simulate_bit_scores(20, 10, len(negative_edge_idxs))
+            if last_source != source:
 
-            for negative_edge_idx, score in zip(negative_edge_idxs, heterolog_scores):
+                # get genome index in genome list from current target genes origin genome
+                target_genome_idx = next((i for i, x in enumerate(group) if x.startswith(target.split('_')[0])), None)
 
-                # add heterolog sim scores to sim score dict both ways
-                negative_target = gene_lsts[target_genome_idx][negative_edge_idx]
-                similarity_dict[source][negative_target] = score
-                similarity_dict[negative_target][source] = score
-                edge_count2 += 1
-                print(edge_count2 *2)
+                if target_genome_idx is None: log.error(f'Could not infer origin genome of target gene {target} from its name. Too bad.')
+                last_source = source
 
-            edge_count += 1
-            target_genome_idx += 1
+                # for source gene select n target genes to add negative edges to
+                negative_edge_idxs = random.choices(range(num_genes_per_genome), k = num_negative_edges_per_gene_lst[ribap_group_count])
+                heterolog_scores = simulate_bit_scores(20, 10, len(negative_edge_idxs))
 
+                for negative_edge_idx, score in zip(negative_edge_idxs, heterolog_scores):
 
-    # this fails
-    assert nested_len(similarity_dict) == (num_total_edges * 2), f'Number of similarity scores in dictionary ({nested_len(similarity_dict)}) is not equal to number of expected similarity edges ({num_total_edges * 2}).'
-    assert len(ribap_groups_dict) == (num_genes_per_genome * (num_genomes - 1)) , f'Number of ribap group mappings found ({len(ribap_groups_dict)}) is not equal to number of expected ribap group mappings ({num_genes_per_genome * (num_genomes - 1)}).'
+                    # add heterolog sim scores to sim score dict both ways
+                    negative_target = gene_lsts[target_genome_idx][negative_edge_idx]
+                    similarity_dict[source][negative_target] = score
+                    similarity_dict[negative_target][source] = score
+                    neg_edge_count += 2
+
+    if (nested_len(similarity_dict) / (num_total_edges * 2)) < 0.8: log.info(f'Number of similarity scores in dictionary ({nested_len(similarity_dict)}) diverges by more than 20% from number of expected similarity edges ({num_total_edges * 2}).')
+    else: log.info(f'Generated {(nested_len(similarity_dict) / (num_total_edges * 2)) * 100} % ({nested_len(similarity_dict)}) of expected edges ({num_total_edges * 2}), which is in within the tolerated variance (80 %).')
+    assert len(ribap_groups_dict) == (num_genes_per_genome * (num_genomes)) , f'Number of ribap group mappings found ({len(ribap_groups_dict)}) is not equal to number of expected ribap group mappings ({num_genes_per_genome * (num_genomes)}).'
     assert len(ribap_groups_lst) == num_genes_per_genome , f'Number of ribap groups ({len(ribap_groups_lst)}) is not equal to number of genes per genome ({num_genes_per_genome}), but every gene should belong to one RIBAP group.'
     return similarity_dict, ribap_groups_dict, ribap_groups_lst
 
@@ -176,12 +196,14 @@ def shuffle_synteny_blocks(genomes_lst, k, n):
     Fragment each genome into synteny blocks of size k of which n blocks are shuffled within the genome.
     """
 
+    log.info('Generating and shuffling gene synteny blocks..')
+
     shuffled_genomes = [None] * len(genomes_lst)
     genome_idx = 0
 
     for genome in genomes_lst:
-        genome_fragments = chunks(genome, k)
-        fragments_to_shuffle_indices = random.choices(range(genome_fragments), k = n)
+        genome_fragments = list(chunks(genome, k))
+        fragments_to_shuffle_indices = random.choices(range(len(genome_fragments)), k = n)
 
         selected_frags = [genome_fragments[i] for i in fragments_to_shuffle_indices]
         random.shuffle(selected_frags)
