@@ -244,6 +244,7 @@ class UnionGraphDataset(Dataset):
         super().__init__(root = None, transform = None, pre_transform = None, pre_filter = None)
 
         genome_annotation_df_lst = []
+        genome_annotation_df = None
         genome_name_lst = []
         self.gene_str_ids_lst_train = []
         self.gene_str_ids_lst_val = []
@@ -281,7 +282,7 @@ class UnionGraphDataset(Dataset):
                 self.gene_str_ids_lst, gene_id_by_genome_lst = simulate_gene_ids(num_genes_per_genome, num_genomes)
                 self.gene_id_position_dict = {gene: idx for idx, gene in enumerate(self.gene_str_ids_lst)}
                 self.sim_score_dict_raw, self.ribap_groups_dict, self.ribap_groups_lst = simulate_similarity_scores_and_ribap_dict(gene_id_by_genome_lst, frac_pos_edges)
-                self.gene_id_by_genome_lst = shuffle_synteny_blocks(gene_id_by_genome_lst, k = frag_size, n = num_frags_to_shuffle)
+                self.gene_id_by_genome_lst = shuffle_synteny_blocks(gene_id_by_genome_lst, k = frag_size, n = int(num_frags_to_shuffle))
         else:
         
             # load annotations from gff files and format to pandas dataframe
