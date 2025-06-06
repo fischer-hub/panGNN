@@ -46,7 +46,11 @@ parser.add_argument('--mixed_precision',    help = "mixed precision setting to u
 
 # parse args
 args = parser.parse_args()
-if args.simulate_dataset is not None: args.simulate_dataset = [int(args.simulate_dataset[0]), int(args.simulate_dataset[1]), float(args.simulate_dataset[2]), float(args.simulate_dataset[3]), float(args.simulate_dataset[4])]
+if args.simulate_dataset is not None:
+    if len(args.simulate_dataset) < 5: log.error(f'Argument --simulate_dataset provided but only {len(args.simulate_dataset)} of 5 values were supplied. Exiting..')
+    args.simulate_dataset = [int(args.simulate_dataset[0]), int(args.simulate_dataset[1]), float(args.simulate_dataset[2]), float(args.simulate_dataset[3]), float(args.simulate_dataset[4])]
+
+
 
 # setup logger
 FORMAT = "%(message)s"

@@ -43,8 +43,8 @@ if not args.simulate_dataset:
         dataset = UnionGraphDataset(args.annotation, args.similarity, args.ribap_groups, split=(0.7, 0.15, 0.01), categorical_nodes = args.categorical_node, calculate_baseline=True)
 else:
     log.info('Simulating dataset.')
-    dataset = UnionGraphDataset()
-    #num_genomes = 3
+    dataset = UnionGraphDataset(calculate_baseline = True)
+    num_genomes = args.simulate_dataset[1]
     #dataset  = UnionGraphDataset()
     #dataset.simulate_dataset(2000, num_genomes, 0.15)
 
@@ -334,6 +334,8 @@ elif args.train:
             prediction_bin, prediction_scores, stats = predict_homolog_genes(model, None, batch, binary_th=binary_th, base_labels = (dataset.base_labels, dataset.base_labels_raw))
             writer.add_pr_curve('PR/test', batch.y.cpu(), torch.sigmoid(prediction_scores))
 
+    stats['simulate_dataset'] = 0
+    hparams['simulate_dataset'] = 0
     writer.add_hparams(hparams, stats)
     log.info(f"Time elapsed: {time.time() - start:.4f} seconds")
 
@@ -355,7 +357,7 @@ elif args.train:
     
     shutil.move(os.path.join('plots', 'pr_curve.png'), os.path.join('temp', run_id, run_id + 'pr_curve.png'))
     shutil.move(os.path.join('temp', run_id), 'runs')
-    shutil.move(os.path.join('pangnn.log', run_id), 'runs')
+    #shutil.move(os.path.join('pangnn.log', run_id), 'runs')
     writer.close()
 
 #write_groups_file(dataset.test, prediction_bin)

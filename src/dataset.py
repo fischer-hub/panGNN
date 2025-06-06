@@ -330,7 +330,7 @@ class UnionGraphDataset(Dataset):
             self.ribap_groups_dict, self.ribap_groups_lst, self.gff_is_subset = load_ribap_groups(ribap_groups_file, genome_name_lst)
             #plot_homolog_positions(self.ribap_groups_dict, self.gene_id_position_dict)
         else:
-            self.ribap_groups_dict = None
+            if not args.simulate_dataset: self.ribap_groups_dict = None
             self.labels_ts = None
             self.class_balance = None
 
@@ -460,7 +460,7 @@ class UnionGraphDataset(Dataset):
             assert len(sim_edge_weights) == len(sim_edge_index[0]), f'Number of similarity edges is differetn from number of edge weights (similarity scores), can not map {len(sim_edge_weights)} edge weights to {len(sim_edge_index[0])} edges.'
 
 
-            if self.ribap_groups_dict:
+            if self.ribap_groups_dict or args.simulate_dataset:
                 labels_ts = map_labels_to_edge_index(sim_edge_index, gene_lst, self.ribap_groups_dict, use_cache=False)
                 pos += labels_ts.sum().item()
                 neg += len(labels_ts) - labels_ts.sum().item()
@@ -511,8 +511,7 @@ class UnionGraphDataset(Dataset):
             base_labels_raw_lst.append(base_labels_raw)
             data_lst.append(graph)
 
-
-        local_class_balance = neg / pos
+        local_class_balance = (neg+1) / (pos+1)
         log.debug(f'{current_process().name} finished.')
         
         return (data_lst, local_class_balance, base_labels_lst, base_labels_raw_lst)
