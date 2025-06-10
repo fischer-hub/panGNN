@@ -3,7 +3,7 @@ from src.setup import log
 import numpy as np
 from src.plot import plot_logit_distribution, plot_simscore_class
 from src.preprocessing import construct_neighbour_lst, generate_neighbour_edge_features
-from src.helper import char_id_generator, pairwise, chunks
+from src.helper import char_id_generator, pairwise, chunks, nested_len
 from collections import defaultdict
 
 
@@ -99,9 +99,6 @@ def simulate_gene_ids(num_genes_per_genome, num_genomes):
     genome_ids_by_genome = [[ f'{genome_id}_{gene_number:06}' for gene_number in range(num_genes_per_genome)] for genome_id in genome_ids]
     return genome_ids_flat, genome_ids_by_genome
 
-
-def nested_len(d):
-    return sum([nested_len(v) if isinstance(v, dict) else 1 for v in d.values()])
 
 
 def simulate_similarity_scores_and_ribap_dict(gene_lsts, frac_pos_edges):

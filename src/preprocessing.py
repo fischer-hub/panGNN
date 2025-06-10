@@ -5,6 +5,7 @@ from src.setup import log, args
 import numpy as np
 from scipy.special import logsumexp
 from collections import Counter
+from src.helper import nested_len
 
 def build_adjacency_vectors(num_neighbours, gene_id_lst):
 
@@ -528,4 +529,5 @@ def normalize_sim_scores(sim_score_dict, t = 0.5, epsilon = 1e-8, pseudo_count =
 
     log.info(f"Normalized similarity scores with t = {t} between gene candidate with loss of {len(empty_dict_ids)} genes in total, e.g. due to only having self comparisons.")
     log.warning(f'one_count: {one_count/all_count *100} %')
+    log.info(f'Created a total of {nested_len(normalized_dict)} edges for input graph.')
     return normalized_dict
