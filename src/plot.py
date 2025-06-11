@@ -274,12 +274,14 @@ def plot_simscore_distribution_by_class(dataset, path = os.path.join('plots', 's
 
     plt.figure()
     import statistics
-    class_0_sim_scores = [dataset.edge_attr[i].item() for i in range(len(dataset.edge_attr)) if dataset.y[i] == 0]
+    print(dataset)
+    class_0_sim_scores = [dataset.edge_attr[i].item() for i in range(len(dataset.y)) if dataset.y[i] == 0]
     print(f"class 0 sim scores: stdev: {statistics.stdev(class_0_sim_scores)}, mean: {sum(class_0_sim_scores) / len(class_0_sim_scores)}")
     
 
-    class_1_sim_scores = [dataset.edge_attr[i].item() for i in range(len(dataset.edge_attr)) if dataset.y[i] == 1]
+    class_1_sim_scores = [dataset.edge_attr[i].item() for i in range(len(dataset.y)) if dataset.y[i] == 1]
     print(f"class 1 sim scores: stdev: {statistics.stdev(class_1_sim_scores)}, mean: {sum(class_1_sim_scores) / len(class_1_sim_scores)}")
+    print(f'percentage pos edges: {len(class_1_sim_scores) / len(dataset.y)}')
 
     plt.hist(class_0_sim_scores, bins=15, label = 'class 0', alpha = 0.6)
     plt.hist(class_1_sim_scores, bins=15, label = 'class 1', alpha = 0.6)
@@ -287,6 +289,7 @@ def plot_simscore_distribution_by_class(dataset, path = os.path.join('plots', 's
 
     plt.xlabel('Score Value')
     plt.ylabel('Frequency')
+    plt.yscale('log')
     plt.title('Distribution of Similarity Scores by Class')
 
     if not os.path.exists(os.path.dirname(path)):

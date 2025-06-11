@@ -8,7 +8,7 @@ from scipy.sparse import csr_array
 from scipy.sparse.csgraph import connected_components
 from torch_geometric.utils.convert import to_scipy_sparse_matrix
 from torch_geometric.transforms import RemoveDuplicatedEdges
-from src.plot import plot_violin_distributions, plot_homolog_positions
+from src.plot import plot_violin_distributions, plot_homolog_positions, plot_simscore_distribution_by_class
 from multiprocessing import Pool, current_process
 from src.simulate import simulate_gene_ids, simulate_similarity_scores_and_ribap_dict, shuffle_synteny_blocks
 

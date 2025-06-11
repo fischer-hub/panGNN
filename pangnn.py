@@ -77,7 +77,7 @@ device = accelerator.device
 #model = MyGCN(dataset = dataset.train, hidden_dim = hidden_dim, num_neighbours = args.neighbours, node_feature_dim = gene_id_embedding_dim, device = device)
 model = AlternateGCN(device = device, dataset = dataset.train, categorical_nodes = dataset.categorical_nodes, dims = [args.node_dim, args.hidden_dim])
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)#selflr=0.00005)
-scheduler = ReduceLROnPlateau(optimizer, mode='min', patience = 7, factor = 0.6)
+scheduler = ReduceLROnPlateau(optimizer, mode='min', patience = 700, factor = 0.6)
 #scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.90)
 #model, optimizer, data = accelerator.prepare(model, optimizer, dataset)
 

@@ -193,7 +193,7 @@ def shuffle_synteny_blocks(genomes_lst, k, n):
     Fragment each genome into synteny blocks of size k of which n blocks are shuffled within the genome.
     """
 
-    if n >= 1:
+    if n <= 1:
         log.info('Cannot shuffle a single synteny block, returning original gene synteny..')
         return genomes_lst
 
