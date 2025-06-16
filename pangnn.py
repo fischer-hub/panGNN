@@ -356,7 +356,7 @@ elif args.train:
     writer.flush()
     
     shutil.move(os.path.join('plots', 'pr_curve.png'), os.path.join('temp', run_id, run_id + 'pr_curve.png'))
-    shutil.move(os.path.join('temp', run_id), 'runs')
+    shutil.move(os.path.join('temp', run_id), args.output)
     #shutil.move(os.path.join('pangnn.log', run_id), 'runs')
     writer.close()
 
