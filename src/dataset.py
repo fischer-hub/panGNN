@@ -461,7 +461,7 @@ class UnionGraphDataset(Dataset):
             assert len(sim_edge_index[0]) == len(sim_edge_index[1]), f'List or origin nodes ({len(sim_edge_index[0])}) is of different length than list of target nodes ({len(sim_edge_index[1])}), invalid edge index!'
 
             sim_edge_weights = map_edge_weights(sim_edge_index, sub_sim_score_dict, gene_lst, use_cache=False)
-            assert len(sim_edge_weights) == len(sim_edge_index[0]), f'Number of similarity edges is differetn from number of edge weights (similarity scores), can not map {len(sim_edge_weights)} edge weights to {len(sim_edge_index[0])} edges.'
+            assert len(sim_edge_weights) == len(sim_edge_index[0]), f'Number of similarity edges is different from number of edge weights (similarity scores), can not map {len(sim_edge_weights)} edge weights to {len(sim_edge_index[0])} edges.'
 
 
             if self.ribap_groups_dict or args.simulate_dataset:

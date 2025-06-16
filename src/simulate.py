@@ -194,7 +194,7 @@ def shuffle_synteny_blocks(genomes_lst, k, n):
     """
 
     if n <= 1:
-        log.info('Cannot shuffle a single synteny block, returning original gene synteny..')
+        log.info('Cannot shuffle a single synteny block but blocks to shuffle is set < 1, returning original gene synteny..')
         return genomes_lst
 
     log.info('Generating and shuffling gene synteny blocks..')
