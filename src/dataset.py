@@ -360,6 +360,7 @@ class UnionGraphDataset(Dataset):
             
             mend = time.time()
             log.info(f'Generated sub-graphs successfully, elapsed time: {mend-mstart} s.')
+            quit()
 
             del results
             del class_balance_lst
@@ -437,12 +438,15 @@ class UnionGraphDataset(Dataset):
                 continue
 
             similar_gene_lst = get_connected_nodes(group, self.sim_score_dict, args.neighbours)
+            #print(f'len before {len(similar_gene_lst)}')
             if not similar_gene_lst: continue
 
             assert set(group).issubset(similar_gene_lst), f'Genes from gene family {group} not part of connected similarity nodes {similar_gene_lst}.'
 
             neighbour_edge_index, sub_gene_id_pos_dict, gene_lst = get_neighbour_graph(similar_gene_lst, self.gene_id_position_dict, self.gene_str_ids_lst, args.neighbours)
+            
             neighbour_edge_index = remove_duplicate_edges_tuple(neighbour_edge_index)
+            #print(f'len after neighbour edges: {len(neighbour_edge_index[0])}')
             assert set(similar_gene_lst).issubset(gene_lst), f'Genes from similarity gene set {similar_gene_lst} not part of sub graph gene set with neighbour genes {gene_lst}.'
             assert len(neighbour_edge_index[0]) == len(neighbour_edge_index[1]), f'List or origin nodes ({len(neighbour_edge_index[0])}) is of different length than list of target nodes ({len(neighbour_edge_index[1])}), invalid edge index!'
 
