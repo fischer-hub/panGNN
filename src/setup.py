@@ -35,7 +35,7 @@ parser.add_argument('--from_pickle',        help = 'path to pickle file to load 
 parser.add_argument('--node_dim',           help = 'dimension of node embedding and input of first convolution layer', default = 64, type = int)
 parser.add_argument('--hidden_dim',         help = 'dimension of hidden convoluytion layer(s)', default = 128, type = int)
 parser.add_argument('--decoder',            help = "decoding strategy (similarity measure) to use predict link between two node embeddings ['mlp', 'cosine', 'dotproduct']", default = 'mlp', type = str)
-parser.add_argument('--o', '--output',        help = "output directory to store run files (PR-AUC, tensorboard track files, etc.) in ", default = 'runs', type = str)
+parser.add_argument('-o', '--output',        help = "output directory to store run files (PR-AUC, tensorboard track files, etc.) in ", default = 'runs', type = str)
 
 # train mode args
 parser.add_argument('--train',              help = 'set pangnn into training mode', action='store_true')
