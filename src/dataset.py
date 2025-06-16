@@ -360,7 +360,6 @@ class UnionGraphDataset(Dataset):
             
             mend = time.time()
             log.info(f'Generated sub-graphs successfully, elapsed time: {mend-mstart} s.')
-            quit()
 
             del results
             del class_balance_lst
