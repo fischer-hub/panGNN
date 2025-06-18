@@ -150,7 +150,7 @@ def simulate_similarity_scores_and_ribap_dict(gene_lsts, frac_pos_edges):
 
 
         # assume genes at same pos are orthologs and score come from gamma distr with highest mean
-        ortholog_scores = simulate_bit_scores(500, 10, num_edges_per_group)
+        ortholog_scores = simulate_bit_scores(500, 10000, num_edges_per_group)
 
 
         for (source, target), score in zip(itertools.combinations(group, 2), ortholog_scores):
@@ -173,7 +173,7 @@ def simulate_similarity_scores_and_ribap_dict(gene_lsts, frac_pos_edges):
 
                 # for source gene select n target genes to add negative edges to
                 negative_edge_idxs = random.choices(range(num_genes_per_genome), k = num_negative_edges_per_gene_lst[ribap_group_count])
-                heterolog_scores = simulate_bit_scores(20, 10, len(negative_edge_idxs))
+                heterolog_scores = simulate_bit_scores(200, 10000, len(negative_edge_idxs))
 
                 for negative_edge_idx, score in zip(negative_edge_idxs, heterolog_scores):
 
