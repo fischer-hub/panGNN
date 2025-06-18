@@ -11,11 +11,13 @@ from collections import defaultdict
 def simulate_bit_scores(expectation_value, dispersion, n):
 
     # Calculate shape (k) and scale (theta) from mean and variance
-    shape = expectation_value / dispersion
-    scale = expectation_value
+    #shape = expectation_value / dispersion
+    #scale = expectation_value
+        
+    shape = (expectation_value ** 2) / dispersion
+    scale = dispersion / expectation_value
+    
     return np.random.gamma(shape, scale, size = n)
-
-
 
 """
 def generate_data(num_genes_per_genome, num_gene_families1, num_gene_families2, fraction_orthologs, fraction_paralogs_same_species, fraction_paralogs_diff_species):
