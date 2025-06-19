@@ -129,7 +129,8 @@ def simulate_similarity_scores_and_ribap_dict(gene_lsts, frac_pos_edges):
     log.info(f'Num neg edges: {num_negative_edges}')
     mean_neg_candidates_per_gene = math.floor(num_negative_edges / num_total_genes / num_genomes)
     log.info(f'Num avg neg edges per gene: {mean_neg_candidates_per_gene}')
-    num_negative_edges_per_gene_lst = np.random.poisson(lam = mean_neg_candidates_per_gene, size = num_total_genes)
+    #num_negative_edges_per_gene_lst = np.random.poisson(lam = mean_neg_candidates_per_gene, size = num_total_genes)
+    num_negative_edges_per_gene_lst = np.random.negative_binomial(n=0.2, p=0.2 / (mean_neg_candidates_per_gene + 0.2), size=num_total_genes)
     num_negative_edges_per_gene_lst = [int(i+1) for i in num_negative_edges_per_gene_lst]
     log.info(f'Number of drawn neg edges: {sum(num_negative_edges_per_gene_lst)}')
     ribap_groups_lst = [None] * num_genes_per_genome

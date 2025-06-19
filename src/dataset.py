@@ -514,7 +514,7 @@ class UnionGraphDataset(Dataset):
             base_labels_raw_lst.append(base_labels_raw)
             data_lst.append(graph)
 
-        local_class_balance = (neg+1) / (pos+1)
+        local_class_balance = neg / pos
         log.debug(f'{current_process().name} finished.')
         
         return (data_lst, local_class_balance, base_labels_lst, base_labels_raw_lst)
