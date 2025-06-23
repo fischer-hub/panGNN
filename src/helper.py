@@ -353,6 +353,10 @@ def get_connected_nodes(gene_lst, sim_score_dict, n, connected_nodes = None):
             new_connected_nodes.update(sim_score_dict[gene].keys())
 
     new_connected_nodes = new_connected_nodes - connected_nodes
+
+    if not new_connected_nodes:
+        return list(connected_nodes)
+
     connected_nodes.update(new_connected_nodes)
 
     return get_connected_nodes(new_connected_nodes, sim_score_dict, n-1, connected_nodes)
@@ -365,7 +369,7 @@ def get_neighbour_graph(gene_lst, gene_id_pos_dict, gene_id_lst, n):
     edge_counter = 0
 
     # this will be the remapped node index of neighbour nodes
-    neighbour_id_lst = list(gene_lst)
+    neighbour_id_lst = {gene: None for gene in list(gene_lst)}
     old_new_pos_dict = {gene_id_pos_dict[gene]: idx for idx, gene in enumerate(gene_lst)}
 
     for new_origin_gene_pos, origin_gene in enumerate(gene_lst):
@@ -385,11 +389,11 @@ def get_neighbour_graph(gene_lst, gene_id_pos_dict, gene_id_lst, n):
             neighbour_gene_id = gene_id_lst[old_neighbour_gene_pos]
 
             # if we havent seen the string id of the neighbour add it to list (new node index)
-            # since we just added the node its edge index id will be len(new node idx) -1
+            # since we just added the node its edge index id will be len(new node idx)
             # map the old position of origin and neighbour nodes to new pos in case we come across the node again
             if neighbour_gene_id not in neighbour_id_lst:
-                new_neighbour_gene_pos = len(neighbour_id_lst)-1
-                neighbour_id_lst.append(neighbour_gene_id)
+                new_neighbour_gene_pos = len(neighbour_id_lst)
+                neighbour_id_lst[neighbour_gene_id] = None
                 old_new_pos_dict[old_neighbour_gene_pos] = new_neighbour_gene_pos
             else:
                 # we have already seen this neighbour use the position it has in the new node index
@@ -410,7 +414,7 @@ def get_neighbour_graph(gene_lst, gene_id_pos_dict, gene_id_lst, n):
     gene_id_pos_dict = {gene: idx for idx, gene in enumerate(neighbour_id_lst)}
 
     # return data object with node features = 1 and labels = 0 (neighbour edges are never label 1)
-    return (edge_index, gene_id_pos_dict, neighbour_id_lst)
+    return (edge_index, gene_id_pos_dict, list(neighbour_id_lst))
 
 
 def remove_duplicate_edges_tuple(edge_index):
