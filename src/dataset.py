@@ -490,22 +490,27 @@ class UnionGraphDataset(Dataset):
                 torch.tensor((sim_edge_index[1]), dtype = torch.long)
             ))
 
-            union_edge_index = torch.stack((
-                torch.cat((torch.tensor(neighbour_edge_index[0]), sim_edge_index[0])),
-                torch.cat((torch.tensor(neighbour_edge_index[1]), sim_edge_index[1]))
-            ))
+            if union_edge_weights:
+                
+                union_edge_index = torch.stack((
+                    torch.cat((torch.tensor(neighbour_edge_index[0]), sim_edge_index[0])),
+                    torch.cat((torch.tensor(neighbour_edge_index[1]), sim_edge_index[1]))
+                ))
 
 
-            union_edge_weights = torch.cat((
-                torch.tensor([1] * (len(union_edge_index[0]) - len(sim_edge_index[0]))),
-                sim_edge_weights
-            ))
+                union_edge_weights = torch.cat((
+                    torch.tensor([1] * (len(union_edge_index[0]) - len(sim_edge_index[0]))),
+                    sim_edge_weights
+                ))
 
-            assert len(union_edge_weights) == len(union_edge_index[0]), f'Number of similarity edges is different from number of edge weights (similarity scores), can not map {len(union_edge_weights)} edge weights to {len(union_edge_index[0])} edges.'
+                assert len(union_edge_weights) == len(union_edge_index[0]), f'Number of similarity edges is different from number of edge weights (similarity scores), can not map {len(union_edge_weights)} edge weights to {len(union_edge_index[0])} edges.'
 
-            graph = Data(x, sim_edge_index, union_edge_weights, labels_ts)
+                graph = Data(x, sim_edge_index, union_edge_weights, labels_ts)
+                graph.union_edge_index = union_edge_index.long()
             
-            graph.union_edge_index = union_edge_index.long()
+            else:
+                graph = Data(x, sim_edge_index, sim_edge_weights, labels_ts)
+                graph.neighbour_edge_index = neighbour_edge_index.long()
 
             if self.calculate_baseline:
                 graph.gene_lst = gene_lst
@@ -559,21 +564,26 @@ class UnionGraphDataset(Dataset):
         origin_idx = origin_idx[:edge_count]
         target_idx = target_idx[:edge_count]
 
-        union_edge_index_ts = torch.stack((torch.cat((edge_index_ts[0], torch.tensor(origin_idx))), torch.cat((edge_index_ts[1], torch.tensor(target_idx)))))
+        neighbour_edge_index_ts = torch.stack((torch.tensor(origin_idx), torch.tensor(target_idx)))
 
         if args.union_edge_weights:
+            union_edge_index_ts = torch.stack((torch.cat((edge_index_ts[0], neighbour_edge_index_ts[0])), torch.cat((edge_index_ts[1], neighbour_edge_index_ts[1]))))
             assert (len(union_edge_index_ts[0]) - len(edge_index_ts[0])) > 0, f'Union edge index ({len(union_edge_index_ts[0])}) is smaller than similarity edge index ({len(edge_index_ts[0])}) but was built based on similarity edge index, something broke!'
-            edge_weight_ts = torch.cat((edge_weight_ts, torch.tensor([1] * (len(union_edge_index_ts[0]) - len(edge_index_ts[0])))))
-            assert len(edge_weight_ts) == len(union_edge_index_ts[0]), f'Number of edge weights ({len(edge_weight_ts)}) is different from number of edges in union edge index ({len(union_edge_index_ts[0])}).'
+            union_edge_weights = torch.cat((edge_weight_ts, torch.tensor([1] * (len(union_edge_index_ts[0]) - len(edge_index_ts[0])))))
+            assert len(union_edge_weights) == len(union_edge_index_ts[0]), f'Number of edge weights ({len(edge_weight_ts)}) is different from number of edges in union edge index ({len(union_edge_index_ts[0])}).'
             #labels_ts      = torch.cat((labels_ts, torch.tensor([1] * (len(union_edge_index_ts[0]) - len(labels_ts)))))
         
+            graph_data = Data(x, edge_index_ts, union_edge_weights, labels_ts)
+            graph_data.union_edge_index = union_edge_index_ts
+        else:
+            graph_data = Data(x, edge_index_ts, edge_weight_ts, labels_ts)
+            graph_data.union_edge_index = neighbour_edge_index_ts
+
         if self.categorical_nodes:
             x = torch.ones(len(self.gene_str_ids_lst))
         else:
             x = node_features_ts
 
-        graph_data = Data(x, edge_index_ts, edge_weight_ts, labels_ts)
-        graph_data.union_edge_index = union_edge_index_ts
 
         # since the sub graph in inference mode is the whole graph we pass the whole sim score dict instread of the sub sim score dict here
         log.info('Calculating baseline labels for max score candidates..')

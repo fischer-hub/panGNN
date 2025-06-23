@@ -138,31 +138,25 @@ class AlternateGCN(torch.nn.Module):
 
             #log.debug(f"Outputting nodes to decode function of shape: {nodes.shape}\n{nodes}")
 
+        elif args.base_model:
+
+            nodes = self.conv_in(node_embeddings, graph.sim_edge_index, graph.edge_attr)
+            nodes = self.activation_fct(nodes)
+            nodes = self.conv_out(nodes, graph.sim_edge_index, graph.edge_attr)
+            nodes = self.activation_fct(nodes)
+
+
         else:
 
-        # convolute over similarity edges
-            nodes = self.conv_in(node_embeddings, graph.edge_index, graph.edge_attr)
+            # convolute over similarity edges
+            nodes = self.conv_in(node_embeddings, graph.sim_edge_index, graph.edge_attr)
             nodes = self.activation_fct(nodes)
 
-            # convolute over union graph edges
-            nodes = self.conv_hidden(nodes, graph.union_edge_index)
+            # convolute over neighbour graph edges
+            nodes = self.conv_hidden(nodes, graph.neighbour_edge_index)
             nodes = self.activation_fct(nodes)
             
-            for layer in range(max(args.neighbours-2, 1)):
-            
-                log.debug(f'Passing union graph data to convolution layer {layer + 1}..')
-                # convolute over similarity edges
-                nodes = self.conv_hidden(nodes, graph.edge_index, graph.edge_attr)
-                nodes = self.activation_fct(nodes)
-
-                # convolute over union graph edges
-                nodes = self.conv_hidden(nodes, graph.union_edge_index)
-                nodes = self.activation_fct(nodes)
-
-
-            nodes = self.conv_hidden(nodes, graph.edge_index, graph.edge_attr)
-            nodes = self.activation_fct(nodes)
-            nodes = self.conv_out(nodes, graph.union_edge_index)
+            nodes = self.conv_out(nodes, graph.sim_edge_index, graph.edge_attr)
             nodes = self.activation_fct(nodes)
 
             #log.debug(f"Outputting nodes to decode function of shape: {nodes.shape}\n{nodes}")
