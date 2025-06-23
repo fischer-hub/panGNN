@@ -490,7 +490,7 @@ class UnionGraphDataset(Dataset):
                 torch.tensor((sim_edge_index[1]), dtype = torch.long)
             ))
 
-            if union_edge_weights:
+            if args.union_edge_weights:
                 
                 union_edge_index = torch.stack((
                     torch.cat((torch.tensor(neighbour_edge_index[0]), sim_edge_index[0])),
@@ -510,7 +510,10 @@ class UnionGraphDataset(Dataset):
             
             else:
                 graph = Data(x, sim_edge_index, sim_edge_weights, labels_ts)
-                graph.neighbour_edge_index = neighbour_edge_index.long()
+                graph.neighbour_edge_index = torch.stack((
+                    torch.tensor((neighbour_edge_index[0]), dtype = torch.long),
+                    torch.tensor((neighbour_edge_index[1]), dtype = torch.long)
+                )) 
 
             if self.calculate_baseline:
                 graph.gene_lst = gene_lst

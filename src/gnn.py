@@ -139,6 +139,8 @@ class AlternateGCN(torch.nn.Module):
             #log.debug(f"Outputting nodes to decode function of shape: {nodes.shape}\n{nodes}")
 
         elif args.base_model:
+            
+            graph.sim_edge_index = graph.edge_index
 
             nodes = self.conv_in(node_embeddings, graph.sim_edge_index, graph.edge_attr)
             nodes = self.activation_fct(nodes)
@@ -147,6 +149,8 @@ class AlternateGCN(torch.nn.Module):
 
 
         else:
+            
+            graph.sim_edge_index = graph.edge_index
 
             # convolute over similarity edges
             nodes = self.conv_in(node_embeddings, graph.sim_edge_index, graph.edge_attr)
