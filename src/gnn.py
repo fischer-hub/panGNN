@@ -101,6 +101,8 @@ class AlternateGCN(torch.nn.Module):
         self.conv_hidden = GCNConv(hidden_dim, hidden_dim, add_self_loops = False)
         self.conv_out = GCNConv(hidden_dim, node_embedding_dim, add_self_loops = False)
 
+        self.linear_out = torch.nn.Linear(hidden_dim, node_embedding_dim)
+
         #self.activation_fct = torch.nn.LeakyReLU()
         #self.activation_fct = F.relu
         self.activation_fct = torch.nn.ELU()
@@ -139,12 +141,12 @@ class AlternateGCN(torch.nn.Module):
             #log.debug(f"Outputting nodes to decode function of shape: {nodes.shape}\n{nodes}")
 
         elif args.base_model:
-            
+
             graph.sim_edge_index = graph.edge_index
 
             nodes = self.conv_in(node_embeddings, graph.sim_edge_index, graph.edge_attr)
             nodes = self.activation_fct(nodes)
-            nodes = self.conv_out(nodes, graph.sim_edge_index, graph.edge_attr)
+            nodes = self.linear_out(nodes)
             nodes = self.activation_fct(nodes)
 
 
@@ -157,10 +159,10 @@ class AlternateGCN(torch.nn.Module):
             nodes = self.activation_fct(nodes)
 
             # convolute over neighbour graph edges
-            nodes = self.conv_hidden(nodes, graph.neighbour_edge_index)
-            nodes = self.activation_fct(nodes)
+            #nodes = self.conv_hidden(nodes, graph.neighbour_edge_index)
+            #nodes = self.activation_fct(nodes)
             
-            nodes = self.conv_out(nodes, graph.sim_edge_index, graph.edge_attr)
+            nodes = self.conv_out(nodes, graph.neighbour_edge_index, graph.edge_attr)
             nodes = self.activation_fct(nodes)
 
             #log.debug(f"Outputting nodes to decode function of shape: {nodes.shape}\n{nodes}")

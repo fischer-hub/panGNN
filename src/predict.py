@@ -2,7 +2,7 @@ import torch, time
 from rich.console import Console
 from src.setup import log, args
 from src.plot import plot_roc, plot_logit_distribution, plot_pr_curve, plot_confusion_matrix, plot_sim_score_vs_logit
-from src.helper import concat_graph_data, calculate_logit_baseline_labels
+from src.helper import concat_graph_data, calculate_logit_baseline_labels, format_duration
 from sklearn.metrics import confusion_matrix, PrecisionRecallDisplay
 import torch.nn.functional as F
 
@@ -30,7 +30,7 @@ def predict_homolog_genes(model, train_dataset = None, test_dataset = None, bina
             #test_dataset.to(device)
             inference_start_time = time.time()
             edge_scores = model(test_dataset)
-            log.info(f"Time elapsed during inference on test datset: {time.time() - inference_start_time:.4f} seconds")
+            log.info(f"Time elapsed during inference on test datset: {format_duration(time.time() - inference_start_time):.4f} seconds")
 
             if isinstance(test_dataset, tuple): test_dataset = test_dataset[0]
 

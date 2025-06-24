@@ -1,7 +1,7 @@
 import torch, os, pickle, random, time, math
 from src.preprocessing import load_gff, load_similarity_score, load_ribap_groups, build_edge_index, map_edge_weights, map_labels_to_edge_index, construct_neighbour_lst, generate_neighbour_edge_features, build_adjacency_vectors, normalize_sim_scores
 from src.setup import log, args
-from src.helper import concat_graph_data, simulate_dataset, generate_minimal_dataset, calculate_baseline_labels, get_connected_nodes, get_neighbour_graph, remove_duplicate_edges_tuple, char_id_generator
+from src.helper import concat_graph_data, simulate_dataset, generate_minimal_dataset, calculate_baseline_labels, get_connected_nodes, get_neighbour_graph, remove_duplicate_edges_tuple, char_id_generator, format_duration
 from torch_geometric.data import Dataset, Data
 from rich.progress import track, Console, Progress
 from scipy.sparse import csr_array
@@ -359,7 +359,7 @@ class UnionGraphDataset(Dataset):
                 self.class_balance = sum(class_balance_lst) / len(class_balance_lst)
             
             mend = time.time()
-            log.info(f'Generated sub-graphs successfully, elapsed time: {mend-mstart} s.')
+            log.info(f'Generated sub-graphs successfully, elapsed time: {format_duration(mend-mstart)} s.')
 
             del results
             del class_balance_lst

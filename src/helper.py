@@ -590,3 +590,17 @@ def pairwise(iterable):
 
 def nested_len(d):
     return sum([nested_len(v) if isinstance(v, dict) else 1 for v in d.values()])
+
+
+def format_duration(seconds):
+    if seconds < 60:
+        return f"{seconds:.2f} seconds"
+    elif seconds < 3600:
+        minutes = seconds // 60
+        seconds = seconds % 60
+        return f"{int(minutes)} min {seconds:.2f} sec"
+    else:
+        hours = seconds // 3600
+        minutes = (seconds % 3600) // 60
+        seconds = seconds % 60
+        return f"{int(hours)} h {int(minutes)} min {seconds:.2f} sec"
