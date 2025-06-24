@@ -162,7 +162,7 @@ class AlternateGCN(torch.nn.Module):
             #nodes = self.conv_hidden(nodes, graph.neighbour_edge_index)
             #nodes = self.activation_fct(nodes)
             
-            nodes = self.conv_out(nodes, graph.neighbour_edge_index, graph.edge_attr)
+            nodes = self.conv_out(nodes, graph.neighbour_edge_index)
             nodes = self.activation_fct(nodes)
 
             #log.debug(f"Outputting nodes to decode function of shape: {nodes.shape}\n{nodes}")

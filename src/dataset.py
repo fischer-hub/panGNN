@@ -359,7 +359,7 @@ class UnionGraphDataset(Dataset):
                 self.class_balance = sum(class_balance_lst) / len(class_balance_lst)
             
             mend = time.time()
-            log.info(f'Generated sub-graphs successfully, elapsed time: {format_duration(mend-mstart)} s.')
+            log.info(f'Generated sub-graphs successfully, elapsed time: {format_duration(mend-mstart)}.')
 
             del results
             del class_balance_lst
