@@ -63,6 +63,9 @@ There is quite a lot of options to change, especially if you want to train a new
                         dynamically calculate the binary threshold that separates the predictions best based on yuden index (default: False)
   --simulate_dataset SIMULATE_DATASET SIMULATE_DATASET SIMULATE_DATASET SIMULATE_DATASET SIMULATE_DATASET
                         parameters to generate simulated input data with seperated by whitespace [num_genes_per_genome, num_genomes, fraction_pos_edges, num_fragments, num_frags_to_shuffle] (default: None)
+  --simulated_score_means SIMULATED_SCORE_MEANS SIMULATED_SCORE_MEANS
+                        means of the gamma distributions to draw the scores of negative and positive edge scores from during simulation seperated by whitespace [negative_mean, positive_mean] (default: [200,
+                        500])
   --union_edge_weights  unite edge weights from sim and neighbour graph and only convolute over one (default: False)
   --exclude_trivial     exclude scores from trivial cases where there is only one candidate to predict the true homolog from (default: False)
   --skip_connections    activate skip connections in model (default: False)

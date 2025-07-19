@@ -1,5 +1,5 @@
 import random, torch, os, math, itertools
-from src.setup import log
+from src.setup import log, args
 import numpy as np
 from src.plot import plot_logit_distribution, plot_simscore_class
 from src.preprocessing import construct_neighbour_lst, generate_neighbour_edge_features
@@ -111,7 +111,8 @@ def simulate_similarity_scores_and_ribap_dict(gene_lsts, frac_pos_edges):
     ribap_groups_dict = {}
     pos_edge_count = 0
     neg_edge_count = 0
-    edge_count = 0
+    neg_mean = args.simulated_score_means[0]
+    pos_mean = args.simulated_score_means[1]
     
     num_genomes = len(gene_lsts)
     log.info(f'Num genomes: {num_genomes}')
@@ -132,7 +133,8 @@ def simulate_similarity_scores_and_ribap_dict(gene_lsts, frac_pos_edges):
     #num_negative_edges_per_gene_lst = np.random.poisson(lam = mean_neg_candidates_per_gene, size = num_total_genes)
     num_negative_edges_per_gene_lst = np.random.negative_binomial(n=0.2, p=0.2 / (mean_neg_candidates_per_gene + 0.2), size=num_total_genes)
     num_negative_edges_per_gene_lst = [int(i+1) for i in num_negative_edges_per_gene_lst]
-    log.info(f'Number of drawn neg edges: {sum(num_negative_edges_per_gene_lst)}')
+    log.info(f'Drawing negative edge scores from gramma distribution with mean: {neg_mean}')
+    log.info(f'Drawing positive edge scores from gramma distribution with mean: {pos_mean}')
     ribap_groups_lst = [None] * num_genes_per_genome
     ribap_group_count = 0
     last_source = ''
@@ -151,7 +153,7 @@ def simulate_similarity_scores_and_ribap_dict(gene_lsts, frac_pos_edges):
 
 
         # assume genes at same pos are orthologs and score come from gamma distr with highest mean
-        ortholog_scores = simulate_bit_scores(500, 10000, num_edges_per_group)
+        ortholog_scores = simulate_bit_scores(pos_mean, 10000, num_edges_per_group)
 
 
         for (source, target), score in zip(itertools.combinations(group, 2), ortholog_scores):
@@ -174,7 +176,7 @@ def simulate_similarity_scores_and_ribap_dict(gene_lsts, frac_pos_edges):
 
                 # for source gene select n target genes to add negative edges to
                 negative_edge_idxs = random.choices(range(num_genes_per_genome), k = num_negative_edges_per_gene_lst[ribap_group_count])
-                heterolog_scores = simulate_bit_scores(200, 10000, len(negative_edge_idxs))
+                heterolog_scores = simulate_bit_scores(neg_mean, 10000, len(negative_edge_idxs))
 
                 for negative_edge_idx, score in zip(negative_edge_idxs, heterolog_scores):
 
