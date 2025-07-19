@@ -19,8 +19,8 @@ parser.add_argument('-c', '--cache',  	  help = 'cache computionally slow data s
 parser.add_argument('-l', '--log_level',  help = "set the level to print logs ['NOTSET', 'DEBUG', 'INFO', 'WARN', 'ERROR', 'CRITICAL']", default = 'INFO', type = str)
 parser.add_argument('-m', '--model_args', help = 'path to save or load model from, depending on training or prediction mode', default = 'model.pkl', type = str)
 parser.add_argument('-n', '--neighbours', help = 'number of genes from target gene to consider as neighbours', default = 1, type = int)
-parser.add_argument('-a', '--annotation', help = 'path to the two annotation files in gff format of the two input genomes, seperated by tab', default = ["data/dummy_dataset/dummy1.gff", "data/dummy_dataset/dummy2.gff"], type = str, nargs = '*')
-parser.add_argument('-s', '--similarity', help = 'path to the similarity score file (e.g tab seperated output of MMSeqs2)', default = os.path.join('data', 'dummy_dataset', 'dummy_mmseqs2.csv'), type = str)
+parser.add_argument('-a', '--annotation', help = 'path to the two annotation files in gff format of the two input genomes, seperated by tab', default = [os.path.join("data", "Cga_08-1274-3_RENAMED.gff"), os.path.join("data", "Cga_12-4358_RENAMED.gff")], type = str, nargs = '*')
+parser.add_argument('-s', '--similarity', help = 'path to the similarity score file (e.g tab seperated output of MMSeqs2)', default = os.path.join('data', 'mmseq2_result.csv'), type = str)
 parser.add_argument('--binary_threshold', help = 'binary threshold to classify output probabilities to the label class', default = 0.5, type = float)
 parser.add_argument('--dynamic_binary_threshold', help = 'dynamically calculate the binary threshold that separates the predictions best based on yuden index', action = 'store_true')
 parser.add_argument('--simulate_dataset', help = 'parameters to generate simulated input data with seperated by whitespace [num_genes_per_genome, num_genomes, fraction_pos_edges, num_fragments, num_frags_to_shuffle]', nargs=5, type=str, default = None)
@@ -33,6 +33,7 @@ parser.add_argument('--normalization_temp', help = 'temperature value for simila
 parser.add_argument('--tb_comment',         help = 'comment to append to current run for evaluation with tensorboard', default = '')
 parser.add_argument('--from_pickle',        help = 'path to pickle file to load saved dataset from', default = '')
 parser.add_argument('--to_pickle',          help = 'path to pickle file to save current dataset to', default = '')
+parser.add_argument('--fix_dataset',        help = "for loaded dataset fix subset instead of generating it newly, chose from ['train', 'val', 'test']", default = [], type = str, nargs = '*')
 parser.add_argument('--node_dim',           help = 'dimension of node embedding and input of first convolution layer', default = 64, type = int)
 parser.add_argument('--hidden_dim',         help = 'dimension of hidden convoluytion layer(s)', default = 128, type = int)
 parser.add_argument('--decoder',            help = "decoding strategy (similarity measure) to use predict link between two node embeddings ['mlp', 'cosine', 'dotproduct']", default = 'mlp', type = str)
@@ -43,8 +44,8 @@ parser.add_argument('-o', '--output',        help = "output directory to store r
 parser.add_argument('--train',              help = 'set pangnn into training mode', action='store_true')
 parser.add_argument('-b', '--batch_size',   help = 'set number of graphes to be contained in one batch', default = 32, type = int)
 parser.add_argument('-e', '--epochs',       help = 'set number of epochs for model training', default = 10, type = int)
-parser.add_argument('-r', '--ribap_groups', help = 'path to file holding the ribap groups calculated for the input genomes', default = os.path.join('data', 'dummy_dataset', 'dummy_ribap.csv'), type = str)
-parser.add_argument('-@', '--cpus',         help = 'max number of threads used during preprocessing', default = 4, type = int)
+parser.add_argument('-r', '--ribap_groups', help = 'path to file holding the ribap groups calculated for the input genomes', default = os.path.join('data', 'holy_python_ribap_95.csv'), type = str)
+parser.add_argument('-@', '--cpus',         help = 'max number of threads used during preprocessing', default = 2, type = int)
 parser.add_argument('--mixed_precision',    help = "mixed precision setting to use ['no', 'fp16', 'bf16']", default = 'no', type = str)
 
 # parse args
@@ -74,6 +75,15 @@ if not args.traceback: install(show_locals=True)
 if args.train and not args.ribap_groups:
     log.error("Training mode was selected but no label data (RIBAP groups file) was supplied, cannot train model without 'ground truth' data, exiting.")
     quit()
+
+if len(args.fix_dataset) > 3:
+    log.error(f"More than 3 data sub sets defined ('{args.fix_dataset}') to be fixed, pleas chose from ['train', 'val', 'test'] only.")
+    quit()
+
+for subset in args.fix_dataset:
+    if subset not in ['train', 'val', 'test']:
+        log.error(f"Subset '{subset}' is not a valid subset name, please chose from ['train', 'val', 'test'].")
+        quit()
 
 # print header text
 print_header(True, args)

@@ -573,6 +573,11 @@ class UnionGraphDataset(Dataset):
 
         neighbour_edge_index_ts = torch.stack((torch.tensor(origin_idx), torch.tensor(target_idx)))
 
+        if self.categorical_nodes:
+            x = torch.ones(len(self.gene_str_ids_lst))
+        else:
+            x = node_features_ts
+            
         if args.union_edge_weights:
             union_edge_index_ts = torch.stack((torch.cat((edge_index_ts[0], neighbour_edge_index_ts[0])), torch.cat((edge_index_ts[1], neighbour_edge_index_ts[1]))))
             assert (len(union_edge_index_ts[0]) - len(edge_index_ts[0])) > 0, f'Union edge index ({len(union_edge_index_ts[0])}) is smaller than similarity edge index ({len(edge_index_ts[0])}) but was built based on similarity edge index, something broke!'
@@ -586,10 +591,6 @@ class UnionGraphDataset(Dataset):
             graph_data = Data(x, edge_index_ts, edge_weight_ts, labels_ts)
             graph_data.union_edge_index = neighbour_edge_index_ts
 
-        if self.categorical_nodes:
-            x = torch.ones(len(self.gene_str_ids_lst))
-        else:
-            x = node_features_ts
 
 
         # since the sub graph in inference mode is the whole graph we pass the whole sim score dict instread of the sub sim score dict here
@@ -717,23 +718,29 @@ class UnionGraphDataset(Dataset):
             quit()
 
         if os.path.exists(path):
-            log.info(f'Loading pickled dataset from file {path}..')
+            log.info(f"Loading pickled dataset from file '{path}'..")
             with open(path, 'rb') as handle:
                 load_dict = pickle.load(handle)
         else:
             log.info(f'File {path} doesn\'t exists, exiting.')
             quit()
 
-        print(load_dict.keys())
 
+        # load sub dataset into dataset object
+        log.info(f"Fixing pickled dataset(s) '{args.fix_dataset}'.")
         for subset in ['train', 'test', 'val']:
 
             if subset in load_dict:
-                setattr(self, subset, [ Data().from_dict(graph_dict) for graph_dict in load_dict[subset] ])
+                if args.fix_dataset:
+                    if subset in args.fix_dataset:
+                        setattr(self, subset, [ Data().from_dict(graph_dict) for graph_dict in load_dict[subset] ])                
+                else:
+                    setattr(self, subset, [ Data().from_dict(graph_dict) for graph_dict in load_dict[subset] ])
             else:
                 log.info(f"Did not find any {subset} data in the dataset that is being loaded.")
                 setattr(self, subset, None)
-
+        
+        # load additional info into dataset object
         self.class_balance = load_dict['class_balance']
         self.num_genes = load_dict['num_genes']
         self.base_labels = load_dict['base_labels']

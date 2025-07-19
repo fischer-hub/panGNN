@@ -336,6 +336,7 @@ def load_gff(annotation_file_name, start_gene = 'hemB'):
         start_gene_idx = start_gene_idx_lst[0]
     else:
         log.error(f"Could not find start gene '{start_gene}' in annotation file, uncentered input genomes might cause falsy gene positions and lead to unstable models.")
+        start_gene_idx = 1
 
     # this works for circular genomes, if we have linear ones we might need to find another solution for an anchor gene
     df1 = annotation_df.iloc[start_gene_idx:, :]

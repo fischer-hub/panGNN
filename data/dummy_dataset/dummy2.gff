@@ -1,0 +1,5 @@
+##gff-version 3
+##sequence-region contig1 1 1040930
+contig1	Prodigal:002006	CDS	277	1572	.	-	0	ID=KCMFMKKO_00001;eC_number=7.2.1.1;Name=hemB;db_xref=COG:COG2871;gene=nqrF;inference=ab initio prediction:Prodigal:002006,similar to AA sequence:UniProtKB:Q56584;locus_tag=KCMFMKKO_00001;product=Na(+)-translocating NADH-quinone reductase subunit F
+contig1	Prodigal:002006	CDS	1691	2044	.	-	0	ID=KCMFMKKO_00002;inference=ab initio prediction:Prodigal:002006;locus_tag=KCMFMKKO_00002;product=hypothetical protein
+contig1	Prodigal:002006	CDS	2116	3318	.	-	0	ID=KCMFMKKO_00003;eC_number=2.1.1.189;Name=rlmCD;db_xref=COG:COG2265;gene=rlmCD;inference=ab initio prediction:Prodigal:002006,similar to AA sequence:UniProtKB:O31503;locus_tag=KCMFMKKO_00003;product=23S rRNA (uracil-C(5))-methyltransferase RlmCD

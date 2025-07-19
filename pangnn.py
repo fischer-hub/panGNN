@@ -34,13 +34,19 @@ log.info(f"Launched panGNN with command: {' '.join(sys.argv)}")
 
 #dataset = HomogenousDataset(args.annotation, args.similarity, args.ribap_groups, args.neighbours) if args.train else HomogenousDataset(args.annotation, args.similarity, args.neighbours)
 if not args.simulate_dataset:
-    if args.from_pickle:
+    if args.from_pickle and not args.fix_dataset:
         dataset  = UnionGraphDataset()
         dataset.load(args.from_pickle)
         num_genomes = 'number of genomes not available since dataset was loaded from disk'
     else:
         num_genomes = len(args.annotation)
         dataset = UnionGraphDataset(args.annotation, args.similarity, args.ribap_groups, split=(0.7, 0.15, 0.01), categorical_nodes = args.categorical_node, calculate_baseline=True)
+        
+        if args.from_pickle and args.fix_dataset:
+            dataset.load(args.from_pickle)
+        elif args.fix_dataset and not args.from_pickle:
+            log.error("Fix dataset was set but no pickle file to load dataset to fix was defined. Please define via '--from_pickle'.")
+            quit()
 else:
     log.info('Simulating dataset.')
     dataset = UnionGraphDataset(calculate_baseline = True, split=(0.7, 0.15, 0.01), categorical_nodes = args.categorical_node)
