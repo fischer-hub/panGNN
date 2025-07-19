@@ -697,6 +697,11 @@ class UnionGraphDataset(Dataset):
             else:
                 log.info(f"Did not find any {subset} data in the dataset to be save.")
 
+        save_dict['class_balance'] = self.class_balance
+        save_dict['num_genes'] = self.num_genes
+        save_dict['base_labels'] = self.base_labels
+        save_dict['base_labels_raw'] = self.base_labels_raw
+
         if save_dict:
             with open(path, 'wb') as handle:
                 pickle.dump(save_dict, handle, protocol = -1)
@@ -717,19 +722,22 @@ class UnionGraphDataset(Dataset):
                 load_dict = pickle.load(handle)
         else:
             log.info(f'File {path} doesn\'t exists, exiting.')
-            quit()        
+            quit()
 
-        if 'train' in load_dict:
-            self.train = Data().from_dict(load_dict['train'])
-        else:
-            log.info("Did not find any training data in the dataset that is being loaded.")
-            self.train = None
-                
-        if 'test' in load_dict:
-            self.test = Data().from_dict(load_dict['test'])
-        else:
-            log.info("Did not find any test data in the dataset that is being loaded.")
-            self.test = None
+        print(load_dict.keys())
+
+        for subset in ['train', 'test', 'val']:
+
+            if subset in load_dict:
+                setattr(self, subset, [ Data().from_dict(graph_dict) for graph_dict in load_dict[subset] ])
+            else:
+                log.info(f"Did not find any {subset} data in the dataset that is being loaded.")
+                setattr(self, subset, None)
+
+        self.class_balance = load_dict['class_balance']
+        self.num_genes = load_dict['num_genes']
+        self.base_labels = load_dict['base_labels']
+        self.base_labels_raw = load_dict['base_labels_raw']
 
         if not self.test and not self.train:
             log.error("Failed to load dataset from file, check that file contains at least one of training or test data.")

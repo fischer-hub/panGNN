@@ -16,8 +16,8 @@ from torchmetrics.classification import BinaryConfusionMatrix, BinaryAveragePrec
 from rich.progress import Console, Progress
 from src.helper import calculate_logit_baseline_labels, format_duration
 
-profiler = cProfile.Profile()
-profiler.enable()
+#profiler = cProfile.Profile()
+#profiler.enable()
 
 accelerator = Accelerator(mixed_precision = args.mixed_precision)
 
@@ -369,9 +369,9 @@ elif args.train:
 # improvement?
 
 # Stop cProfile for time profiling
-profiler.disable()
+#profiler.disable()
 
 # Process and print time stats
-stats = pstats.Stats(profiler)
-stats.strip_dirs()
-stats.sort_stats("tottime").print_stats(20)
+#stats = pstats.Stats(profiler)
+#stats.strip_dirs()
+#stats.sort_stats("tottime").print_stats(20)
