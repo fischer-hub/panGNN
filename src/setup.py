@@ -86,6 +86,7 @@ for subset in args.fix_dataset:
         log.error(f"Subset '{subset}' is not a valid subset name, please chose from ['train', 'val', 'test'].")
         quit()
 
+
 # print header text
 print_header(True, args)
 

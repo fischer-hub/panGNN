@@ -19,6 +19,9 @@ from src.helper import calculate_logit_baseline_labels, format_duration
 #profiler = cProfile.Profile()
 #profiler.enable()
 
+# make tensorflow shut up because we only use it for tensorboard and it keeps warning about gpu issues we dont care abpout
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
+
 accelerator = Accelerator(mixed_precision = args.mixed_precision)
 
 binary_confusion_matrix_train = BinaryConfusionMatrix().to(accelerator.device)
