@@ -95,7 +95,7 @@ scheduler = ReduceLROnPlateau(optimizer, mode='min', patience = 10, factor = 0.6
 # nn.CrossEntropyLoss() # multi-class classification where each sample belongs to only one class out of multiple classes., outputs logits
 #criterion = torch.nn.BCEWithLogitsLoss()#pos_weight = dataset.class_balance) # if your model outputs raw logits and you want the loss function to handle the sigmoid activation internally, outputs probabilities
 
-criterion = torch.nn.BCEWithLogitsLoss(pos_weight = torch.tensor(hparams['class_balance']))
+criterion = torch.nn.BCEWithLogitsLoss(pos_weight = hparams['class_balance'])
 
 train_losses = []
 val_losses = []
@@ -340,7 +340,7 @@ elif args.train:
 
         # get metrics on test dataset
         for batch in test_data_loader:
-            prediction_bin, prediction_scores, stats = predict_homolog_genes(model, None, batch, binary_th=binary_th, base_labels = (dataset.base_labels, dataset.base_labels_raw))
+            prediction_bin, prediction_scores, stats = predict_homolog_genes(model, None, batch, binary_th=binary_th, base_labels = (dataset.base_labels, dataset.base_labels_raw), dataset =  dataset)
             writer.add_pr_curve('PR/test', batch.y.cpu(), torch.sigmoid(prediction_scores))
 
     stats['simulate_dataset'] = 0
@@ -364,7 +364,9 @@ elif args.train:
     write_stats_csv(stats)
     writer.flush()
     
+    log.info(f"Moving output to '{os.path.join('temp', run_id, run_id)}' ...")
     shutil.move(os.path.join('plots', 'pr_curve.png'), os.path.join('temp', run_id, run_id + 'pr_curve.png'))
+    shutil.move(os.path.join('q_score_vs_logit.csv'), os.path.join('temp', run_id, run_id + 'q_score_vs_logit.csv'))
     shutil.move(os.path.join('temp', run_id), args.output)
     #shutil.move(os.path.join('pangnn.log', run_id), 'runs')
     writer.close()

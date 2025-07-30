@@ -7,7 +7,8 @@ from sklearn.metrics import roc_curve, auc, PrecisionRecallDisplay, average_prec
 import numpy as np
 from sklearn.decomposition import PCA
 import seaborn as sns
-import torch
+import torch, statistics
+from src.setup import log
 
 """
 def plot_umap_pca(dataset, path = os.path.join('plots', 'umap.png')):
@@ -135,12 +136,11 @@ def plot_pr_curve(labels, probabilities, base_labels, refined_base_labels, max_c
     if max_candidate_logit_labels is not None:
         #logit_precision, logit_recall, _ = precision_recall_curve(labels, max_candidate_logit_labels)
         logit_precision = precision_score(labels, max_candidate_logit_labels, pos_label = 1)
-        print(f'f1 base logits: {f1_score(labels, max_candidate_logit_labels)}')
+        log.info(f'F1 score of max candidate logit baseline: {f1_score(labels, max_candidate_logit_labels)}')
 
         logit_recall = recall_score(labels, max_candidate_logit_labels, pos_label = 1)
         #plt.plot(logit_recall, logit_precision, linestyle='--', label='Max Logit Candidate', color='purple')
         plt.hlines(logit_precision, 0, 1, linestyle='--', label='Max Logit Candidate', color='purple')
-        print(logit_precision, logit_recall)
         plt.plot(logit_recall, logit_precision, 'o', color = 'purple')
 
     if base_labels is not None:
@@ -148,15 +148,13 @@ def plot_pr_curve(labels, probabilities, base_labels, refined_base_labels, max_c
         baseline_precision, baseline_recall, th = precision_recall_curve(labels, base_labels)
         baseline_precision = precision_score(labels, base_labels, pos_label = 1)
         baseline_recall = recall_score(labels, base_labels, pos_label = 1)
-        print(baseline_precision, baseline_recall)
-        print(f'f1 base qscore: {f1_score(labels, base_labels)}')
+        log.info(f'F1 score of max candidate Q-score transformed baseline:  {f1_score(labels, base_labels)}')
         plt.plot(baseline_recall, baseline_precision, 'o', color = 'red')
 
         baseline_precision_raw, baseline_recall_raw, _ = precision_recall_curve(labels, base_labels_raw)
-        print(f'f1 base raw: {f1_score(labels, base_labels_raw)}')
+        log.info(f'F1 score of max candidate raw score baseline: {f1_score(labels, base_labels_raw)}')
         baseline_precision_raw = precision_score(labels, base_labels_raw, pos_label = 1)
         baseline_recall_raw = recall_score(labels, base_labels_raw, pos_label = 1)
-        print(baseline_precision_raw, baseline_recall_raw)
         plt.plot(baseline_recall_raw, baseline_precision_raw, 'o', color = 'green')
 
         #plt.plot(baseline_recall, baseline_precision, linestyle='--', label='Max Q-Score Candidate', color='red')
@@ -171,6 +169,7 @@ def plot_pr_curve(labels, probabilities, base_labels, refined_base_labels, max_c
     if not os.path.exists(os.path.dirname(path)):
         os.mkdir(os.path.dirname(path))
 
+    log.info(f"Saving PR-curve plot with baselines to '{path}'.")
     plt.savefig(path)
 
     return AP
@@ -476,7 +475,7 @@ def plot_sim_score_vs_logit(labels, edge_weights, logits, edge_index, gene_lst, 
     if not os.path.exists(os.path.dirname(path)):
         os.mkdir(os.path.dirname(path))
         
-    plt.savefig(path, dpi = 300)
+    plt.savefig(path, dpi = 400)
 
     data['source_int_id'] = edge_index[0].tolist()
     data['target_int_id'] = edge_index[1].tolist()
@@ -487,8 +486,7 @@ def plot_sim_score_vs_logit(labels, edge_weights, logits, edge_index, gene_lst, 
     data['target_str_id'] = [ gene_lst[i] for i in edge_index[1].tolist() ]
     data = data[['source_int_id', 'target_int_id', 'source_str_id', 'target_str_id', 'score', 'logit', 'homolog', 'q_score_baseline', 'raw_baseline', 'logit_baseline']]
 
-    print('one count ',one_count)
-    print('1 count', data.score.value_counts()[1.0] / len(data.index))
-
+    log.info(f"Percentage of edge weights with value 1.0: {one_count}")
+    log.info(f"Writing 'q_score_vs_logit.csv' ...")
     
     data.to_csv('q_score_vs_logit.csv', index = False)

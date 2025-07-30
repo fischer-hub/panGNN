@@ -30,15 +30,16 @@ def predict_homolog_genes(model, train_dataset = None, test_dataset = None, bina
             #test_dataset.to(device)
             inference_start_time = time.time()
             edge_scores = model(test_dataset)
-            log.info(f"Time elapsed during inference on test datset: {format_duration(time.time() - inference_start_time)}.")
+        
+        log.info(f"Time elapsed during inference on test datset: {format_duration(time.time() - inference_start_time)}.")
 
-            if isinstance(test_dataset, tuple): test_dataset = test_dataset[0]
+        if isinstance(test_dataset, tuple): test_dataset = test_dataset[0]
 
-            if train_dataset:
-                #train_dataset.to(device)
-                train_dataset = concat_graph_data(train_dataset)
-                edge_scores_train = model(train_dataset)
-                if isinstance(train_dataset, tuple): train_dataset = train_dataset[0]
+        if train_dataset:
+            #train_dataset.to(device)
+            train_dataset = concat_graph_data(train_dataset)
+            edge_scores_train = model(train_dataset)
+            if isinstance(train_dataset, tuple): train_dataset = train_dataset[0]
         
         if hasattr(test_dataset, 'y'):
             log.info('Calculating metrics..')
@@ -79,6 +80,7 @@ def predict_homolog_genes(model, train_dataset = None, test_dataset = None, bina
                 plot_confusion_matrix(test_labels, max_candidate_logit_labels, title='Max Logit Candidate', path = 'plots/logit_conf_matrix.png')
                 plot_sim_score_vs_logit(test_labels, test_dataset.edge_attr, edge_scores, test_dataset.edge_index, dataset.gene_str_ids_lst, base_labels, max_candidate_logit_labels)
             else:
+                # we dont know the mapping between test data nodes that have been generated with the sub graphing and the original genes, also, nodes are not unique between graphs
                 AP = plot_pr_curve(test_labels, probablilities, base_labels, refined_base_labels)
 
             stats['average_precision'] = AP

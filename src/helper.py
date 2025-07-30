@@ -533,18 +533,18 @@ def init_worker(origin_edge_index, gene_lst, sim_score_dict, gene_pos_dict, logi
 # this is slow as flip
 def calculate_logit_baseline_labels(graph, sim_score_dict, logits, gene_lst, gene_pos_dict, basti = False):
     
-    print('copying logits and graph from gpu')
+    log.info('Copying logits and graph data from device ...')
     logits = logits.tolist()
     #graph = graph.cpu()
     #logits = list(logits)
     #logit_dict = defaultdict(dict)
 
-    print('convertingtensoirs to lists')
+    log.info('Converting tensors to lists ...')
     origin_edge_index, target_edge_index = graph.edge_index[0].tolist(), graph.edge_index[1].tolist()
     #gene_pos_dict = {id: pos for pos, id in enumerate(gene_lst)}
 
     # for each node id save the indices of the edges that the node appears in
-    print('mapping logits to connected nodes')
+    log.info('Mapping logits to connected nodes ...')
     logit_dict = { (src, tgt): logits[i] for i, (src, tgt) in enumerate(zip(origin_edge_index, target_edge_index)) }
     #for i, (src, tgt) in enumerate(zip(origin_edge_index, target_edge_index)):
     #    logit_dict[(src, tgt)] = i
@@ -564,7 +564,7 @@ def calculate_logit_baseline_labels(graph, sim_score_dict, logits, gene_lst, gen
         results  = pool.starmap(find_max_logit, zip(origin_edge_index_chunked, target_edge_index_chunked, logits_chunked))
         label_lst = [inner for outer in results for inner in outer]
 
-    print('logit frac 1 labels: ', sum(label_lst) / len(label_lst))
+    log.debug(f'Fraction of logits with label true: {sum(label_lst) / len(label_lst)}')
     
     if basti:
         print("Hallo Welt.")

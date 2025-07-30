@@ -368,7 +368,6 @@ class UnionGraphDataset(Dataset):
 
             if args.to_pickle:
                 self.save(args.to_pickle)
-                quit()
         
         else:
             log.info("PanGNN not in training mode, skipping graph batching because 'ground truth' labels necessary for splitting are unknown in inference mode.")
@@ -589,7 +588,7 @@ class UnionGraphDataset(Dataset):
             graph_data.union_edge_index = union_edge_index_ts
         else:
             graph_data = Data(x, edge_index_ts, edge_weight_ts, labels_ts)
-            graph_data.union_edge_index = neighbour_edge_index_ts
+            graph_data.neighbour_edge_index = neighbour_edge_index_ts
 
 
 
@@ -702,6 +701,7 @@ class UnionGraphDataset(Dataset):
         save_dict['num_genes'] = self.num_genes
         save_dict['base_labels'] = self.base_labels
         save_dict['base_labels_raw'] = self.base_labels_raw
+        save_dict['similarity_dict'] = self.sim_score_dict
 
         if save_dict:
             with open(path, 'wb') as handle:
@@ -727,7 +727,12 @@ class UnionGraphDataset(Dataset):
 
 
         # load sub dataset into dataset object
-        log.info(f"Fixing pickled dataset(s) '{args.fix_dataset}'.")
+        
+        if not args.fix_dataset:
+            args.fix_dataset = ('train', 'test', 'val')
+        else:
+            log.info(f"Fixing pickled dataset(s) '{args.fix_dataset}'.")
+
         for subset in ['train', 'test', 'val']:
 
             if subset in load_dict:
@@ -745,6 +750,8 @@ class UnionGraphDataset(Dataset):
         self.num_genes = load_dict['num_genes']
         self.base_labels = load_dict['base_labels']
         self.base_labels_raw = load_dict['base_labels_raw']
+        self.sim_score_dict = load_dict['similarity_dict']
+
 
         if not self.test and not self.train:
             log.error("Failed to load dataset from file, check that file contains at least one of training or test data.")
