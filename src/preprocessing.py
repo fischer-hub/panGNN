@@ -368,6 +368,8 @@ def remove_trivial_cases(sim_score_dict):
         non_unique_target_genome_ids = {k for k, v in Counter(target_genome_ids).items() if v > 1}
         filtered_candidates = { key: val for key, val in target_genes.items() if key.split('_')[0] in non_unique_target_genome_ids }
         if filtered_candidates: filtered_sim_score_dict[source_gene] = filtered_candidates
+
+    log.info(f'Ignoring {len(sim_score_dict) - len(filtered_sim_score_dict)} of {old_len} scores because they were the only candidate in their candidate set.')
     
     return filtered_sim_score_dict
 
@@ -410,7 +412,6 @@ def load_similarity_score(similarity_score_file, gene_id_position_dict, center_s
 
         sim_score_dict = remove_trivial_cases(sim_score_dict)
 
-    log.info(f'Ignoring {old_len - len(sim_score_dict)} of {old_len} scores because they were the only candidate in their candidate set.')
     return sim_score_dict
 
 
