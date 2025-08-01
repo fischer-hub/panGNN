@@ -356,7 +356,23 @@ def load_gff(annotation_file_name, start_gene = 'hemB'):
     return annotation_df
 
 
-def load_similarity_score(similarity_score_file, gene_id_position_dict, center_scores = True, exclude_trivial = True):
+def remove_trivial_cases(sim_score_dict):
+
+    log.info('Filtering scores for trivial cases..')
+
+    filtered_sim_score_dict = {}
+
+    for source_gene, target_genes in sim_score_dict.items():
+        target_gene_ids = target_genes.keys()
+        target_genome_ids = [ id.split('_')[0] for id in target_gene_ids ]
+        non_unique_target_genome_ids = {k for k, v in Counter(target_genome_ids).items() if v > 1}
+        filtered_candidates = { key: val for key, val in target_genes.items() if key.split('_')[0] in non_unique_target_genome_ids }
+        if filtered_candidates: filtered_sim_score_dict[source_gene] = filtered_candidates
+    
+    return filtered_sim_score_dict
+
+
+def load_similarity_score(similarity_score_file, gene_id_position_dict, center_scores = True):
 
     log.info(f"Loading similarity scores file: {similarity_score_file}")
     with open(similarity_score_file) as sim_score_handle:
@@ -390,23 +406,10 @@ def load_similarity_score(similarity_score_file, gene_id_position_dict, center_s
     old_len = len(sim_score_dict)
     
 
-    if args.exclude_trivial:
+    if not args.include_trivial:
 
-        log.info('Filtering scores for trivial cases..')
-    
-        filtered_sim_score_dict = {}
+        sim_score_dict = remove_trivial_cases(sim_score_dict)
 
-        for source_gene, target_genes in sim_score_dict.items():
-            target_gene_ids = target_genes.keys()
-            target_genome_ids = [ id.split('_')[0] for id in target_gene_ids ]
-            non_unique_target_genome_ids = {k for k, v in Counter(target_genome_ids).items() if v > 1}
-            filtered_candidates = { key: val for key, val in target_genes.items() if key.split('_')[0] in non_unique_target_genome_ids }
-            if filtered_candidates: filtered_sim_score_dict[source_gene] = filtered_candidates
-        
-        sim_score_dict = filtered_sim_score_dict
-
-
-        #sim_score_dict = { key: val for key, val in sim_score_dict.items() if len(val) <= 1 }
     log.info(f'Ignoring {old_len - len(sim_score_dict)} of {old_len} scores because they were the only candidate in their candidate set.')
     return sim_score_dict
 
@@ -529,6 +532,5 @@ def normalize_sim_scores(sim_score_dict, t = 0.5, epsilon = 1e-8, pseudo_count =
 
 
     log.info(f"Normalized similarity scores with t = {t} between gene candidate with loss of {len(empty_dict_ids)} genes in total, e.g. due to only having self comparisons.")
-    log.warning(f'one_count: {one_count/all_count *100} %')
     log.info(f'Created a total of {nested_len(normalized_dict)} edges for input graph.')
     return normalized_dict

@@ -26,7 +26,7 @@ parser.add_argument('--dynamic_binary_threshold', help = 'dynamically calculate 
 parser.add_argument('--simulate_dataset', help = 'parameters to generate simulated input data with seperated by whitespace [num_genes_per_genome, num_genomes, fraction_pos_edges, num_fragments, num_frags_to_shuffle]', nargs=5, type=str, default = None)
 parser.add_argument('--simulated_score_means', help = 'means of the gamma distributions to draw the scores of negative and positive edge scores from during simulation seperated by whitespace [negative_mean, positive_mean]', nargs=2, type=int, default = [200, 500])
 parser.add_argument('--union_edge_weights', help = 'unite edge weights from sim and neighbour graph and only convolute over one', action = 'store_true')
-parser.add_argument('--exclude_trivial', help = 'exclude scores from trivial cases where there is only one candidate to predict the true homolog from', action = 'store_true')
+parser.add_argument('--include_trivial', help = 'include scores from trivial cases where there is only one candidate to predict the true homolog from', action = 'store_true')
 parser.add_argument('--skip_connections', help = 'activate skip connections in model', action = 'store_true')
 parser.add_argument('--categorical_node', help = 'embed node features as categorical feature embeddings using embedding layer, where category referes to the position of each gene in its genome', action = 'store_true')
 parser.add_argument('--no_q_score_transform', help = 'dont transform normalized edge probabilities between homolog candidates to Q-score like values before training [default: True]', action = 'store_false')

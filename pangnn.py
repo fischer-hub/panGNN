@@ -5,7 +5,7 @@ import torch, os, datetime, time, shutil, resource, cProfile, pstats, sys
 from torch_geometric.loader import DataLoader
 from src.predict import predict_homolog_genes
 from rich.progress import Progress
-from src.dataset import HomogenousDataset, UnionGraphDataset
+from src.dataset import UnionGraphDataset
 from src.gnn import AlternateGCN
 from src.postprocessing import write_stats_csv
 from sklearn.metrics import roc_curve

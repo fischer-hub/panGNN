@@ -128,16 +128,19 @@ def simulate_similarity_scores_and_ribap_dict(gene_lsts, frac_pos_edges):
     log.info(f'Num total edges: {num_total_edges}')
     num_negative_edges = num_total_edges - num_pos_edges
     log.info(f'Num neg edges: {num_negative_edges}')
-    mean_neg_candidates_per_gene = math.floor(num_negative_edges / num_total_genes / num_genomes)
+    mean_neg_candidates_per_gene = math.floor(num_negative_edges / num_total_genes)
     log.info(f'Num avg neg edges per gene: {mean_neg_candidates_per_gene}')
     #num_negative_edges_per_gene_lst = np.random.poisson(lam = mean_neg_candidates_per_gene, size = num_total_genes)
     num_negative_edges_per_gene_lst = np.random.negative_binomial(n=0.2, p=0.2 / (mean_neg_candidates_per_gene + 0.2), size=num_total_genes)
-    num_negative_edges_per_gene_lst = [int(i+2) for i in num_negative_edges_per_gene_lst]
+    num_negative_edges_per_gene_lst = np.clip(num_negative_edges_per_gene_lst, 1, num_genes_per_genome)
+    num_negative_edges_per_gene_lst = [int(i) for i in num_negative_edges_per_gene_lst]
+    log.info(f'drew negative total edges: {sum(num_negative_edges_per_gene_lst)}')
     log.info(f'Drawing negative edge scores from gramma distribution with mean: {neg_mean}')
     log.info(f'Drawing positive edge scores from gramma distribution with mean: {pos_mean}')
     ribap_groups_lst = [None] * num_genes_per_genome
     ribap_group_count = 0
     last_source = ''
+    gene_count = 0
    
 
     for group in zip(*gene_lsts):
@@ -158,6 +161,7 @@ def simulate_similarity_scores_and_ribap_dict(gene_lsts, frac_pos_edges):
 
         for (source, target), score in zip(itertools.combinations(group, 2), ortholog_scores):
 
+
             if source == target: continue
             if target_genome_idx == len(gene_lsts)+1: target_genome_idx = 0
 
@@ -167,7 +171,7 @@ def simulate_similarity_scores_and_ribap_dict(gene_lsts, frac_pos_edges):
             pos_edge_count += 2
 
             if last_source != source:
-                print(source, target)
+                gene_count += 1
 
                 # get genome index in genome list from current target genes origin genome
                 target_genome_idx = next((i for i, x in enumerate(group) if x.startswith(target.split('_')[0])), None)
@@ -176,7 +180,8 @@ def simulate_similarity_scores_and_ribap_dict(gene_lsts, frac_pos_edges):
                 last_source = source
 
                 # for source gene select n target genes to add negative edges to
-                negative_edge_idxs = random.sample(range(num_genes_per_genome), k = num_negative_edges_per_gene_lst[ribap_group_count])
+                #print(len(num_negative_edges_per_gene_lst), gene_count)
+                negative_edge_idxs = random.sample(range(num_genes_per_genome), k = num_negative_edges_per_gene_lst[gene_count])
                 heterolog_scores = simulate_bit_scores(neg_mean, 10000, len(negative_edge_idxs))
 
                 for negative_edge_idx, score in zip(negative_edge_idxs, heterolog_scores):
@@ -187,8 +192,9 @@ def simulate_similarity_scores_and_ribap_dict(gene_lsts, frac_pos_edges):
                     similarity_dict[negative_target][source] = score
                     neg_edge_count += 2
 
-    log.info(f'Generated {neg_edge_count} negative edges.')
-    log.info(f'Generated {pos_edge_count} positive edges.')
+    #log.info(f'Generated {neg_edge_count} negative edges.')
+    #log.info(f'Gene count {gene_count}.')
+    #log.info(f'Generated {pos_edge_count} positive edges.')
     if (nested_len(similarity_dict) / (num_total_edges * 2)) < 0.8: log.warning(f'Number of similarity scores in dictionary ({nested_len(similarity_dict)}) diverges by more than 20 % ({(nested_len(similarity_dict) / (num_total_edges * 2)) *100:.2f} %) from number of expected similarity edges ({num_total_edges * 2}).')
     else: log.info(f'Generated {(nested_len(similarity_dict) / (num_total_edges * 2)) * 100} % ({nested_len(similarity_dict)}) of expected edges ({num_total_edges * 2}), which is in within the tolerated variance (80 %).')
     assert len(ribap_groups_dict) == (num_genes_per_genome * (num_genomes)) , f'Number of ribap group mappings found ({len(ribap_groups_dict)}) is not equal to number of expected ribap group mappings ({num_genes_per_genome * (num_genomes)}).'
@@ -223,5 +229,5 @@ def shuffle_synteny_blocks(genomes_lst, k, n):
         
         shuffled_genomes[genome_idx] = [x for xs in genome_fragments for x in xs]
         genome_idx += 1
-    quit()
+
     return shuffled_genomes
