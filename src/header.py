@@ -57,7 +57,7 @@ def print_header(print_ansi_esc = True, args = None):
 {bcolors.LIGHTBLUE}/_/    \__,_/_/ /_/\____/_/ |_/_/ |_/
 
 
-{bcolors.PURPLE}Genes and Pansexuals - version 0.0.1{bcolors.ENDC}
+{bcolors.PURPLE}Genes and Pans - version 0.0.1{bcolors.ENDC}
 
 """
     

@@ -1,9 +1,11 @@
 import torch, time
 from rich.console import Console
 from src.setup import log, args
+from src.preprocessing import map_edge_weights
 from src.plot import plot_roc, plot_logit_distribution, plot_pr_curve, plot_confusion_matrix, plot_sim_score_vs_logit
 from src.helper import concat_graph_data, calculate_logit_baseline_labels, format_duration
 from sklearn.metrics import confusion_matrix, PrecisionRecallDisplay
+from sklearn.preprocessing import minmax_scale
 import torch.nn.functional as F
 
 
@@ -71,17 +73,23 @@ def predict_homolog_genes(model, train_dataset = None, test_dataset = None, bina
 
             random_pred = torch.randint(0,2,(len(binary_prediction),))
 
-            if not args.train:
+            log.info('Calculating raw baseline PR ...')
+            mapped_raw_scores = map_edge_weights(test_dataset.edge_index, dataset.sim_score_dict_raw, dataset.gene_str_ids_lst, use_cache=False)
+            min_max_raw_scores = minmax_scale(mapped_raw_scores, feature_range = (0,1), copy =True)
+            log.info('Calculating normalized baseline PR ...')
+            min_max_q_scores = minmax_scale(test_dataset.edge_attr.tolist(), feature_range = (0,1), copy =True)
+
+            if not args.train or args.simulate_dataset:
                 log.info('Calculating max logit candidate baseline..')
                 max_candidate_logit_labels = calculate_logit_baseline_labels(test_dataset, dataset.sim_score_dict, edge_scores, dataset.gene_str_ids_lst, dataset.gene_id_position_dict)
-                AP = plot_pr_curve(test_labels, probablilities, base_labels, refined_base_labels, max_candidate_logit_labels = max_candidate_logit_labels)
+                AP = plot_pr_curve(test_labels, probablilities, base_labels, refined_base_labels, max_candidate_logit_labels = max_candidate_logit_labels, min_max_raw = min_max_raw_scores, min_max_q = min_max_q_scores)
                 plot_confusion_matrix(test_labels, base_labels[0], title='Q-Score Max Candidate', path = 'plots/q_score_conf_matrix.png')
                 plot_confusion_matrix(test_labels, base_labels[1], title='Raw Score Max Candidate', path = 'plots/raw_score_conf_matrix.png')
                 plot_confusion_matrix(test_labels, max_candidate_logit_labels, title='Max Logit Candidate', path = 'plots/logit_conf_matrix.png')
                 plot_sim_score_vs_logit(test_labels, test_dataset.edge_attr, edge_scores, test_dataset.edge_index, dataset.gene_str_ids_lst, base_labels, max_candidate_logit_labels)
             else:
                 # we dont know the mapping between test data nodes that have been generated with the sub graphing and the original genes, also, nodes are not unique between graphs
-                AP = plot_pr_curve(test_labels, probablilities, base_labels, refined_base_labels)
+                AP = plot_pr_curve(test_labels, probablilities, base_labels, refined_base_labels, min_max_raw = min_max_raw_scores, min_max_q = min_max_q_scores)
 
             stats['average_precision'] = AP
 

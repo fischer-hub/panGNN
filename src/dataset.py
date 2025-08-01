@@ -269,7 +269,7 @@ class UnionGraphDataset(Dataset):
             log.info('Baseline calculation is set to True, note that this can slow down preprocessing and metric calculation!')
 
         
-        if not gff_files:
+        if not gff_files or args.simulate_dataset:
             if not args.simulate_dataset:
                 log.info("No annotation files provided, use generate_minimal_dataset() or simulate_dataset() to generate graph data for this object.")
                 return
@@ -279,10 +279,13 @@ class UnionGraphDataset(Dataset):
                 log.info(f'Simulating dataset with input parameters: {args.simulate_dataset}')
                 frag_size = math.floor(num_genes_per_genome / num_fragments)
                 self.num_genes = num_genes_per_genome * num_genomes
-                self.gene_str_ids_lst, gene_id_by_genome_lst = simulate_gene_ids(num_genes_per_genome, num_genomes)
-                self.gene_id_position_dict = {gene: idx for idx, gene in enumerate(self.gene_str_ids_lst)}
+                self.gene_str_ids_lst_old, gene_id_by_genome_lst = simulate_gene_ids(num_genes_per_genome, num_genomes)
+                
+                # where do we use the shuffled gene synteny order???
                 self.sim_score_dict_raw, self.ribap_groups_dict, self.ribap_groups_lst = simulate_similarity_scores_and_ribap_dict(gene_id_by_genome_lst, frac_pos_edges)
                 self.gene_id_by_genome_lst = shuffle_synteny_blocks(gene_id_by_genome_lst, k = frag_size, n = int(num_frags_to_shuffle))
+                self.gene_str_ids_lst = [x for xs in self.gene_id_by_genome_lst for x in xs]
+                self.gene_id_position_dict = {gene: idx for idx, gene in enumerate(self.gene_str_ids_lst)}
         else:
         
             # load annotations from gff files and format to pandas dataframe
@@ -365,6 +368,9 @@ class UnionGraphDataset(Dataset):
             del class_balance_lst
             
             self.split_data(split, args.batch_size)
+
+            if args.simulate_dataset:
+                self.test = [self.generate_graphs()]
 
             if args.to_pickle:
                 self.save(args.to_pickle)
@@ -560,6 +566,7 @@ class UnionGraphDataset(Dataset):
         edge_count = 0
 
         # add edges to n nearest neighbour nodes
+        # NOTE: this ignores shuffled gene synteny from simulated datasets since it doesnt use the gene_id_pos_dict!!!
         for gene_id in track(range(self.num_genes), description = 'Adding edges to neighbouring nodes..', transient = True):
             for neighbour_id in range(gene_id - args.neighbours, gene_id + args.neighbours + 1):
                 if neighbour_id >= 0 and neighbour_id < len(self.gene_str_ids_lst):

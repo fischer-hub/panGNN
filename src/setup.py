@@ -14,7 +14,7 @@ parser = argparse.ArgumentParser(
 # general args
 parser.add_argument('-d', '--debug',      help = 'set log level to DEBUG and print debug information while running', action='store_true')  # on/off flag
 parser.add_argument('-p', '--plot_graph', help = "plot input and output graph and save in './plots'", action='store_true')  # on/off flag
-parser.add_argument('-t', '--traceback',  help = 'turns on rich formatting of traceback', action = 'store_false')
+parser.add_argument('-t', '--traceback',  help = 'turns on rich formatting of traceback', action = 'store_true')
 parser.add_argument('-c', '--cache',  	  help = 'cache computionally slow data structures', action = 'store_true')
 parser.add_argument('-l', '--log_level',  help = "set the level to print logs ['NOTSET', 'DEBUG', 'INFO', 'WARN', 'ERROR', 'CRITICAL']", default = 'INFO', type = str)
 parser.add_argument('-m', '--model_args', help = 'path to save or load model from, depending on training or prediction mode', default = 'model.pkl', type = str)

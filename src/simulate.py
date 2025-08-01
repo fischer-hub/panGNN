@@ -17,7 +17,7 @@ def simulate_bit_scores(expectation_value, dispersion, n):
     shape = (expectation_value ** 2) / dispersion
     scale = dispersion / expectation_value
     
-    return np.random.gamma(shape, scale, size = n)
+    return [int(i) for i in np.random.gamma(shape, scale, size = n)]
 
 """
 def generate_data(num_genes_per_genome, num_gene_families1, num_gene_families2, fraction_orthologs, fraction_paralogs_same_species, fraction_paralogs_diff_species):
@@ -132,7 +132,7 @@ def simulate_similarity_scores_and_ribap_dict(gene_lsts, frac_pos_edges):
     log.info(f'Num avg neg edges per gene: {mean_neg_candidates_per_gene}')
     #num_negative_edges_per_gene_lst = np.random.poisson(lam = mean_neg_candidates_per_gene, size = num_total_genes)
     num_negative_edges_per_gene_lst = np.random.negative_binomial(n=0.2, p=0.2 / (mean_neg_candidates_per_gene + 0.2), size=num_total_genes)
-    num_negative_edges_per_gene_lst = [int(i+1) for i in num_negative_edges_per_gene_lst]
+    num_negative_edges_per_gene_lst = [int(i+2) for i in num_negative_edges_per_gene_lst]
     log.info(f'Drawing negative edge scores from gramma distribution with mean: {neg_mean}')
     log.info(f'Drawing positive edge scores from gramma distribution with mean: {pos_mean}')
     ribap_groups_lst = [None] * num_genes_per_genome
@@ -167,6 +167,7 @@ def simulate_similarity_scores_and_ribap_dict(gene_lsts, frac_pos_edges):
             pos_edge_count += 2
 
             if last_source != source:
+                print(source, target)
 
                 # get genome index in genome list from current target genes origin genome
                 target_genome_idx = next((i for i, x in enumerate(group) if x.startswith(target.split('_')[0])), None)
@@ -175,7 +176,7 @@ def simulate_similarity_scores_and_ribap_dict(gene_lsts, frac_pos_edges):
                 last_source = source
 
                 # for source gene select n target genes to add negative edges to
-                negative_edge_idxs = random.choices(range(num_genes_per_genome), k = num_negative_edges_per_gene_lst[ribap_group_count])
+                negative_edge_idxs = random.sample(range(num_genes_per_genome), k = num_negative_edges_per_gene_lst[ribap_group_count])
                 heterolog_scores = simulate_bit_scores(neg_mean, 10000, len(negative_edge_idxs))
 
                 for negative_edge_idx, score in zip(negative_edge_idxs, heterolog_scores):
@@ -186,6 +187,8 @@ def simulate_similarity_scores_and_ribap_dict(gene_lsts, frac_pos_edges):
                     similarity_dict[negative_target][source] = score
                     neg_edge_count += 2
 
+    log.info(f'Generated {neg_edge_count} negative edges.')
+    log.info(f'Generated {pos_edge_count} positive edges.')
     if (nested_len(similarity_dict) / (num_total_edges * 2)) < 0.8: log.warning(f'Number of similarity scores in dictionary ({nested_len(similarity_dict)}) diverges by more than 20 % ({(nested_len(similarity_dict) / (num_total_edges * 2)) *100:.2f} %) from number of expected similarity edges ({num_total_edges * 2}).')
     else: log.info(f'Generated {(nested_len(similarity_dict) / (num_total_edges * 2)) * 100} % ({nested_len(similarity_dict)}) of expected edges ({num_total_edges * 2}), which is in within the tolerated variance (80 %).')
     assert len(ribap_groups_dict) == (num_genes_per_genome * (num_genomes)) , f'Number of ribap group mappings found ({len(ribap_groups_dict)}) is not equal to number of expected ribap group mappings ({num_genes_per_genome * (num_genomes)}).'
@@ -209,7 +212,8 @@ def shuffle_synteny_blocks(genomes_lst, k, n):
 
     for genome in genomes_lst:
         genome_fragments = list(chunks(genome, k))
-        fragments_to_shuffle_indices = random.choices(range(len(genome_fragments)), k = n)
+        
+        fragments_to_shuffle_indices = random.sample(range(len(genome_fragments)), k = n)
 
         selected_frags = [genome_fragments[i] for i in fragments_to_shuffle_indices]
         random.shuffle(selected_frags)
@@ -218,5 +222,6 @@ def shuffle_synteny_blocks(genomes_lst, k, n):
             genome_fragments[idx] = shuffled_value
         
         shuffled_genomes[genome_idx] = [x for xs in genome_fragments for x in xs]
-
+        genome_idx += 1
+    quit()
     return shuffled_genomes

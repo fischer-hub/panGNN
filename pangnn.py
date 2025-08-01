@@ -130,7 +130,12 @@ if not args.train or os.path.exists(args.model_args):
         for batch in test_data_loader:
             prediction_bin, logits, stats = predict_homolog_genes(model, None, batch, binary_th=binary_th, dataset = dataset, base_labels = (dataset.base_labels, dataset.base_labels_raw))
 
-        
+        run_id = datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + args.tb_comment
+        log.info(f"Moving output to from '{os.path.join('temp', run_id)}/' to '{args.output}/' ...")
+        os.mkdir(os.path.join('temp', run_id))
+        shutil.copyfile(os.path.join('plots', 'pr_curve.png'), os.path.join('temp', run_id, run_id + 'pr_curve.png'))
+        shutil.move(os.path.join('q_score_vs_logit.csv'), os.path.join('temp', run_id, run_id + 'q_score_vs_logit.csv'))
+        shutil.move(os.path.join('temp', run_id), args.output)
             
         stats['mode'] = 'test'
 
@@ -320,7 +325,6 @@ elif args.train:
             log.info(f"Epoch: {epoch+1}, LR: {optimizer.param_groups[0]['lr']:.10f}, Val AP: {pr_auc_val:.4f}")
             log.info(f"Train Loss: {train_loss/len(train_data_loader):.4f}, Train Acc: {acc_train:.4f}, Train F1: {f1_train:.4f}, Val   Loss: {val_loss/len(val_data_loader):.4f}, Val Acc  : {acc_val:.4f}, Val F1  : {f1_val:.4f}")
             if 'cuda' in device.type: log.info(f"GPU max mem allocated: {torch.cuda.max_memory_allocated('cuda:0') / 1024**2} MB, GPU mem reserved: {torch.cuda.memory_reserved('cuda:0') / 1024**2} MB.")
-            print('')
             
             progress.update(training_bar, advance = 1)
             progress.reset(batch_bar)
@@ -336,25 +340,20 @@ elif args.train:
     log.info(f"Saving model to file '{os.path.join('temp', run_id, args.model_args)}'")
     torch.save(model.state_dict(), os.path.join('temp', run_id, args.model_args))
 
-    with Console().status("Finished model training, plotting metrics..") as status:
-
-        # get metrics on test dataset
-        for batch in test_data_loader:
-            prediction_bin, prediction_scores, stats = predict_homolog_genes(model, None, batch, binary_th=binary_th, base_labels = (dataset.base_labels, dataset.base_labels_raw), dataset =  dataset)
-            writer.add_pr_curve('PR/test', batch.y.cpu(), torch.sigmoid(prediction_scores))
+    # get metrics on test dataset
+    for batch in test_data_loader:
+        prediction_bin, prediction_scores, stats = predict_homolog_genes(model, None, batch, binary_th=binary_th, base_labels = (dataset.base_labels, dataset.base_labels_raw), dataset =  dataset)
+        writer.add_pr_curve('PR/test', batch.y.cpu(), torch.sigmoid(prediction_scores))
 
     stats['simulate_dataset'] = 0
     hparams['simulate_dataset'] = 0
+    hparams['class_balance'] = hparams['class_balance'].item()
     writer.add_hparams(hparams, stats)
     log.info(f"Time elapsed: {format_duration(time.time() - start)}.")
 
     stats['binary_threshold'] = binary_th
     stats['date'] = str(datetime.date.today())
     stats['neighbours'] = args.neighbours
-    #stats['num_nodes_train'] = len(dataset.train.x)
-    #stats['num_nodes_sim_edges_train'] = len(dataset.train.edge_index)
-    #stats['num_nodes_test'] = len(dataset.test.x)
-    #stats['num_nodes_sim_edges_test'] = len(dataset.test.edge_index)
     stats['mode'] = 'train'
     stats['epochs'] = args.epochs
     stats['batch_size'] = args.batch_size
@@ -364,9 +363,11 @@ elif args.train:
     write_stats_csv(stats)
     writer.flush()
     
-    log.info(f"Moving output to '{os.path.join('temp', run_id, run_id)}' ...")
-    shutil.move(os.path.join('plots', 'pr_curve.png'), os.path.join('temp', run_id, run_id + 'pr_curve.png'))
-    shutil.move(os.path.join('q_score_vs_logit.csv'), os.path.join('temp', run_id, run_id + 'q_score_vs_logit.csv'))
+    log.info(f"Moving output from '{os.path.join('temp', run_id, run_id)}' to '{args.output}' ...")
+    shutil.copyfile(os.path.join('plots', 'pr_curve.png'), os.path.join('temp', run_id, run_id + 'pr_curve.png'))
+    
+    if os.path.exists('q_score_vs_logit.csv'):
+        shutil.move(os.path.join('q_score_vs_logit.csv'), os.path.join('temp', run_id, run_id + 'q_score_vs_logit.csv'))
     shutil.move(os.path.join('temp', run_id), args.output)
     #shutil.move(os.path.join('pangnn.log', run_id), 'runs')
     writer.close()
