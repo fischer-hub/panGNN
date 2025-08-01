@@ -134,7 +134,7 @@ def simulate_similarity_scores_and_ribap_dict(gene_lsts, frac_pos_edges):
     num_negative_edges_per_gene_lst = np.random.negative_binomial(n=0.2, p=0.2 / (mean_neg_candidates_per_gene + 0.2), size=num_total_genes)
     num_negative_edges_per_gene_lst = np.clip(num_negative_edges_per_gene_lst, 1, num_genes_per_genome)
     num_negative_edges_per_gene_lst = [int(i) for i in num_negative_edges_per_gene_lst]
-    log.info(f'drew negative total edges: {sum(num_negative_edges_per_gene_lst)}')
+    log.info(f'Drew negative total edges: {sum(num_negative_edges_per_gene_lst)}')
     log.info(f'Drawing negative edge scores from gramma distribution with mean: {neg_mean}')
     log.info(f'Drawing positive edge scores from gramma distribution with mean: {pos_mean}')
     ribap_groups_lst = [None] * num_genes_per_genome
