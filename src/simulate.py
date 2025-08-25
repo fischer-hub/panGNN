@@ -123,11 +123,11 @@ def simulate_similarity_scores_and_ribap_dict(gene_lsts, frac_pos_edges):
     num_edges_per_group = math.floor(((num_genomes)*(num_genomes-1))/2)
     log.info(f'Num edges per RIBAP group: {num_edges_per_group}')
     num_pos_edges = num_edges_per_group * num_genes_per_genome
-    log.info(f'Num pos edges: {num_pos_edges}')
+    log.info(f'Num pos scores: {num_pos_edges}')
     num_total_edges = math.floor(num_pos_edges / frac_pos_edges)
-    log.info(f'Num total edges: {num_total_edges}')
+    log.info(f'Num total scores: {num_total_edges}')
     num_negative_edges = num_total_edges - num_pos_edges
-    log.info(f'Num neg edges: {num_negative_edges}')
+    log.info(f'Num neg scores: {num_negative_edges}')
     mean_neg_candidates_per_gene = math.floor(num_negative_edges / num_total_genes)
     log.info(f'Num avg neg edges per gene: {mean_neg_candidates_per_gene}')
     #num_negative_edges_per_gene_lst = np.random.poisson(lam = mean_neg_candidates_per_gene, size = num_total_genes)
@@ -194,7 +194,7 @@ def simulate_similarity_scores_and_ribap_dict(gene_lsts, frac_pos_edges):
 
     #log.info(f'Generated {neg_edge_count} negative edges.')
     #log.info(f'Gene count {gene_count}.')
-    #log.info(f'Generated {pos_edge_count} positive edges.')
+    log.info(f'Generated {pos_edge_count} positive edges and {neg_edge_count} negative edges, class balance: {pos_edge_count / (pos_edge_count + neg_edge_count)}')
     if (nested_len(similarity_dict) / (num_total_edges * 2)) < 0.8: log.warning(f'Number of similarity scores in dictionary ({nested_len(similarity_dict)}) diverges by more than 20 % ({(nested_len(similarity_dict) / (num_total_edges * 2)) *100:.2f} %) from number of expected similarity edges ({num_total_edges * 2}).')
     else: log.info(f'Generated {(nested_len(similarity_dict) / (num_total_edges * 2)) * 100} % ({nested_len(similarity_dict)}) of expected edges ({num_total_edges * 2}), which is in within the tolerated variance (80 %).')
     assert len(ribap_groups_dict) == (num_genes_per_genome * (num_genomes)) , f'Number of ribap group mappings found ({len(ribap_groups_dict)}) is not equal to number of expected ribap group mappings ({num_genes_per_genome * (num_genomes)}).'
