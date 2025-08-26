@@ -95,7 +95,7 @@ scheduler = ReduceLROnPlateau(optimizer, mode='min', patience = 10, factor = 0.6
 # nn.CrossEntropyLoss() # multi-class classification where each sample belongs to only one class out of multiple classes., outputs logits
 #criterion = torch.nn.BCEWithLogitsLoss()#pos_weight = dataset.class_balance) # if your model outputs raw logits and you want the loss function to handle the sigmoid activation internally, outputs probabilities
 
-criterion = torch.nn.BCEWithLogitsLoss(pos_weight = hparams['class_balance'])
+criterion = torch.nn.BCEWithLogitsLoss(pos_weight = torch.tensor(hparams['class_balance']))
 
 train_losses = []
 val_losses = []
