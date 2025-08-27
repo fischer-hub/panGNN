@@ -10,9 +10,6 @@ from collections import defaultdict
 
 def simulate_bit_scores(expectation_value, dispersion, n):
 
-    # Calculate shape (k) and scale (theta) from mean and variance
-    #shape = expectation_value / dispersion
-    #scale = expectation_value
         
     shape = (expectation_value ** 2) / dispersion
     scale = dispersion / expectation_value

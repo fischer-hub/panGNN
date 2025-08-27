@@ -298,12 +298,12 @@ def map_edge_weights(edge_index, bit_score_dict, gene_ids_lst, use_cache = False
             source_str_ID = gene_ids_lst[source_int_ID]
             target_str_ID = gene_ids_lst[target_int_ID]
 
-            if source_str_ID not in bit_score_dict:
-                edge_weight_lst[idx] = 1
-            elif target_str_ID not in bit_score_dict[source_str_ID]:
-                edge_weight_lst[idx] = 1
-            else:
-                edge_weight_lst[idx] = bit_score_dict[source_str_ID][target_str_ID]
+            #if source_str_ID not in bit_score_dict:
+            #    edge_weight_lst[idx] = 1
+            #elif target_str_ID not in bit_score_dict[source_str_ID]:
+            #    edge_weight_lst[idx] = 1
+            #else:
+            edge_weight_lst[idx] = bit_score_dict[source_str_ID][target_str_ID]
             
     
     # pickle test data edge features for testing (mapping takes a while otherwise)
