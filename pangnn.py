@@ -347,7 +347,7 @@ elif args.train:
 
     stats['simulate_dataset'] = 0
     hparams['simulate_dataset'] = 0
-    hparams['class_balance'] = hparams['class_balance'].item()
+    #hparams['class_balance'] = hparams['class_balance'].item()
     writer.add_hparams(hparams, stats)
     log.info(f"Time elapsed: {format_duration(time.time() - start)}.")
 
