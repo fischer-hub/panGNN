@@ -90,7 +90,7 @@ def build_edge_index(sim_score_dict, gene_id_integer_dict, fully_connected = Fal
         mask = (row != col)
         edge_index_ts = torch.stack((row, col), dim=0) if self_loops else torch.stack((row[mask], col[mask]), dim=0) 
     else:
-        max_edge_number = ((len(sim_score_dict)+1) ** 2)
+        max_edge_number = ((len(sim_score_dict)+1) * (nested_len(sim_score_dict)+1))
         origin_idx = [None] * max_edge_number
         target_idx = [None] * max_edge_number
         edge_counter = 0
@@ -298,7 +298,12 @@ def map_edge_weights(edge_index, bit_score_dict, gene_ids_lst, use_cache = False
             source_str_ID = gene_ids_lst[source_int_ID]
             target_str_ID = gene_ids_lst[target_int_ID]
 
-            edge_weight_lst[idx] = bit_score_dict[source_str_ID][target_str_ID]
+            if source_str_ID not in bit_score_dict:
+                edge_weight_lst[idx] = 1
+            elif target_str_ID not in bit_score_dict[source_str_ID]:
+                edge_weight_lst[idx] = 1
+            else:
+                edge_weight_lst[idx] = bit_score_dict[source_str_ID][target_str_ID]
             
     
     # pickle test data edge features for testing (mapping takes a while otherwise)
