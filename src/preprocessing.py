@@ -294,9 +294,15 @@ def map_edge_weights(edge_index, bit_score_dict, gene_ids_lst, use_cache = False
             if source_int_ID == target_int_ID:
                 edge_weight_lst[idx] = 1000
                 continue
-            # retrieve str IDs from integer IDs in the edge index
-            source_str_ID = gene_ids_lst[source_int_ID]
-            target_str_ID = gene_ids_lst[target_int_ID]
+
+            # this should not happen
+            if source_int_ID >= len(gene_ids_lst) or target_int_ID >= len(gene_ids_lst):
+                edge_weight_lst[idx] = 1
+                continue
+            else:
+                # retrieve str IDs from integer IDs in the edge index
+                source_str_ID = gene_ids_lst[source_int_ID]
+                target_str_ID = gene_ids_lst[target_int_ID]
 
             if source_str_ID not in bit_score_dict:
                 edge_weight_lst[idx] = 1
