@@ -216,7 +216,7 @@ def main():
                     log.debug('Calling optimizer step on current batch..')
                     optimizer.step()
                 
-                    train_loss += loss.item()
+                    train_loss += loss.detach()
                     labels = labels.detach()
                     probabilities = torch.sigmoid(output.detach())
                     binary_prediction_train = (probabilities >= binary_th).int()
@@ -258,7 +258,7 @@ def main():
                         val_labels = batch.y
 
                         loss = criterion(output, val_labels)
-                        val_loss += loss.item()
+                        val_loss += loss.detach()
                     
                         probabilities = torch.sigmoid(output.detach())
                         binary_prediction_val = (probabilities >= binary_th).int()
@@ -276,6 +276,7 @@ def main():
                         progress.update(val_bar, advance = 1)
 
 
+                val_loss = float(val_loss)  # single device sync per epoch instead of one per batch
                 # val metrics
                 conf_matrix = binary_confusion_matrix_val.compute()
                 tn = conf_matrix[0, 0].item()
@@ -305,6 +306,7 @@ def main():
                 writer.add_scalar("recall/val", recall_val, epoch)
                 writer.add_scalar("F1/val", f1_val, epoch)
 
+                train_loss = float(train_loss)
                 #train metrics
                 conf_matrix = binary_confusion_matrix_train.compute()
                 tn = conf_matrix[0, 0].item()

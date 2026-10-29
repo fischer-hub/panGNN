@@ -38,10 +38,10 @@ class MyGCN(torch.nn.Module):
         # TODO: does it make sense to call embedding on every forward step? the input doesnt change right?
         # or is this called on the convoluted node embeddings
         log.debug(f"Got nodes tensor of shape: {nodes.shape}")
-        log.debug(f"Got nodes tensor of shape: {nodes}")
+        log.debug("Got nodes tensor: %s", nodes)
         node_embeddings = self.embedding(nodes)
         log.debug(f"Got nodes tensor after embedding layer of shape: {node_embeddings.shape}")
-        log.debug(f"Got nodes tensor after embedding layer of shape: {node_embeddings}")
+        log.debug("Got nodes tensor after embedding layer: %s", node_embeddings)
         #node_embeddings = nodes
         #node_embeddings = combine_neighbour_embeddings(node_embeddings, data.neighbour_lst, self.device)
 
@@ -65,12 +65,12 @@ class MyGCN(torch.nn.Module):
         #nodes = F.dropout(nodes, training=self.training, p = 0.0001) # what does this do??
         #nodes = self.conv3(nodes, edge_index, data.neighbour_edge_weights_ts)
         nodes = self.conv_out(nodes, edge_index, edge_weights)
-        log.debug(f"Outputting nodes to decode function of shape: {nodes.shape}\n{nodes}")
+        log.debug("Outputting nodes to decode function of shape: %s\n%s", nodes.shape, nodes)
 
         link_predictions = self.decode(nodes, edge_index)
         #link_predictions = F.softmax(link_predictions)
         #link_predictions = torch.sigmoid(link_predictions)
-        log.debug(f"Outputting link prediction tensor of shape: {link_predictions.shape}\ntype:{link_predictions.dtype}\n{link_predictions}")
+        log.debug("Outputting link prediction tensor of shape: %s\ntype:%s\n%s", link_predictions.shape, link_predictions.dtype, link_predictions)
 
         return  link_predictions #F.log_softmax(nodes, dim=1)
     
@@ -138,7 +138,7 @@ class AlternateGCN(torch.nn.Module):
             nodes = self.conv_out(nodes, graph.union_edge_index)
             nodes = self.activation_fct(nodes)
 
-            #log.debug(f"Outputting nodes to decode function of shape: {nodes.shape}\n{nodes}")
+            #log.debug("Outputting nodes to decode function of shape: %s\n%s", nodes.shape, nodes)
 
         elif args.base_model:
 
@@ -165,7 +165,7 @@ class AlternateGCN(torch.nn.Module):
             nodes = self.conv_out(nodes, graph.neighbour_edge_index)
             nodes = self.activation_fct(nodes)
 
-            #log.debug(f"Outputting nodes to decode function of shape: {nodes.shape}\n{nodes}")
+            #log.debug("Outputting nodes to decode function of shape: %s\n%s", nodes.shape, nodes)
 
 
         if 'mlp' in args.decoder: 
@@ -195,7 +195,7 @@ class AlternateGCN(torch.nn.Module):
             #plt.savefig(f'umap_frames/{self.epoch}.png')
             #self.epoch += 1
             #plt.close()        
-            #log.debug(f"Outputting link prediction tensor of shape: {link_predictions.shape}\ntype:{link_predictions.dtype}\n{link_predictions}")
+            #log.debug("Outputting link prediction tensor of shape: %s\ntype:%s\n%s", link_predictions.shape, link_predictions.dtype, link_predictions)
 
         return  link_predictions
     
