@@ -1,5 +1,6 @@
 import torch, os, pickle, random, time, math
 from src.preprocessing import load_gff, load_similarity_score, load_ribap_groups, build_edge_index, map_edge_weights, map_labels_to_edge_index, construct_neighbour_lst, generate_neighbour_edge_features, build_adjacency_vectors, normalize_sim_scores, remove_trivial_cases
+from src.preprocessing import assign_gene_splits, TRAIN, VAL, TEST, NO_SPLIT
 from src.setup import log, args
 from src.helper import concat_graph_data, simulate_dataset, generate_minimal_dataset, calculate_baseline_labels, get_connected_nodes, get_neighbour_graph, remove_duplicate_edges_tuple, char_id_generator, format_duration
 from torch_geometric.data import Dataset, Data
@@ -127,6 +128,9 @@ class UnionGraphDataset(Dataset):
         #quit()
         ribap_groups_chunked = [self.ribap_groups_lst[i::args.cpus] for i in range(args.cpus) if self.ribap_groups_lst[i::args.cpus]]
         
+        # train / val / test membership of every gene, computed before the pool starts so the workers inherit it
+        if args.train: self.gene_split = assign_gene_splits(self.sim_score_dict_raw, self.ribap_groups_lst, split)
+
         # free some mem before multiprocessing and copying old objects
         del genome_annotation_df
         del genome_name_lst
@@ -152,7 +156,8 @@ class UnionGraphDataset(Dataset):
             del results
             del class_balance_lst
             
-            self.split_data(split, args.batch_size)
+            #self.split_data(split, args.batch_size)
+            self.split_data_by_gene_split()
 
             if args.simulate_dataset:
                 self.test = [self.generate_graphs()]
@@ -219,6 +224,40 @@ class UnionGraphDataset(Dataset):
         #self.val = concat_graph_data(self.data_lst[-num_val_data:])
     
 
+    def split_data_by_gene_split(self):
+        """Sort the sub graphs into train, val and test by the split of their RIBAP group (see assign_gene_splits)."""
+        graph_indices = {TRAIN: [], VAL: [], TEST: []}
+
+        for idx, graph in enumerate(self.data_lst):
+            graph_indices[graph.split_id.item()].append(idx)
+
+        self.train = [self.data_lst[idx] for idx in graph_indices[TRAIN]]
+        self.val   = [self.data_lst[idx] for idx in graph_indices[VAL]]
+        self.test  = [self.data_lst[idx] for idx in graph_indices[TEST]]
+        log.info(f"Split {len(self.data_lst)} sub graphs into train: {len(self.train)}, val: {len(self.val)}, test: {len(self.test)} graphs.")
+
+        if not self.val or not self.test:
+            log.error("Validation or test set is empty, the input has too few independent gene families to split.")
+            quit()
+
+        if self.calculate_baseline:
+            for graph in self.train + self.val: del graph.gene_lst
+
+            # baseline labels of the test graphs, restricted to the supervised edges like the predictions are
+            test_masks = [self.data_lst[idx].target_mask.tolist() for idx in graph_indices[TEST]]
+            self.base_labels = [label for idx, mask in zip(graph_indices[TEST], test_masks) for label, is_target in zip(self.base_labels[idx], mask) if is_target]
+            self.base_labels_raw = [label for idx, mask in zip(graph_indices[TEST], test_masks) for label, is_target in zip(self.base_labels_raw[idx], mask) if is_target]
+
+
+    def get_target_mask(self, sim_edge_index, gene_lst, graph_split):
+        """True for edges whose two genes both belong to the split of the graph, only these edges are supervised."""
+        gene_splits = torch.tensor([self.gene_split.get(gene, NO_SPLIT) for gene in gene_lst])
+        origin_splits = gene_splits[torch.tensor(sim_edge_index[0], dtype = torch.long)]
+        target_splits = gene_splits[torch.tensor(sim_edge_index[1], dtype = torch.long)]
+
+        return (origin_splits == graph_split) & (target_splits == graph_split)
+
+
     def generate_sub_graphs(self, ribap_groups_lst):
 
         pos = 0
@@ -254,13 +293,21 @@ class UnionGraphDataset(Dataset):
             assert len(sim_edge_index[0]) == len(sim_edge_index[1]), f'List or origin nodes ({len(sim_edge_index[0])}) is of different length than list of target nodes ({len(sim_edge_index[1])}), invalid edge index!'
 
             sim_edge_weights = map_edge_weights(sim_edge_index, sub_sim_score_dict, gene_lst, use_cache=False)
+
+            # all genes of a group share one split, edges to genes of other splits are context only
+            graph_split = self.gene_split[group[0]]
+            target_mask = self.get_target_mask(sim_edge_index, gene_lst, graph_split)
             assert len(sim_edge_weights) == len(sim_edge_index[0]), f'Number of similarity edges is different from number of edge weights (similarity scores), can not map {len(sim_edge_weights)} edge weights to {len(sim_edge_index[0])} edges.'
 
 
             if self.ribap_groups_dict or args.simulate_dataset:
                 labels_ts = map_labels_to_edge_index(sim_edge_index, gene_lst, self.ribap_groups_dict, use_cache=False)
-                pos += labels_ts.sum().item()
-                neg += len(labels_ts) - labels_ts.sum().item()
+                #pos += labels_ts.sum().item()
+                #neg += len(labels_ts) - labels_ts.sum().item()
+                # class balance (pos_weight) describes the supervised training edges only
+                if graph_split == TRAIN:
+                    pos += labels_ts[target_mask].sum().item()
+                    neg += target_mask.sum().item() - labels_ts[target_mask].sum().item()
 
                 if self.calculate_baseline:
                     base_labels, base_labels_raw = calculate_baseline_labels(sim_edge_index, gene_lst, sub_sim_score_dict, self.sim_score_dict_raw)
@@ -308,6 +355,9 @@ class UnionGraphDataset(Dataset):
                     torch.tensor((neighbour_edge_index[0]), dtype = torch.long),
                     torch.tensor((neighbour_edge_index[1]), dtype = torch.long)
                 )) 
+
+            graph.target_mask = target_mask
+            graph.split_id = torch.tensor(graph_split)
 
             if self.calculate_baseline:
                 graph.gene_lst = gene_lst
@@ -544,6 +594,10 @@ class UnionGraphDataset(Dataset):
         self.base_labels = load_dict['base_labels']
         self.base_labels_raw = load_dict['base_labels_raw']
         self.sim_score_dict = load_dict['similarity_dict']
+
+        if any(not hasattr(graph, 'target_mask') for graph in (self.train or []) + (self.val or [])):
+            log.error("Pickled dataset has no 'target_mask' (saved before gene split aware sub graphs), please generate it again with --to_pickle.")
+            quit()
 
 
         if not self.test and not self.train:

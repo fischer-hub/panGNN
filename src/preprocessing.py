@@ -4,6 +4,8 @@ from rich.progress import track, Progress, Console
 from src.setup import log, args
 import numpy as np
 from scipy.special import logsumexp
+from scipy.sparse import coo_matrix
+from scipy.sparse.csgraph import connected_components
 from collections import Counter
 from src.helper import nested_len
 
@@ -425,6 +427,67 @@ def load_similarity_score(similarity_score_file, gene_id_position_dict, center_s
 
     return sim_score_dict
 
+
+
+TRAIN, VAL, TEST, NO_SPLIT = 0, 1, 2, -1
+SPLIT_FRACTIONS = (0.7, 0.15, 0.15)
+SPLIT_SEED = 0
+
+
+def best_hit_edges(sim_score_dict):
+    """Return one (query, target) pair per query gene and target genome: its highest scoring candidate."""
+    best_candidate = {}
+
+    for query, candidates in sim_score_dict.items():
+        for target, score in candidates.items():
+            key = (query, target.split('_')[0])
+            if target != query and (key not in best_candidate or score > best_candidate[key][1]):
+                best_candidate[key] = (target, score)
+
+    return [(query, target) for (query, _), (target, _) in best_candidate.items()]
+
+
+def assign_gene_splits(sim_score_dict_raw, ribap_groups_lst, fractions = SPLIT_FRACTIONS, seed = SPLIT_SEED):
+    """Map every gene to train, val or test so that families are never split across sets.
+
+    Genes are joined into split units by their best similarity hit per genome and by their RIBAP
+    group (without group links, genes dropped by the trivial case filter would be cut off from
+    their group). Synteny edges are left out on purpose, they would fuse everything into one unit.
+    The largest unit goes to train, the rest is shuffled with a fixed seed and each unit goes to
+    the set that is furthest below its target fraction of genes.
+
+    Returns:
+        dict: gene string ID -> TRAIN, VAL or TEST
+    """
+    group_links = [pair for group in ribap_groups_lst for pair in zip(group, group[1:])]
+    links = best_hit_edges(sim_score_dict_raw) + group_links
+
+    all_genes = set(sim_score_dict_raw) | {gene for group in ribap_groups_lst for gene in group}
+    all_genes.update(target for candidates in sim_score_dict_raw.values() for target in candidates)
+    # sorted, because string hashing (set order) changes between runs and would make the split irreproducible
+    gene_index = {gene: idx for idx, gene in enumerate(sorted(all_genes))}
+
+    origins = [gene_index[origin] for origin, _ in links]
+    targets = [gene_index[target] for _, target in links]
+    graph = coo_matrix((np.ones(len(links)), (origins, targets)), shape = (len(gene_index),) * 2)
+    _, unit_of_gene = connected_components(graph, directed = False)
+
+    unit_sizes = np.bincount(unit_of_gene)
+    largest_first = np.argsort(-unit_sizes)
+    split_of_unit = np.full(len(unit_sizes), TRAIN)
+    genes_per_split = np.zeros(3)
+    genes_per_split[TRAIN] = unit_sizes[largest_first[0]]
+
+    for unit in np.random.default_rng(seed).permutation(largest_first[1:]):
+        split = np.argmax(np.array(fractions) - genes_per_split / genes_per_split.sum())
+        split_of_unit[unit] = split
+        genes_per_split[split] += unit_sizes[unit]
+
+    log.info(f"Assigned {len(gene_index)} genes in {len(unit_sizes)} split units to train/val/test: " +
+             '/'.join(f'{share:.1%}' for share in genes_per_split / genes_per_split.sum()) +
+             f" of genes, largest unit has {unit_sizes.max()} genes.")
+
+    return {gene: int(split_of_unit[unit_of_gene[idx]]) for gene, idx in gene_index.items()}
 
 
 def softmax_with_temperature(x, t = 0.65):

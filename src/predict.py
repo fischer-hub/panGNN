@@ -9,6 +9,17 @@ from sklearn.preprocessing import minmax_scale
 import torch.nn.functional as F
 
 
+def keep_target_edges(graph):
+    """Restrict labels, edges and edge weights of a graph to its supervised edges (graph.target_mask)."""
+    mask = graph.target_mask
+    graph.y = graph.y[mask]
+    graph.edge_index = graph.edge_index[:, mask]
+    # in union graphs edge_attr also holds the neighbour edge weights behind the similarity edges
+    graph.edge_attr = graph.edge_attr[:len(mask)][mask]
+
+    return graph
+
+
 def predict_homolog_genes(model, train_dataset = None, test_dataset = None, binary_th = 0.72, base_labels = None, refined_base_labels = None, dataset = None):
     """Infer the GNN with given trained model and predict homolog genes from
     input similarity graph.
@@ -36,6 +47,11 @@ def predict_homolog_genes(model, train_dataset = None, test_dataset = None, bina
         log.info(f"Time elapsed during inference on test datset: {format_duration(time.time() - inference_start_time)}.")
 
         if isinstance(test_dataset, tuple): test_dataset = test_dataset[0]
+
+        # evaluate only on edges between genes of the test split, other edges were message passing context
+        if hasattr(test_dataset, 'target_mask'):
+            edge_scores = edge_scores[test_dataset.target_mask]
+            test_dataset = keep_target_edges(test_dataset)
 
         if train_dataset:
             #train_dataset.to(device)

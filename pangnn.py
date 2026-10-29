@@ -44,7 +44,8 @@ def main():
             num_genomes = 'number of genomes not available since dataset was loaded from disk'
         else:
             num_genomes = len(args.annotation)
-            dataset = UnionGraphDataset(args.annotation, args.similarity, args.ribap_groups, split=(0.7, 0.15, 0.01), categorical_nodes = args.categorical_node, calculate_baseline=True)
+            #dataset = UnionGraphDataset(args.annotation, args.similarity, args.ribap_groups, split=(0.7, 0.15, 0.01), categorical_nodes = args.categorical_node, calculate_baseline=True)
+            dataset = UnionGraphDataset(args.annotation, args.similarity, args.ribap_groups, split=(0.7, 0.15, 0.15), categorical_nodes = args.categorical_node, calculate_baseline=True)
         
             if args.from_pickle and args.fix_dataset:
                 dataset.load(args.from_pickle)
@@ -53,7 +54,8 @@ def main():
                 quit()
     else:
         log.info('Simulating dataset.')
-        dataset = UnionGraphDataset(calculate_baseline = True, split=(0.7, 0.15, 0.01), categorical_nodes = args.categorical_node)
+        #dataset = UnionGraphDataset(calculate_baseline = True, split=(0.7, 0.15, 0.01), categorical_nodes = args.categorical_node)
+        dataset = UnionGraphDataset(calculate_baseline = True, split=(0.7, 0.15, 0.15), categorical_nodes = args.categorical_node)
         num_genomes = args.simulate_dataset[1]
         #dataset  = UnionGraphDataset()
         #dataset.simulate_dataset(2000, num_genomes, 0.15)
@@ -190,6 +192,7 @@ def main():
 
                     #batch = sub_sample_graph_edges(dataset.train, device, fraction = 0.8) if not args.union_edge_weights else dataset.train
                     labels = batch[0].y if isinstance(batch, tuple) else batch.y
+                    target_mask = batch.target_mask
 
                     # clear old gradients so only current batch gradients are used
                     optimizer.zero_grad()
@@ -199,6 +202,8 @@ def main():
 
                     try:
                         output = model(batch)
+                        # only edges between genes of the train split are supervised, the rest is message passing context
+                        output, labels = output[target_mask], labels[target_mask]
                         log.debug('Calling loss function on current batch..')
                         log.debug(batch)
                         loss = criterion(output, labels)
@@ -255,7 +260,9 @@ def main():
                             oom_count +=1
                             continue
 
-                        val_labels = batch.y
+                        #val_labels = batch.y
+                        val_labels = batch.y[batch.target_mask]
+                        output = output[batch.target_mask]
 
                         loss = criterion(output, val_labels)
                         val_loss += loss.detach()
