@@ -241,12 +241,38 @@ class UnionGraphDataset(Dataset):
             quit()
 
         if self.calculate_baseline:
+            # val and test report one prediction per directed gene pair, train keeps its repeats (needs gene_lst, so before it is deleted)
+            self.keep_first_occurrence(self.val)
+            self.keep_first_occurrence(self.test)
+
             for graph in self.train + self.val: del graph.gene_lst
 
             # baseline labels of the test graphs, restricted to the supervised edges like the predictions are
             test_masks = [self.data_lst[idx].target_mask.tolist() for idx in graph_indices[TEST]]
             self.base_labels = [label for idx, mask in zip(graph_indices[TEST], test_masks) for label, is_target in zip(self.base_labels[idx], mask) if is_target]
             self.base_labels_raw = [label for idx, mask in zip(graph_indices[TEST], test_masks) for label, is_target in zip(self.base_labels_raw[idx], mask) if is_target]
+
+
+    def keep_first_occurrence(self, graphs):
+        """Score every directed gene pair in only one graph, the others keep it as context but not as target.
+
+        Graphs are ordered by their sorted gene IDs, so the choice does not depend on --cpus or pool order.
+        """
+        scored_pairs = set()
+
+        for graph in sorted(graphs, key = lambda graph: tuple(sorted(graph.gene_lst))):
+            origins, targets = graph.edge_index.tolist()
+            new_mask = graph.target_mask.tolist()
+
+            for edge, (origin, target) in enumerate(zip(origins, targets)):
+                pair = (graph.gene_lst[origin], graph.gene_lst[target])
+                if not new_mask[edge]: continue
+                if pair in scored_pairs: new_mask[edge] = False
+                scored_pairs.add(pair)
+
+            graph.target_mask = torch.tensor(new_mask)
+
+        log.info(f"Scoring {len(scored_pairs)} unique directed gene pairs in {len(graphs)} graphs.")
 
 
     def get_target_mask(self, sim_edge_index, gene_lst, graph_split):
