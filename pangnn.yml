@@ -1,0 +1,14 @@
+name: panGNN
+channels:
+  - conda-forge
+  - bioconda
+  - pyg
+dependencies:
+  - pyg
+  - matplotlib-base=3.10
+  - pandas=2.2.3
+  - rich=14.0.0
+  - networkx=3.4.2
+  - seaborn=0.13.2
+  - accelerate=1.2.1
+  - torchmetrics=1.5.2
