@@ -1,6 +1,7 @@
 import torch, os, pickle, random, time, math
 from src.preprocessing import load_gff, load_similarity_score, load_ribap_groups, build_edge_index, map_edge_weights, map_labels_to_edge_index, construct_neighbour_lst, generate_neighbour_edge_features, build_adjacency_vectors, normalize_sim_scores, remove_trivial_cases
 from src.preprocessing import assign_gene_splits, TRAIN, VAL, TEST, NO_SPLIT
+from src.preprocessing import random_gene_features
 from src.setup import log, args
 from src.helper import concat_graph_data, simulate_dataset, generate_minimal_dataset, calculate_baseline_labels, get_connected_nodes, get_neighbour_graph, remove_duplicate_edges_tuple, char_id_generator, format_duration
 from torch_geometric.data import Dataset, Data
@@ -275,6 +276,13 @@ class UnionGraphDataset(Dataset):
         log.info(f"Scoring {len(scored_pairs)} unique directed gene pairs in {len(graphs)} graphs.")
 
 
+    def get_node_features(self, gene_lst):
+        """One feature row per gene: the constant 1 (default), or a fixed random vector per gene with --random_node_features."""
+        if args.random_node_features: return random_gene_features(gene_lst, args.node_dim)
+
+        return torch.ones((len(gene_lst), 1))
+
+
     def get_target_mask(self, sim_edge_index, gene_lst, graph_split):
         """True for edges whose two genes both belong to the split of the graph, only these edges are supervised."""
         gene_splits = torch.tensor([self.gene_split.get(gene, NO_SPLIT) for gene in gene_lst])
@@ -350,7 +358,8 @@ class UnionGraphDataset(Dataset):
                 labels_ts = None
 
 
-            x = torch.tensor([1] * len(gene_lst)).unsqueeze(1).float()
+            #x = torch.tensor([1] * len(gene_lst)).unsqueeze(1).float()
+            x = self.get_node_features(gene_lst)
 
             sim_edge_index = torch.stack((
                 torch.tensor((sim_edge_index[0]), dtype = torch.long),
@@ -401,7 +410,8 @@ class UnionGraphDataset(Dataset):
     def generate_graphs(self):
         # total number of genes found in all annotation files
         log.info('Allocating node feature tensor..')
-        node_features_ts = torch.ones((self.num_genes,1 ), dtype = torch.float)
+        #node_features_ts = torch.ones((self.num_genes,1 ), dtype = torch.float)
+        node_features_ts = self.get_node_features(self.gene_str_ids_lst)
 
         with Console().status("Building edge index..") as status:
             edge_index_ts = build_edge_index(self.sim_score_dict, self.gene_id_position_dict, fully_connected = False)

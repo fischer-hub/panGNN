@@ -92,6 +92,9 @@ class AlternateGCN(torch.nn.Module):
             # handle gene nodes as categorical data embeddings
             self.embedding = torch.nn.Embedding(len(dataset.x), node_embedding_dim)
             #log.debug(dataset.x)
+        elif args.random_node_features:
+            # every gene already comes with its own random vector of size node_dim, no projection needed
+            self.embedding = torch.nn.Identity()
         else:
             # handle gene nodes as numerical data embeddings
             self.embedding = torch.nn.Linear(1, node_embedding_dim)

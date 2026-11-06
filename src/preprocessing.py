@@ -8,6 +8,8 @@ from scipy.sparse import coo_matrix
 from scipy.sparse.csgraph import connected_components
 from collections import Counter
 from src.helper import nested_len
+import hashlib
+from functools import lru_cache
 
 def build_adjacency_vectors(num_neighbours, gene_id_lst):
 
@@ -488,6 +490,21 @@ def assign_gene_splits(sim_score_dict_raw, ribap_groups_lst, fractions = SPLIT_F
              f" of genes, largest unit has {unit_sizes.max()} genes.")
 
     return {gene: int(split_of_unit[unit_of_gene[idx]]) for gene, idx in gene_index.items()}
+
+
+NODE_FEATURE_SEED = 0
+
+
+@lru_cache(maxsize = None)
+def gene_feature_vector(gene_id, dim):
+    """Fixed U(-1, 1) vector of one gene, seeded by a stable hash of its ID (python's hash() changes between runs)."""
+    gene_seed = int.from_bytes(hashlib.blake2b(gene_id.encode(), digest_size = 8).digest(), 'little')
+    return np.random.default_rng([NODE_FEATURE_SEED, gene_seed]).uniform(-1, 1, dim)
+
+
+def random_gene_features(gene_ids, dim):
+    """Feature matrix with one fixed random vector per gene, so a gene looks the same in every sub graph and at inference."""
+    return torch.tensor(np.stack([gene_feature_vector(gene_id, dim) for gene_id in gene_ids])).float()
 
 
 def softmax_with_temperature(x, t = 0.65):

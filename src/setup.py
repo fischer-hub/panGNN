@@ -36,6 +36,7 @@ parser.add_argument('--from_pickle',        help = 'path to pickle file to load 
 parser.add_argument('--to_pickle',          help = 'path to pickle file to save current dataset to', default = '')
 parser.add_argument('--fix_dataset',        help = "for loaded dataset fix subset instead of generating it newly, chose from ['train', 'val', 'test']", default = [], type = str, nargs = '*')
 parser.add_argument('--node_dim',           help = 'dimension of node embedding and input of first convolution layer', default = 64, type = int)
+parser.add_argument('--random_node_features', help = 'give every gene its own fixed random feature vector of size node_dim (uniform in [-1, 1], seeded by the gene ID) instead of the same constant 1 for all genes', action = 'store_true')
 parser.add_argument('--hidden_dim',         help = 'dimension of hidden convoluytion layer(s)', default = 128, type = int)
 parser.add_argument('--decoder',            help = "decoding strategy (similarity measure) to use predict link between two node embeddings ['mlp', 'cosine', 'dotproduct']", default = 'mlp', type = str)
 parser.add_argument('--base_model',         help = "train using the base model that only convolutes over similarity edges", action='store_true')
@@ -98,6 +99,7 @@ hparams = {
     "dynamic_binary_threshold": args.dynamic_binary_threshold,  
     "simulate_dataset": args.simulate_dataset,
     "categorical_node": args.categorical_node,
+    "random_node_features": args.random_node_features,
     'no_q_score_transform': args.no_q_score_transform,
     'normalization_temp': args.normalization_temp,
     'tb_comment': args.tb_comment
