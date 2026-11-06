@@ -1,14 +1,44 @@
+# panGNN environment: OS independent, no versions pinned.
+# Taken from the environment the code was last tested in (Python 3.11, latest releases of every package at the time).
+# GPU: install a CUDA build of PyTorch that matches your driver first, see the README.
 name: panGNN
 channels:
   - conda-forge
-  - bioconda
-  - pyg
+  #- bioconda
+  #- pyg
 dependencies:
-  - pyg
-  - matplotlib-base=3.10
-  - pandas=2.2.3
-  - rich=14.0.0
-  - networkx=3.4.2
-  - seaborn=0.13.2
-  - accelerate=1.2.1
-  - torchmetrics=1.5.2
+  - python
+  - pytorch
+  - torchmetrics
+  - accelerate
+  - rich
+  - scikit-learn
+  - scipy
+  - numpy
+  - pandas
+  - seaborn
+  - matplotlib-base
+  - networkx
+  - tensorboard
+  # PyG from conda-forge, replaces the pyg conda channel (only GCNConv is used, no extension libraries needed)
+  - pytorch_geometric
+  # pip variant that was tested in the development environment, use it if the conda-forge package does not solve:
+  #- pip
+  #- pip:
+  #    - torch_geometric
+
+# previous version of this file, kept for reference:
+#name: panGNN
+#channels:
+#  - conda-forge
+#  - bioconda
+#  - pyg
+#dependencies:
+#  - pyg
+#  - matplotlib-base=3.10
+#  - pandas=2.2.3
+#  - rich=14.0.0
+#  - networkx=3.4.2
+#  - seaborn=0.13.2
+#  - accelerate=1.2.1
+#  - torchmetrics=1.5.2
