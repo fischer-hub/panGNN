@@ -15,6 +15,31 @@ from torch_geometric.transforms import RemoveDuplicatedEdges
 from src.plot import plot_violin_distributions, plot_homolog_positions, plot_simscore_distribution_by_class
 from multiprocessing import Pool, current_process
 from src.simulate import simulate_gene_ids, simulate_similarity_scores_and_ribap_dict, shuffle_synteny_blocks
+import sys, multiprocessing
+
+
+# dataset used by the sub graph workers, handed over once per worker by the pool initializer
+# instead of pickling the whole dataset with every task (pool.map(self.generate_sub_graphs, ...))
+_worker_dataset = None
+
+
+def set_worker_dataset(dataset):
+    global _worker_dataset
+    _worker_dataset = dataset
+
+
+def generate_sub_graphs_in_worker(ribap_groups_lst):
+    return _worker_dataset.generate_sub_graphs(ribap_groups_lst)
+
+
+def sub_graph_pool(dataset, processes):
+    """Worker pool holding the dataset.
+
+    On Linux the workers are forked and share the dataset for free, also on python >= 3.14 where the default
+    became forkserver. Elsewhere (macOS: spawn) every worker gets one pickled copy, forking is not safe there.
+    """
+    context = multiprocessing.get_context('fork') if sys.platform.startswith('linux') else multiprocessing.get_context()
+    return context.Pool(processes = processes, initializer = set_worker_dataset, initargs = (dataset,))
 
 
 class UnionGraphDataset(Dataset):
@@ -148,8 +173,10 @@ class UnionGraphDataset(Dataset):
         if args.train:
             mstart = time.time()
 
-            with Console().status("Generating sub-graphs (this might take some time)..") as status, Pool(processes = args.cpus) as pool:
-                results  = pool.map(self.generate_sub_graphs, ribap_groups_chunked)
+            #with Console().status("Generating sub-graphs (this might take some time)..") as status, Pool(processes = args.cpus) as pool:
+            #    results  = pool.map(self.generate_sub_graphs, ribap_groups_chunked)
+            with Console().status("Generating sub-graphs (this might take some time)..") as status, sub_graph_pool(self, args.cpus) as pool:
+                results  = pool.map(generate_sub_graphs_in_worker, ribap_groups_chunked)
                 self.data_lst = [sublist for tup in results for sublist in tup[0]]
                 if self.calculate_baseline: 
                     self.base_labels = [sublist for tup in results for sublist in tup[2]]
