@@ -125,7 +125,9 @@ def main():
     model, optimizer, test_data_loader = accelerator.prepare(model, optimizer, test_data_loader)
 
 
-    if not args.train or os.path.exists(args.model_args):
+    #if not args.train or os.path.exists(args.model_args):
+    # an existing model file must not switch a --train run to inference
+    if not args.train:
         if os.path.exists(args.model_args):
             log.info(f"Found model file '{args.model_args}' with trained parameters, restoring model state for inference..")
             model.load_state_dict(torch.load(args.model_args, map_location = device))

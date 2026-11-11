@@ -7,6 +7,21 @@ from src.helper import concat_graph_data, calculate_logit_baseline_labels, forma
 from sklearn.metrics import confusion_matrix, PrecisionRecallDisplay
 from sklearn.preprocessing import minmax_scale
 import torch.nn.functional as F
+from torch_geometric.data import Batch
+
+
+def run_model_in_chunks(model, graph, graphs_per_chunk):
+    """Edge scores of a batch of graphs, computed a few graphs at a time.
+
+    The test loader puts all test sub graphs into one batch (about 81 M edges on Klebsiella), which does not fit
+    into GPU memory in a single forward pass. The graphs of a batch are disjoint, so scoring them in chunks gives
+    the same scores in the same edge order.
+    """
+    if getattr(graph, 'num_graphs', 1) <= graphs_per_chunk: return model(graph)
+
+    graphs = graph.to_data_list()
+    chunks = [Batch.from_data_list(graphs[start:start + graphs_per_chunk]) for start in range(0, len(graphs), graphs_per_chunk)]
+    return torch.cat([model(chunk) for chunk in chunks])
 
 
 def keep_target_edges(graph):
@@ -42,7 +57,8 @@ def predict_homolog_genes(model, train_dataset = None, test_dataset = None, bina
         with Console().status("Infering model on test data..") as status:
             #test_dataset.to(device)
             inference_start_time = time.time()
-            edge_scores = model(test_dataset)
+            #edge_scores = model(test_dataset)
+            edge_scores = run_model_in_chunks(model, test_dataset, args.batch_size)
         
         log.info(f"Time elapsed during inference on test datset: {format_duration(time.time() - inference_start_time)}.")
 
