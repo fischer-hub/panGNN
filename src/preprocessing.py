@@ -511,6 +511,23 @@ def assign_gene_splits(sim_score_dict_raw, ribap_groups_lst, fractions = SPLIT_F
     return {gene: int(split_of_unit[unit_of_gene[idx]]) for gene, idx in gene_index.items()}
 
 
+def gene_split_units(sim_score_dict_raw, ribap_groups_lst):
+    """Split unit of every gene: the connected components that assign_gene_splits distributes over train, val and test."""
+    group_links = [pair for group in ribap_groups_lst for pair in zip(group, group[1:])]
+    links = best_hit_edges(sim_score_dict_raw) + group_links
+
+    all_genes = set(sim_score_dict_raw) | {gene for group in ribap_groups_lst for gene in group}
+    all_genes.update(target for candidates in sim_score_dict_raw.values() for target in candidates)
+    gene_index = {gene: idx for idx, gene in enumerate(sorted(all_genes))}
+
+    origins = [gene_index[origin] for origin, _ in links]
+    targets = [gene_index[target] for _, target in links]
+    graph = coo_matrix((np.ones(len(links)), (origins, targets)), shape = (len(gene_index),) * 2)
+    _, unit_of_gene = connected_components(graph, directed = False)
+
+    return {gene: int(unit_of_gene[idx]) for gene, idx in gene_index.items()}
+
+
 NODE_FEATURE_SEED = 0
 
 

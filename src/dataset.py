@@ -4,6 +4,8 @@ from src.preprocessing import assign_gene_splits, TRAIN, VAL, TEST, NO_SPLIT
 from src.preprocessing import random_gene_features
 from src.preprocessing import build_edge_index_with_weights
 from src.helper import best_score_per_genome, calculate_baseline_labels_fast
+from src.preprocessing import gene_split_units, SPLIT_SEED
+from src.union_batching import WholeGraph, UnionBatchDataset, batches_in_unit_order
 from src.setup import log, args
 from src.helper import concat_graph_data, simulate_dataset, generate_minimal_dataset, calculate_baseline_labels, get_connected_nodes, get_neighbour_graph, remove_duplicate_edges_tuple, char_id_generator, format_duration
 from torch_geometric.data import Dataset, Data
@@ -163,6 +165,9 @@ class UnionGraphDataset(Dataset):
         if args.train and self.calculate_baseline:
             self.best_score, self.best_score_raw = best_score_per_genome(self.sim_score_dict), best_score_per_genome(self.sim_score_dict_raw)
 
+        # optional: one union sub graph per batch, cut out of the whole graph during training instead of the sub graph pool
+        if args.train and args.union_batches: self.build_union_batches(self.ribap_groups_lst)
+
         # free some mem before multiprocessing and copying old objects
         del genome_annotation_df
         del genome_name_lst
@@ -170,7 +175,8 @@ class UnionGraphDataset(Dataset):
         del genome_annotation_df_lst
 
 
-        if args.train:
+        #if args.train:
+        if args.train and not args.union_batches:
             mstart = time.time()
 
             #with Console().status("Generating sub-graphs (this might take some time)..") as status, Pool(processes = args.cpus) as pool:
@@ -199,7 +205,8 @@ class UnionGraphDataset(Dataset):
             if args.to_pickle:
                 self.save(args.to_pickle)
         
-        else:
+        #else:
+        elif not args.train:
             log.info("PanGNN not in training mode, skipping graph batching because 'ground truth' labels necessary for splitting are unknown in inference mode.")
 
             self.test = [self.generate_graphs()]
@@ -307,6 +314,43 @@ class UnionGraphDataset(Dataset):
             graph.target_mask = torch.tensor(new_mask)
 
         log.info(f"Scoring {len(scored_pairs)} unique directed gene pairs in {len(graphs)} graphs.")
+
+
+    def build_union_batches(self, ribap_groups_lst):
+        """Train, val and test data for --union_batches, built from one whole graph instead of the sub graph pool.
+
+        train: batches cut out freshly every epoch (UnionBatchDataset), groups of a split unit kept together
+        val:   the same kind of batches, cut once in a fixed order, every directed gene pair scored once
+        test:  the whole graph, only edges between two test genes are scored
+        """
+        start = time.time()
+        self.whole_graph = WholeGraph(self.gene_str_ids_lst, self.sim_score_dict, ribap_groups_lst, self.gene_split, args.neighbours)
+        unit_of_gene = gene_split_units(self.sim_score_dict_raw, ribap_groups_lst)
+
+        # same groups the sub graph loop uses: more than one gene and at least one gene with similarity scores
+        units_by_split = {TRAIN: {}, VAL: {}, TEST: {}}
+        for group in ribap_groups_lst:
+            if len(group) <= 1 or not any(gene in self.sim_score_dict for gene in group): continue
+            seed_nodes = torch.tensor([self.whole_graph.node_of[gene] for gene in group])
+            units_by_split[self.gene_split[group[0]]].setdefault(unit_of_gene[group[0]], []).append(seed_nodes)
+
+        self.train = UnionBatchDataset(self.whole_graph, list(units_by_split[TRAIN].values()), TRAIN, args.batch_size, self.get_node_features, SPLIT_SEED)
+
+        val_batches = batches_in_unit_order([units_by_split[VAL][unit] for unit in sorted(units_by_split[VAL])], args.batch_size)
+        self.val = [self.whole_graph.batch_graph(seed_nodes, VAL, self.get_node_features, keep_gene_ids = True) for seed_nodes in val_batches]
+        self.keep_first_occurrence(self.val)
+        for graph in self.val: del graph.gene_lst
+
+        test_graph = self.whole_graph.full_graph(TEST, self.get_node_features)
+        self.test = [test_graph]
+        test_edges = test_graph.edge_index[:, test_graph.target_mask].tolist()
+        self.base_labels, self.base_labels_raw = calculate_baseline_labels_fast(test_edges, self.gene_str_ids_lst, self.sim_score_dict, self.sim_score_dict_raw, self.best_score, self.best_score_raw)
+        del test_graph.gene_lst
+
+        self.class_balance = self.whole_graph.class_balance(TRAIN)
+        log.info(f"Union batches: {len(self.train)} train batches from {sum(len(unit) for unit in units_by_split[TRAIN].values())} groups, "
+                 f"{len(self.val)} fixed val batches, whole graph test with {int(test_graph.target_mask.sum())} test edges, "
+                 f"class balance {self.class_balance:.3f}, built in {format_duration(time.time() - start)}.")
 
 
     def get_node_features(self, gene_lst):

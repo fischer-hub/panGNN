@@ -152,8 +152,12 @@ def main():
         run_id = datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + args.tb_comment
         writer = SummaryWriter(log_dir = os.path.join('temp', run_id), comment = args.tb_comment)
     
-        train_data_loader = DataLoader(dataset.train, batch_size=args.batch_size, shuffle=True, pin_memory = True)
-        val_data_loader = DataLoader(dataset.val, batch_size=args.batch_size, shuffle=True, pin_memory = True)
+        #train_data_loader = DataLoader(dataset.train, batch_size=args.batch_size, shuffle=True, pin_memory = True)
+        #val_data_loader = DataLoader(dataset.val, batch_size=args.batch_size, shuffle=True, pin_memory = True)
+        # with --union_batches every item already is a whole batch (one union sub graph of batch_size groups)
+        loader_batch_size = 1 if args.union_batches else args.batch_size
+        train_data_loader = DataLoader(dataset.train, batch_size=loader_batch_size, shuffle=True, pin_memory = True)
+        val_data_loader = DataLoader(dataset.val, batch_size=loader_batch_size, shuffle=True, pin_memory = True)
 
         model, optimizer, train_data_loader, scheduler, val_data_loader, test_data_loader = accelerator.prepare(model, optimizer, train_data_loader, scheduler, val_data_loader, test_data_loader)
 
@@ -168,6 +172,9 @@ def main():
             val_bar      = progress.add_task("Infering model on validation data set:", total=len(val_data_loader))
 
             for epoch in range(args.epochs):
+
+                # new batch composition every epoch, groups of a split unit stay together
+                if args.union_batches: dataset.train.reshuffle(epoch)
 
                 if 'cuda' in device.type:
                 

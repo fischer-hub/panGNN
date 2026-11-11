@@ -39,6 +39,7 @@ parser.add_argument('--node_dim',           help = 'dimension of node embedding 
 parser.add_argument('--random_node_features', help = 'give every gene its own fixed random feature vector of size node_dim (uniform in [-1, 1], seeded by the gene ID) instead of the same constant 1 for all genes', action = 'store_true')
 parser.add_argument('--hidden_dim',         help = 'dimension of hidden convoluytion layer(s)', default = 128, type = int)
 parser.add_argument('--decoder',            help = "decoding strategy (similarity measure) to use predict link between two node embeddings ['mlp', 'cosine', 'dotproduct']", default = 'mlp', type = str)
+parser.add_argument('--union_batches',      help = "instead of building all sub graphs up front, cut one sub graph per batch out of the whole graph during training (groups of a split unit batched together, shared genes once); validation uses fixed batches, the test set is the whole graph scoring only test-test edges", action='store_true')
 parser.add_argument('--base_model',         help = "train using the base model that only convolutes over similarity edges", action='store_true')
 parser.add_argument('-o', '--output',        help = "output directory to store run files (PR-AUC, tensorboard track files, etc.) in ", default = 'runs', type = str)
 
@@ -87,6 +88,12 @@ for subset in args.fix_dataset:
         log.error(f"Subset '{subset}' is not a valid subset name, please chose from ['train', 'val', 'test'].")
         quit()
 
+unsupported_with_union_batches = [flag for flag, is_set in [('--union_edge_weights', args.union_edge_weights), ('--categorical_node', args.categorical_node),
+                                                            ('--simulate_dataset', args.simulate_dataset), ('--from_pickle', args.from_pickle), ('--to_pickle', args.to_pickle)] if is_set]
+if args.union_batches and unsupported_with_union_batches:
+    log.error(f"--union_batches can not be combined with {', '.join(unsupported_with_union_batches)} yet, exiting.")
+    quit()
+
 
 # print header text
 print_header(True, args)
@@ -100,6 +107,7 @@ hparams = {
     "simulate_dataset": args.simulate_dataset,
     "categorical_node": args.categorical_node,
     "random_node_features": args.random_node_features,
+    "union_batches": args.union_batches,
     'no_q_score_transform': args.no_q_score_transform,
     'normalization_temp': args.normalization_temp,
     'tb_comment': args.tb_comment
