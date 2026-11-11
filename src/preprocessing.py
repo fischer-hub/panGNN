@@ -122,6 +122,25 @@ def build_edge_index(sim_score_dict, gene_id_integer_dict, fully_connected = Fal
     return (origin_idx, target_idx)
 
 
+def build_edge_index_with_weights(sim_score_dict, gene_id_integer_dict):
+    """Similarity edges between genes of the graph and their scores in one pass.
+
+    Lists are appended instead of pre-allocated: build_edge_index reserves (n+1)*max(40, n+1) slots, which is
+    119 times more than needed for the largest Klebsiella sub graph. The edges of a dict are unique by
+    construction, so no duplicate removal is needed afterwards.
+    """
+    origin_idx, target_idx, edge_weights = [], [], []
+
+    for origin_id, candidates in sim_score_dict.items():
+        for target_id, score in candidates.items():
+            if target_id == origin_id or target_id not in gene_id_integer_dict: continue
+            origin_idx.append(gene_id_integer_dict[origin_id])
+            target_idx.append(gene_id_integer_dict[target_id])
+            edge_weights.append(score)
+
+    return (origin_idx, target_idx), torch.tensor(edge_weights).float()
+
+
 # TODO: slow
 def map_labels_to_edge_index(edge_index, gene_ids_lst, ribap_groups_dict, use_cache = False):
     """Map labels for test dataset from RIBAP result table to respective edge

@@ -2,6 +2,8 @@ import torch, os, pickle, random, time, math
 from src.preprocessing import load_gff, load_similarity_score, load_ribap_groups, build_edge_index, map_edge_weights, map_labels_to_edge_index, construct_neighbour_lst, generate_neighbour_edge_features, build_adjacency_vectors, normalize_sim_scores, remove_trivial_cases
 from src.preprocessing import assign_gene_splits, TRAIN, VAL, TEST, NO_SPLIT
 from src.preprocessing import random_gene_features
+from src.preprocessing import build_edge_index_with_weights
+from src.helper import best_score_per_genome, calculate_baseline_labels_fast
 from src.setup import log, args
 from src.helper import concat_graph_data, simulate_dataset, generate_minimal_dataset, calculate_baseline_labels, get_connected_nodes, get_neighbour_graph, remove_duplicate_edges_tuple, char_id_generator, format_duration
 from torch_geometric.data import Dataset, Data
@@ -131,6 +133,10 @@ class UnionGraphDataset(Dataset):
         
         # train / val / test membership of every gene, computed before the pool starts so the workers inherit it
         if args.train: self.gene_split = assign_gene_splits(self.sim_score_dict_raw, self.ribap_groups_lst, split)
+
+        # best score per (gene, target genome), turns every baseline label into a single lookup in the sub graph workers
+        if args.train and self.calculate_baseline:
+            self.best_score, self.best_score_raw = best_score_per_genome(self.sim_score_dict), best_score_per_genome(self.sim_score_dict_raw)
 
         # free some mem before multiprocessing and copying old objects
         del genome_annotation_df
@@ -320,13 +326,14 @@ class UnionGraphDataset(Dataset):
             
             if not sub_sim_score_dict: continue
 
-            sim_edge_index = build_edge_index(sub_sim_score_dict, sub_gene_id_pos_dict, fully_connected = False)
-            sim_edge_index = remove_duplicate_edges_tuple(sim_edge_index)
+            #sim_edge_index = build_edge_index(sub_sim_score_dict, sub_gene_id_pos_dict, fully_connected = False)
+            #sim_edge_index = remove_duplicate_edges_tuple(sim_edge_index)
+            sim_edge_index, sim_edge_weights = build_edge_index_with_weights(sub_sim_score_dict, sub_gene_id_pos_dict)
             if self.gff_is_subset and len(sim_edge_index[0]) < len(group): continue
             assert len(sim_edge_index[0]) >= len(group), f'Found less similarity edges than edges neccessary to connect genes from origin gene family, number of edges is: {len(sim_edge_index[0])}, but {len(group)} genes belong to origin gene family ({group}) of this graph.'
             assert len(sim_edge_index[0]) == len(sim_edge_index[1]), f'List or origin nodes ({len(sim_edge_index[0])}) is of different length than list of target nodes ({len(sim_edge_index[1])}), invalid edge index!'
 
-            sim_edge_weights = map_edge_weights(sim_edge_index, sub_sim_score_dict, gene_lst, use_cache=False)
+            #sim_edge_weights = map_edge_weights(sim_edge_index, sub_sim_score_dict, gene_lst, use_cache=False)
 
             # all genes of a group share one split, edges to genes of other splits are context only
             graph_split = self.gene_split[group[0]]
@@ -343,8 +350,11 @@ class UnionGraphDataset(Dataset):
                     pos += labels_ts[target_mask].sum().item()
                     neg += target_mask.sum().item() - labels_ts[target_mask].sum().item()
 
-                if self.calculate_baseline:
-                    base_labels, base_labels_raw = calculate_baseline_labels(sim_edge_index, gene_lst, sub_sim_score_dict, self.sim_score_dict_raw)
+                #if self.calculate_baseline:
+                #    base_labels, base_labels_raw = calculate_baseline_labels(sim_edge_index, gene_lst, sub_sim_score_dict, self.sim_score_dict_raw)
+                # baseline labels are only kept for test graphs (split_data_by_gene_split), so only compute them there
+                if self.calculate_baseline and graph_split == TEST:
+                    base_labels, base_labels_raw = calculate_baseline_labels_fast(sim_edge_index, gene_lst, sub_sim_score_dict, self.sim_score_dict_raw, self.best_score, self.best_score_raw)
                     assert len(base_labels) == len(labels_ts), f"List of normalized baseline labels ({len(base_labels)}) is not the same size as list of 'ground truth' labels ({len(labels_ts)})."
                     assert len(base_labels_raw) == len(labels_ts), f"List of raw baseline labels ({len(base_labels)}) is not the same size as list of 'ground truth' labels ({len(labels_ts)})."
                 else:

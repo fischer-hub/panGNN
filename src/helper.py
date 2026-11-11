@@ -485,6 +485,31 @@ def calculate_baseline_labels(edge_index, gene_ids_lst, sub_sim_score_dict, sim_
     return label_lst, label_raw_lst
 
 
+def best_score_per_genome(sim_score_dict):
+    """Highest score of every query gene per target genome, so a baseline label is one lookup instead of a scan over all candidates."""
+    best_score = {}
+
+    for query, candidates in sim_score_dict.items():
+        for target, score in candidates.items():
+            key = (query, target.split('_')[0])
+            if score > best_score.get(key, float('-inf')): best_score[key] = score
+
+    return best_score
+
+
+def calculate_baseline_labels_fast(edge_index, gene_ids_lst, sim_score_dict, sim_score_dict_raw, best_score, best_score_raw):
+    """Same labels as calculate_baseline_labels: 1 if the edge holds the highest score of its source gene within the target genome."""
+    label_lst, label_raw_lst = [], []
+
+    for origin, target in zip(*edge_index):
+        source_gene, target_gene = gene_ids_lst[origin], gene_ids_lst[target]
+        key = (source_gene, target_gene.split('_')[0])
+        label_lst.append(int(sim_score_dict[source_gene][target_gene] >= best_score[key]))
+        label_raw_lst.append(int(sim_score_dict_raw[source_gene][target_gene] >= best_score_raw[key]))
+
+    return label_lst, label_raw_lst
+
+
 def chunks(lst, n):
     """Yield successive n-sized chunks from lst."""
     for i in range(0, len(lst), n):
