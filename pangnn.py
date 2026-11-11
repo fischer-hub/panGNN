@@ -25,6 +25,9 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 def main():
     accelerator = Accelerator(mixed_precision = args.mixed_precision)
 
+    # TF32 tensor cores for float32 matmuls (decoder MLP), off by default in PyTorch
+    if args.tf32: torch.set_float32_matmul_precision('high')
+
     binary_confusion_matrix_train = BinaryConfusionMatrix().to(accelerator.device)
     binary_confusion_matrix_val = BinaryConfusionMatrix().to(accelerator.device)
     binary_auroc = BinaryAUROC().to(accelerator.device)
@@ -109,6 +112,7 @@ def main():
     recall_lst = []
     binary_th = args.binary_threshold
     oom_count = 0
+    best_val_ap, best_epoch, best_state = -1, 0, None
 
     start = time.time()
 
@@ -349,6 +353,15 @@ def main():
                 progress.reset(batch_bar)
                 progress.reset(val_bar)
 
+                # keep a CPU copy of the weights of the best epoch, stop once val AP stalls for --early_stopping epochs
+                if args.early_stopping:
+                    if pr_auc_val > best_val_ap:
+                        best_val_ap, best_epoch = pr_auc_val, epoch + 1
+                        best_state = {k: v.detach().cpu().clone() for k, v in accelerator.unwrap_model(model).state_dict().items()}
+                    elif epoch + 1 - best_epoch >= args.early_stopping:
+                        log.info(f"Early stopping after epoch {epoch+1}, val AP did not improve for {args.early_stopping} epochs.")
+                        break
+
         if 'cuda' in device.type and ((epoch + 1) % 10 == 0):
             log.info('Trying to clear unneccesarily reserved GPU memory..')
             torch.cuda.empty_cache()
@@ -356,6 +369,9 @@ def main():
         #plot_loss_accuracy(args.epochs, train_losses, train_accuracies, val_losses, val_accuracies, f1_train_lst)
         log.info('Unwrapping model from accelerate layers.')
         model = accelerator.unwrap_model(model)
+        if best_state is not None:
+            log.info(f"Restoring model of best epoch {best_epoch} (val AP {best_val_ap:.4f}).")
+            model.load_state_dict(best_state)
         log.info(f"Saving model to file '{os.path.join('temp', run_id, args.model_args)}'")
         torch.save(model.state_dict(), os.path.join('temp', run_id, args.model_args))
 
@@ -374,7 +390,8 @@ def main():
         stats['date'] = str(datetime.date.today())
         stats['neighbours'] = args.neighbours
         stats['mode'] = 'train'
-        stats['epochs'] = args.epochs
+        #stats['epochs'] = args.epochs
+        stats['epochs'] = epoch + 1  # epochs actually run, fewer than args.epochs after early stopping
         stats['batch_size'] = args.batch_size
         stats['device'] = device
         stats['runtime'] = (time.time() - start)

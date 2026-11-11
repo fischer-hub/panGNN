@@ -50,6 +50,8 @@ parser.add_argument('-e', '--epochs',       help = 'set number of epochs for mod
 parser.add_argument('-r', '--ribap_groups', help = 'path to file holding the ribap groups calculated for the input genomes', default = os.path.join('data', 'holy_python_ribap_95.csv'), type = str)
 parser.add_argument('-@', '--cpus',         help = 'max number of threads used during preprocessing', default = 2, type = int)
 parser.add_argument('--mixed_precision',    help = "mixed precision setting to use ['no', 'fp16', 'bf16']", default = 'no', type = str)
+parser.add_argument('--tf32',               help = "allow TF32 tensor cores for float32 matrix multiplications on Ampere or newer GPUs (faster, slightly less precise)", action='store_true')
+parser.add_argument('--early_stopping',     help = "stop training when validation AP has not improved for this many epochs and keep the model of the best epoch, 0 turns it off", default = 0, type = int)
 
 # parse args
 args = parser.parse_args()
@@ -108,6 +110,8 @@ hparams = {
     "categorical_node": args.categorical_node,
     "random_node_features": args.random_node_features,
     "union_batches": args.union_batches,
+    "tf32": args.tf32,
+    "early_stopping": args.early_stopping,
     'no_q_score_transform': args.no_q_score_transform,
     'normalization_temp': args.normalization_temp,
     'tb_comment': args.tb_comment
